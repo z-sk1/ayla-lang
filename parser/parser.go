@@ -48,6 +48,11 @@ type InfixExpression struct {
 	Right    Expression
 }
 
+type PrefixExpression struct {
+	Operator string
+	Right    Expression
+}
+
 type Parser struct {
 	l       *lexer.Lexer
 	curTok  token.Token
@@ -218,6 +223,18 @@ func (p *Parser) parseExpression() Expression {
 
 func (p *Parser) parsePrimary() Expression {
 	switch p.curTok.Type {
+	case token.BANG:
+		operator := p.curTok.Literal
+		p.nextToken()
+		right := p.parsePrimary()
+		if right == nil {
+			return nil
+		}
+		return &PrefixExpression{
+			Operator: operator,
+			Right:    right,
+		}
+
 	case token.INT:
 		return &IntLiteral{Value: atoi(p.curTok.Literal)}
 

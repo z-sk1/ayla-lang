@@ -94,6 +94,9 @@ func (i *Interpreter) EvalExpression(e parser.Expression) interface{} {
 		left := i.EvalExpression(expr.Left)
 		right := i.EvalExpression(expr.Right)
 		return evalInfix(left, expr.Operator, right)
+	case *parser.PrefixExpression:
+		right := i.EvalExpression(expr.Right)
+		return evalPrefix(expr.Operator, right)
 	default:
 		return nil
 	}
@@ -161,6 +164,15 @@ func evalInfix(left interface{}, operator string, right interface{}) interface{}
 	}
 
 	panic("unsupported operand types")
+}
+
+func evalPrefix(operator string, right interface{}) interface{} {
+	switch operator {
+	case "!":
+		return !isTruthy(right)
+	default:
+		panic("unknown prefix operator: " + operator)
+	}
 }
 
 func isTruthy(val interface{}) bool {
