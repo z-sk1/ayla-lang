@@ -80,23 +80,47 @@ func (i *Interpreter) EvalExpression(e parser.Expression) interface{} {
 	switch expr := e.(type) {
 	case *parser.IntLiteral:
 		return expr.Value
+
 	case *parser.StringLiteral:
 		return expr.Value
+
 	case *parser.BoolLiteral:
 		return expr.Value
+
 	case *parser.Identifier:
 		val, ok := i.env.Get(expr.Value)
 		if !ok {
 			panic("undefined variable: " + expr.Value)
 		}
 		return val
+
 	case *parser.InfixExpression:
+		if expr.Operator == "&&" {
+			left := i.EvalExpression(expr.Left)
+			if !isTruthy(left) {
+				return false
+			}
+			right := i.EvalExpression(expr.Right)
+			return isTruthy(right)
+		}
+
+		if expr.Operator == "||" {
+			left := i.EvalExpression(expr.Left)
+			if isTruthy(left) {
+				return true
+			}
+			right := i.EvalExpression(expr.Right)
+			return isTruthy(right)
+		}
+
 		left := i.EvalExpression(expr.Left)
 		right := i.EvalExpression(expr.Right)
 		return evalInfix(left, expr.Operator, right)
+
 	case *parser.PrefixExpression:
 		right := i.EvalExpression(expr.Right)
 		return evalPrefix(expr.Operator, right)
+
 	default:
 		return nil
 	}

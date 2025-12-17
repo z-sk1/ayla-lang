@@ -260,5 +260,6 @@ func isOperator(t token.TokenType) bool {
 		t == token.ASTERISK || t == token.SLASH ||
 		t == token.EQ || t == token.NOT_EQ ||
 		t == token.LT || t == token.LTE ||
-		t == token.GT || t == token.GTE
+		t == token.GT || t == token.GTE ||
+		t == token.AND || t == token.OR
 }

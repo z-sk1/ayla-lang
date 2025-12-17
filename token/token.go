@@ -30,8 +30,8 @@ const (
 	GTE    = "GTE"
 
 	BANG = "!"
-	AND  = "&&"
-	OR   = "||"
+	AND  = "AND"
+	OR   = "OR"
 
 	COMMA     = ","
 	SEMICOLON = ";"
