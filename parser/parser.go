@@ -174,12 +174,24 @@ func (p *Parser) parseIfStatement() *IfStatement {
 
 	stmt.Consequence = p.parseBlockStatement()
 
-	// ELSE?
+	// else and else if
 	if p.peekTok.Type == token.ELSE {
 		p.nextToken() // ELSE
+
+		// else if
+		if p.peekTok.Type == token.IF {
+			p.nextToken()
+			stmt.Alternative = []Statement{
+				p.parseIfStatement(),
+			}
+			return stmt
+		}
+
+		// else
 		if p.peekTok.Type != token.LBRACE {
 			return stmt
 		}
+
 		p.nextToken() // '{'
 		stmt.Alternative = p.parseBlockStatement()
 	}
