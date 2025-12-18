@@ -183,6 +183,10 @@ func evalInfix(left interface{}, operator string, right interface{}) interface{}
 		}
 
 		switch operator {
+		case "&&":
+			return l && r
+		case "||":
+			return l || r
 		case "==":
 			return l == r
 		case "!=":

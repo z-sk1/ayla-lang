@@ -11,6 +11,37 @@ import (
 type Statement interface{}
 type Expression interface{}
 
+const (
+	_ int = iota
+	LOWEST
+	OR          // ||
+	AND         // &&
+	EQUALS      // == !=
+	LESSGREATER // < >
+	SUM         // + -
+	PRODUCT     // * /
+	PREFIX      // !x -z
+)
+
+var precedences = map[token.TokenType]int{
+	token.OR:  OR,
+	token.AND: AND,
+
+	token.EQ:     EQUALS,
+	token.NOT_EQ: EQUALS,
+
+	token.LT:  LESSGREATER,
+	token.GT:  LESSGREATER,
+	token.LTE: LESSGREATER,
+	token.GTE: LESSGREATER,
+
+	token.PLUS:  SUM,
+	token.MINUS: SUM,
+
+	token.ASTERISK: PRODUCT,
+	token.SLASH:    PRODUCT,
+}
+
 type VarStatement struct {
 	Name  string
 	Value Expression
@@ -80,6 +111,20 @@ func (p *Parser) nextToken() {
 	p.peekTok = p.l.NextToken()
 }
 
+func (p *Parser) peekPrecedence() int {
+	if p, ok := precedences[p.peekTok.Type]; ok {
+		return p
+	}
+	return LOWEST
+}
+
+func (p *Parser) curPrecedence() int {
+	if p, ok := precedences[p.curTok.Type]; ok {
+		return p
+	}
+	return LOWEST
+}
+
 func (p *Parser) ParseProgram() []Statement {
 	var statements []Statement
 	for p.curTok.Type != token.EOF {
@@ -124,7 +169,7 @@ func (p *Parser) parseVarStatement() *VarStatement {
 
 	// Expression after '='
 	p.nextToken()
-	stmt.Value = p.parseExpression()
+	stmt.Value = p.parseExpression(LOWEST)
 
 	// Optional semicolon
 	if p.peekTok.Type == token.SEMICOLON {
@@ -145,7 +190,7 @@ func (p *Parser) parsePrintStatement() *PrintStatement {
 
 	// Parse the expression inside parentheses
 	p.nextToken()
-	stmt.Value = p.parseExpression()
+	stmt.Value = p.parseExpression(LOWEST)
 
 	// Expect ')'
 	p.nextToken()
@@ -166,7 +211,7 @@ func (p *Parser) parseIfStatement() *IfStatement {
 
 	// move to condition
 	p.nextToken()
-	stmt.Condition = p.parseExpression()
+	stmt.Condition = p.parseExpression(LOWEST)
 
 	// expect '{'
 	if p.peekTok.Type != token.LBRACE {
@@ -219,22 +264,29 @@ func (p *Parser) parseBlockStatement() []Statement {
 	return statements
 }
 
-func (p *Parser) parseExpression() Expression {
+func (p *Parser) parseExpression(precedence int) Expression {
 	left := p.parsePrimary()
 
-	for isOperator(p.peekTok.Type) {
-		op := p.peekTok.Literal
+	for p.peekTok.Type != token.SEMICOLON && precedence < p.peekPrecedence() {
 		p.nextToken() // move to operator
-		p.nextToken() // move to right-hand side
-		right := p.parsePrimary()
-		left = &InfixExpression{
-			Left:     left,
-			Operator: op,
-			Right:    right,
-		}
+
+		left = p.parseInfixExpression(left)
 	}
 
 	return left
+}
+
+func (p *Parser) parseInfixExpression(left Expression) Expression {
+	expr := &InfixExpression{
+		Left:     left,
+		Operator: p.curTok.Literal,
+	}
+
+	prec := p.curPrecedence()
+	p.nextToken()
+
+	expr.Right = p.parseExpression(prec)
+	return expr
 }
 
 func (p *Parser) parsePrimary() Expression {
@@ -268,7 +320,7 @@ func (p *Parser) parsePrimary() Expression {
 
 	case token.LPAREN:
 		p.nextToken()
-		exp := p.parseExpression()
+		exp := p.parseExpression(LOWEST)
 
 		if p.peekTok.Type != token.RPAREN {
 			panic("expected ')'")
@@ -280,13 +332,4 @@ func (p *Parser) parsePrimary() Expression {
 	default:
 		return nil
 	}
-}
-
-func isOperator(t token.TokenType) bool {
-	return t == token.PLUS || t == token.MINUS ||
-		t == token.ASTERISK || t == token.SLASH ||
-		t == token.EQ || t == token.NOT_EQ ||
-		t == token.LT || t == token.LTE ||
-		t == token.GT || t == token.GTE ||
-		t == token.AND || t == token.OR
 }
