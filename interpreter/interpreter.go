@@ -121,6 +121,9 @@ func (i *Interpreter) EvalExpression(e parser.Expression) interface{} {
 		right := i.EvalExpression(expr.Right)
 		return evalPrefix(expr.Operator, right)
 
+	case *parser.GroupedExpression:
+		return i.EvalExpression(expr.Expression)
+
 	default:
 		return nil
 	}

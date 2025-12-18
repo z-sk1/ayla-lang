@@ -53,6 +53,10 @@ type PrefixExpression struct {
 	Right    Expression
 }
 
+type GroupedExpression struct {
+	Expression Expression
+}
+
 type Parser struct {
 	l       *lexer.Lexer
 	curTok  token.Token
@@ -261,6 +265,17 @@ func (p *Parser) parsePrimary() Expression {
 
 	case token.IDENT:
 		return &Identifier{Value: p.curTok.Literal}
+
+	case token.LPAREN:
+		p.nextToken()
+		exp := p.parseExpression()
+
+		if p.peekTok.Type != token.RPAREN {
+			panic("expected ')'")
+		}
+
+		p.nextToken()
+		return &GroupedExpression{Expression: exp}
 
 	default:
 		return nil
