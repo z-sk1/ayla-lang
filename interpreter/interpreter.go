@@ -2,6 +2,7 @@ package interpreter
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/z-sk1/ayla-lang/parser"
 )
@@ -125,6 +126,45 @@ func (i *Interpreter) EvalExpression(e parser.Expression) interface{} {
 			panic("undefined variable: " + expr.Value)
 		}
 		return val
+
+	case *parser.IntCastExpression:
+		v := i.EvalExpression(expr.Value)
+
+		switch x := v.(type) {
+		case int:
+			return x
+		case bool:
+			if x {
+				return 1
+			}
+			return 0
+		case string:
+			n, err := strconv.Atoi(x)
+			if err != nil {
+				panic("could not convert string to int")
+			}
+			return n
+		default:
+			panic("unsupported int() conversion")
+		}
+
+	case *parser.StringCastExpression:
+		v := i.EvalExpression(expr.Value)
+
+		switch x := v.(type) {
+		case string:
+			return x
+		case bool:
+			if x {
+				return "true"
+			}
+			return "false"
+		case int:
+			n := strconv.Itoa(x)
+			return n
+		default:
+			panic("unsupport string() conversion")
+		}
 
 	case *parser.InfixExpression:
 		if expr.Operator == "&&" {

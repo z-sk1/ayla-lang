@@ -77,8 +77,16 @@ type IntLiteral struct {
 	Value int
 }
 
+type IntCastExpression struct {
+	Value Expression
+}
+
 type StringLiteral struct {
 	Value string
+}
+
+type StringCastExpression struct {
+	Value Expression
 }
 
 type BoolLiteral struct {
@@ -465,8 +473,46 @@ func (p *Parser) parsePrimary() Expression {
 	case token.INT:
 		return &IntLiteral{Value: atoi(p.curTok.Literal)}
 
+	case token.INT_TYPE:
+		// expect '('
+		p.nextToken()
+		if p.curTok.Type != token.LPAREN {
+			return nil
+		}
+
+		// parse inner expression
+		p.nextToken()
+		val := p.parseExpression(LOWEST)
+
+		// expect ')'
+		if p.peekTok.Type != token.RPAREN {
+			panic("expected ) after int(")
+		}
+		p.nextToken()
+
+		return &IntCastExpression{Value: val}
+
 	case token.STRING:
 		return &StringLiteral{Value: p.curTok.Literal}
+
+	case token.STRING_TYPE:
+		// expect '('
+		p.nextToken()
+		if p.curTok.Type != token.LPAREN {
+			return nil
+		}
+
+		// parse inner expression
+		p.nextToken()
+		val := p.parseExpression(LOWEST)
+
+		// expect ')'
+		if p.peekTok.Type != token.RPAREN {
+			panic("expected ) after string(")
+		}
+		p.nextToken()
+
+		return &StringCastExpression{Value: val}
 
 	case token.TRUE:
 		return &BoolLiteral{Value: true}
