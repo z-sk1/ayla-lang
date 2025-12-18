@@ -75,6 +75,11 @@ func (i *Interpreter) EvalStatement(s parser.Statement) {
 		val := i.EvalExpression(stmt.Value)
 		fmt.Println(val)
 
+	case *parser.ScanlnStatement:
+		var input string
+		fmt.Scanln(&input)
+		i.env.Set(stmt.Name, input)
+
 	case *parser.IfStatement:
 		if stmt.Condition == nil {
 			panic("if statement missing condition")

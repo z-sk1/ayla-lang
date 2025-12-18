@@ -55,6 +55,8 @@ const (
 	TRUE  = "TRUE"
 	FALSE = "FALSE"
 
+	SCANLN = "SCANLN"
+
 	INT_TYPE    = "INT_TYPE"
 	STRING_TYPE = "STRING_TYPE"
 	BOOL_TYPE   = "BOOL_TYPE"
@@ -73,6 +75,7 @@ var keywords = map[string]TokenType{
 	"why":     WHILE,
 	"true":    TRUE,
 	"false":   FALSE,
+	"scanln":  SCANLN,
 }
 
 func LookupIdent(ident string) TokenType {

@@ -56,6 +56,10 @@ type PrintStatement struct {
 	Value Expression
 }
 
+type ScanlnStatement struct {
+	Name string
+}
+
 type IfStatement struct {
 	Condition   Expression
 	Consequence []Statement
@@ -156,6 +160,8 @@ func (p *Parser) parseStatement() Statement {
 		return p.parseVarStatement()
 	case token.PRINT:
 		return p.parsePrintStatement()
+	case token.SCANLN:
+		return p.parseScanlnStatement()
 	case token.IF:
 		return p.parseIfStatement()
 	case token.FOR:
@@ -264,6 +270,36 @@ func (p *Parser) parsePrintStatement() *PrintStatement {
 	}
 
 	// Optional semicolon
+	if p.peekTok.Type == token.SEMICOLON {
+		p.nextToken()
+	}
+
+	return stmt
+}
+
+func (p *Parser) parseScanlnStatement() *ScanlnStatement {
+	stmt := &ScanlnStatement{}
+
+	// expect '('
+	p.nextToken()
+	if p.curTok.Type != token.LPAREN {
+		return nil
+	}
+
+	// expect the ident and store it
+	p.nextToken()
+	if p.curTok.Type != token.IDENT {
+		return nil
+	}
+	stmt.Name = p.curTok.Literal
+
+	// expect ')'
+	p.nextToken()
+	if p.curTok.Type != token.RPAREN {
+		return nil
+	}
+
+	// optional semicolon
 	if p.peekTok.Type == token.SEMICOLON {
 		p.nextToken()
 	}
