@@ -51,10 +51,30 @@ func (i *Interpreter) EvalStatement(s parser.Statement) {
 	switch stmt := s.(type) {
 	case *parser.VarStatement:
 		val := i.EvalExpression(stmt.Value)
+
+		// variable must not exist
+		if _, ok := i.env.Get(stmt.Name); ok {
+			fmt.Printf("cant redeclare variable with egg, to reassign just do '%s = %v'\n", stmt.Name, stmt.Value)
+			panic("\ndeclaration to already defined variable " + stmt.Name)
+		}
+
 		i.env.Set(stmt.Name, val)
+
+	case *parser.AssignmentStatement:
+		val := i.EvalExpression(stmt.Value)
+
+		// variable must already exist
+		if _, ok := i.env.Get(stmt.Name); !ok {
+			fmt.Println("declare variable with egg first, cant reassign undeclared var")
+			panic("\nassignment to undefined variable: " + stmt.Name)
+		}
+
+		i.env.Set(stmt.Name, val)
+
 	case *parser.PrintStatement:
 		val := i.EvalExpression(stmt.Value)
 		fmt.Println(val)
+
 	case *parser.IfStatement:
 		if stmt.Condition == nil {
 			panic("if statement missing condition")
@@ -72,6 +92,13 @@ func (i *Interpreter) EvalStatement(s parser.Statement) {
 			if stmt.Alternative != nil {
 				i.EvalStatements(stmt.Alternative)
 			}
+		}
+
+	case *parser.ForStatement:
+		i.EvalStatement(stmt.Init)
+		for isTruthy(i.EvalExpression(stmt.Condition)) {
+			i.EvalStatements(stmt.Body)
+			i.EvalStatement(stmt.Post)
 		}
 	}
 }

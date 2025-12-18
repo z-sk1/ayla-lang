@@ -47,6 +47,11 @@ type VarStatement struct {
 	Value Expression
 }
 
+type AssignmentStatement struct {
+	Name  string
+	Value Expression
+}
+
 type PrintStatement struct {
 	Value Expression
 }
@@ -55,6 +60,13 @@ type IfStatement struct {
 	Condition   Expression
 	Consequence []Statement
 	Alternative []Statement // optional else block
+}
+
+type ForStatement struct {
+	Init      Statement  // egg i = 0;
+	Condition Expression // i < 5;
+	Post      Statement  // i = i + 1
+	Body      []Statement
 }
 
 type IntLiteral struct {
@@ -146,9 +158,14 @@ func (p *Parser) parseStatement() Statement {
 		return p.parsePrintStatement()
 	case token.IF:
 		return p.parseIfStatement()
-	default:
-		return nil
+	case token.FOR:
+		return p.parseForStatement()
+	case token.IDENT:
+		if p.peekTok.Type == token.ASSIGN {
+			return p.parseAssignStatement()
+		}
 	}
+	return nil
 }
 
 func (p *Parser) parseVarStatement() *VarStatement {
@@ -176,6 +193,54 @@ func (p *Parser) parseVarStatement() *VarStatement {
 		p.nextToken()
 	}
 
+	return stmt
+}
+
+func (p *Parser) parseVarStatementNoSemicolon() *VarStatement {
+	stmt := &VarStatement{}
+	p.nextToken() // name
+	stmt.Name = p.curTok.Literal
+
+	p.nextToken() // '='
+	p.nextToken()
+	stmt.Value = p.parseExpression(LOWEST)
+
+	return stmt
+}
+
+func (p *Parser) parseAssignStatement() *AssignmentStatement {
+	stmt := &AssignmentStatement{}
+
+	// current token is IDENT
+	stmt.Name = p.curTok.Literal
+
+	// move to =
+	p.nextToken()
+	if p.curTok.Type != token.ASSIGN {
+		return nil
+	}
+
+	// expression after =
+	p.nextToken()
+	stmt.Value = p.parseExpression(LOWEST)
+
+	// optional semicolon
+	if p.peekTok.Type == token.SEMICOLON {
+		p.nextToken()
+	}
+
+	return stmt
+}
+
+func (p *Parser) parseAssignmentNoSemicolon() *AssignmentStatement {
+	stmt := &AssignmentStatement{}
+	stmt.Name = p.curTok.Literal
+
+	// consume '='
+	p.nextToken()
+	p.nextToken()
+
+	stmt.Value = p.parseExpression(LOWEST)
 	return stmt
 }
 
@@ -230,6 +295,7 @@ func (p *Parser) parseIfStatement() *IfStatement {
 		// else if
 		if p.peekTok.Type == token.IF {
 			p.nextToken()
+
 			stmt.Alternative = []Statement{
 				p.parseIfStatement(),
 			}
@@ -245,6 +311,63 @@ func (p *Parser) parseIfStatement() *IfStatement {
 		stmt.Alternative = p.parseBlockStatement()
 	}
 
+	return stmt
+}
+
+func (p *Parser) parseForInit() Statement {
+	if p.curTok.Type == token.VAR {
+		return p.parseVarStatementNoSemicolon()
+	}
+	return p.parseAssignmentNoSemicolon()
+}
+
+func (p *Parser) parseForPost() Statement {
+	return p.parseAssignmentNoSemicolon()
+}
+
+func (p *Parser) parseForStatement() *ForStatement {
+	stmt := &ForStatement{}
+
+	// init
+	p.nextToken() // move to VAR or IDENT
+	stmt.Init = p.parseForInit()
+	if stmt.Init == nil {
+		return nil
+	}
+
+	// expect ';'
+	if p.peekTok.Type != token.SEMICOLON {
+		return nil
+	}
+	p.nextToken() // consume ';'
+
+	// condition
+	p.nextToken()
+	stmt.Condition = p.parseExpression(LOWEST)
+	if stmt.Condition == nil {
+		return nil
+	}
+
+	// expect ';'
+	if p.peekTok.Type != token.SEMICOLON {
+		return nil
+	}
+	p.nextToken() // consume ';'
+
+	// post
+	p.nextToken()
+	stmt.Post = p.parseForPost()
+	if stmt.Post == nil {
+		return nil
+	}
+
+	// expect '{'
+	if p.peekTok.Type != token.LBRACE {
+		return nil
+	}
+	p.nextToken() // move to '{'
+
+	stmt.Body = p.parseBlockStatement()
 	return stmt
 }
 
