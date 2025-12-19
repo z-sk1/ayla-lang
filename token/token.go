@@ -51,6 +51,7 @@ const (
 	ELSE  = "ELSE"
 	FOR   = "FOR"
 	WHILE = "WHILE"
+	BREAK = "BREAK"
 	CONST = "CONST"
 	TRUE  = "TRUE"
 	FALSE = "FALSE"
@@ -73,6 +74,7 @@ var keywords = map[string]TokenType{
 	"bool":    BOOL_TYPE,
 	"four":    FOR,
 	"why":     WHILE,
+	"kitkat":  BREAK,
 	"true":    TRUE,
 	"false":   FALSE,
 	"scanln":  SCANLN,

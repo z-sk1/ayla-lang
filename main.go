@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"time"
 
 	"github.com/z-sk1/ayla-lang/interpreter"
 	"github.com/z-sk1/ayla-lang/lexer"
@@ -13,7 +12,7 @@ import (
 )
 
 func main() {
-	input, err := os.ReadFile("main.ayl")
+	input, err := os.ReadFile("main.ayla")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -30,13 +29,7 @@ func main() {
 	fmt.Printf("AST: %#v\n", program)
 
 	interp := interpreter.New()
-
-	started := time.Now()
-
 	interp.EvalStatements(program)
-
-	elapsed := time.Since(started)
-	fmt.Println(elapsed)
 
 	for {
 		tok := l.NextToken()

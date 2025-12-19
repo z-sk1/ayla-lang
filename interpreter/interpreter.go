@@ -13,6 +13,18 @@ type Environment struct {
 	store map[string]Value
 }
 
+type ControlSignal int
+
+const (
+	SignalNone ControlSignal = iota
+	SignalBreak
+	SignalContinue
+)
+
+type ConstValue struct {
+	Value interface{}
+}
+
 type Interpreter struct {
 	env *Environment
 }
@@ -35,16 +47,17 @@ func (e *Environment) Set(name string, val Value) Value {
 	return val
 }
 
-func (i *Interpreter) EvalStatements(stmts []parser.Statement) {
+func (i *Interpreter) EvalStatements(stmts []parser.Statement) ControlSignal {
 	for _, s := range stmts {
-		if s == nil {
-			continue
+		sig := i.EvalStatement(s)
+		if sig != SignalNone {
+			return sig
 		}
-		i.EvalStatement(s)
 	}
+	return SignalNone
 }
 
-func (i *Interpreter) EvalStatement(s parser.Statement) {
+func (i *Interpreter) EvalStatement(s parser.Statement) ControlSignal {
 	if s == nil {
 		panic("EvalStatement got nil statement")
 	}
@@ -60,6 +73,18 @@ func (i *Interpreter) EvalStatement(s parser.Statement) {
 		}
 
 		i.env.Set(stmt.Name, val)
+		return SignalNone
+
+	case *parser.ConstStatement:
+		val := i.EvalExpression(stmt.Value)
+
+		// check if variable already exist
+		if _, ok := i.env.Get(stmt.Name); ok {
+			panic("cant redeclare const " + stmt.Name)
+		}
+
+		// store const val
+		i.env.Set(stmt.Name, ConstValue{Value: val})
 
 	case *parser.AssignmentStatement:
 		val := i.EvalExpression(stmt.Value)
@@ -70,16 +95,26 @@ func (i *Interpreter) EvalStatement(s parser.Statement) {
 			panic("\nassignment to undefined variable: " + stmt.Name)
 		}
 
+		// check for const
+		if existingVal, ok := i.env.Get(stmt.Name); ok {
+			if _, isConst := existingVal.(ConstValue); isConst {
+				panic("cannot reassign to const: " + stmt.Name)
+			}
+		}
+
 		i.env.Set(stmt.Name, val)
+		return SignalNone
 
 	case *parser.PrintStatement:
 		val := i.EvalExpression(stmt.Value)
 		fmt.Println(val)
+		return SignalNone
 
 	case *parser.ScanlnStatement:
 		var input string
 		fmt.Scanln(&input)
 		i.env.Set(stmt.Name, input)
+		return SignalNone
 
 	case *parser.IfStatement:
 		if stmt.Condition == nil {
@@ -92,25 +127,46 @@ func (i *Interpreter) EvalStatement(s parser.Statement) {
 
 		if isTruthy(cond) {
 			if stmt.Consequence != nil {
-				i.EvalStatements(stmt.Consequence)
+				return i.EvalStatements(stmt.Consequence)
 			}
 		} else {
 			if stmt.Alternative != nil {
-				i.EvalStatements(stmt.Alternative)
+				return i.EvalStatements(stmt.Alternative)
 			}
 		}
+		return SignalNone
 
 	case *parser.ForStatement:
 		i.EvalStatement(stmt.Init)
 		for isTruthy(i.EvalExpression(stmt.Condition)) {
-			i.EvalStatements(stmt.Body)
+			sig := i.EvalStatements(stmt.Body)
+			if sig == SignalBreak {
+				return SignalNone
+			}
+			if sig == SignalContinue {
+				continue
+			}
 			i.EvalStatement(stmt.Post)
 		}
+		return SignalNone
 	case *parser.WhileStatement:
 		for isTruthy(i.EvalExpression(stmt.Condition)) {
-			i.EvalStatements(stmt.Body)
+			sig := i.EvalStatements(stmt.Body)
+
+			if sig == SignalBreak {
+				return SignalNone
+			}
+			if sig == SignalContinue {
+				continue
+			}
 		}
+		return SignalNone
+
+	case *parser.BreakStatement:
+		return SignalBreak
 	}
+
+	return SignalNone
 }
 
 func (i *Interpreter) EvalExpression(e parser.Expression) interface{} {
@@ -129,6 +185,12 @@ func (i *Interpreter) EvalExpression(e parser.Expression) interface{} {
 		if !ok {
 			panic("undefined variable: " + expr.Value)
 		}
+
+		// unwrap const from ConstValue{}
+		if constVal, isConst := val.(ConstValue); isConst {
+			return constVal.Value
+		}
+
 		return val
 
 	case *parser.IntCastExpression:
