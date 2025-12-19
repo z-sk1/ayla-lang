@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"github.com/z-sk1/ayla-lang/interpreter"
 	"github.com/z-sk1/ayla-lang/lexer"
@@ -29,7 +30,13 @@ func main() {
 	fmt.Printf("AST: %#v\n", program)
 
 	interp := interpreter.New()
+
+	started := time.Now()
+
 	interp.EvalStatements(program)
+
+	elapsed := time.Since(started)
+	fmt.Println(elapsed)
 
 	for {
 		tok := l.NextToken()

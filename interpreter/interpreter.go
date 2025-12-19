@@ -106,6 +106,10 @@ func (i *Interpreter) EvalStatement(s parser.Statement) {
 			i.EvalStatements(stmt.Body)
 			i.EvalStatement(stmt.Post)
 		}
+	case *parser.WhileStatement:
+		for isTruthy(i.EvalExpression(stmt.Condition)) {
+			i.EvalStatements(stmt.Body)
+		}
 	}
 }
 

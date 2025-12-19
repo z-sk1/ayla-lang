@@ -73,6 +73,11 @@ type ForStatement struct {
 	Body      []Statement
 }
 
+type WhileStatement struct {
+	Condition Expression // i < 5
+	Body      []Statement
+}
+
 type IntLiteral struct {
 	Value int
 }
@@ -174,6 +179,8 @@ func (p *Parser) parseStatement() Statement {
 		return p.parseIfStatement()
 	case token.FOR:
 		return p.parseForStatement()
+	case token.WHILE:
+		return p.parseWhileStatement()
 	case token.IDENT:
 		if p.peekTok.Type == token.ASSIGN {
 			return p.parseAssignStatement()
@@ -402,6 +409,26 @@ func (p *Parser) parseForStatement() *ForStatement {
 	p.nextToken()
 	stmt.Post = p.parseForPost()
 	if stmt.Post == nil {
+		return nil
+	}
+
+	// expect '{'
+	if p.peekTok.Type != token.LBRACE {
+		return nil
+	}
+	p.nextToken() // move to '{'
+
+	stmt.Body = p.parseBlockStatement()
+	return stmt
+}
+
+func (p *Parser) parseWhileStatement() *WhileStatement {
+	stmt := &WhileStatement{}
+
+	// move to condition
+	p.nextToken()
+	stmt.Condition = p.parseExpression(LOWEST)
+	if stmt.Condition == nil {
 		return nil
 	}
 
