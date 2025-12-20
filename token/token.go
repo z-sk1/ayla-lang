@@ -45,16 +45,19 @@ const (
 	RBRACKET = "]"
 
 	// keywords
-	VAR   = "VAR"
-	PRINT = "PRINT"
-	IF    = "IF"
-	ELSE  = "ELSE"
-	FOR   = "FOR"
-	WHILE = "WHILE"
-	BREAK = "BREAK"
-	CONST = "CONST"
-	TRUE  = "TRUE"
-	FALSE = "FALSE"
+	VAR      = "VAR"
+	CONST    = "CONST"
+	PRINT    = "PRINT"
+	IF       = "IF"
+	ELSE     = "ELSE"
+	FUNC     = "FUNC"
+	RETURN   = "RETURN"
+	CONTINUE = "CONTINUE"
+	FOR      = "FOR"
+	WHILE    = "WHILE"
+	BREAK    = "BREAK"
+	TRUE     = "TRUE"
+	FALSE    = "FALSE"
 
 	SCANLN = "SCANLN"
 
@@ -64,19 +67,28 @@ const (
 )
 
 var keywords = map[string]TokenType{
-	"egg":     VAR,
-	"rock":    CONST,
+	"egg":  VAR,
+	"rock": CONST,
+
+	"ayla": IF,
+	"elen": ELSE,
+
+	"func": FUNC,
+	"back": RETURN,
+
+	"int":    INT_TYPE,
+	"string": STRING_TYPE,
+	"bool":   BOOL_TYPE,
+
+	"four":   FOR,
+	"why":    WHILE,
+	"kitkat": BREAK,
+	"next":   CONTINUE,
+
+	"true":  TRUE,
+	"false": FALSE,
+
 	"explode": PRINT,
-	"ayla":    IF,
-	"elen":    ELSE,
-	"int":     INT_TYPE,
-	"string":  STRING_TYPE,
-	"bool":    BOOL_TYPE,
-	"four":    FOR,
-	"why":     WHILE,
-	"kitkat":  BREAK,
-	"true":    TRUE,
-	"false":   FALSE,
 	"scanln":  SCANLN,
 }
 

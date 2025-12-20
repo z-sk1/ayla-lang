@@ -9,20 +9,28 @@ import (
 
 type Value interface{}
 
-type Environment struct {
-	store map[string]Value
+type ControlSignal interface{}
+
+type SignalNone struct{}
+type SignalBreak struct{}
+type SignalContinue struct{}
+
+type SignalReturn struct {
+	Value interface{}
 }
-
-type ControlSignal int
-
-const (
-	SignalNone ControlSignal = iota
-	SignalBreak
-	SignalContinue
-)
 
 type ConstValue struct {
 	Value interface{}
+}
+
+type Func struct {
+	Params []string
+	Body   []parser.Statement
+}
+
+type Environment struct {
+	store map[string]Value
+	funcs map[string]*Func
 }
 
 type Interpreter struct {
@@ -34,7 +42,10 @@ func New() *Interpreter {
 }
 
 func NewEnvironment() *Environment {
-	return &Environment{store: make(map[string]Value)}
+	return &Environment{
+		store: make(map[string]Value),
+		funcs: make(map[string]*Func),
+	}
 }
 
 func (e *Environment) Get(name string) (Value, bool) {
@@ -47,14 +58,25 @@ func (e *Environment) Set(name string, val Value) Value {
 	return val
 }
 
+func (e *Environment) GetFunc(name string) (*Func, bool) {
+	f, ok := e.funcs[name]
+	return f, ok
+}
+
+func (e *Environment) SetFunc(name string, f *Func) {
+	e.funcs[name] = f
+}
+
 func (i *Interpreter) EvalStatements(stmts []parser.Statement) ControlSignal {
 	for _, s := range stmts {
 		sig := i.EvalStatement(s)
-		if sig != SignalNone {
+
+		switch sig.(type) {
+		case SignalReturn, SignalBreak, SignalContinue:
 			return sig
 		}
 	}
-	return SignalNone
+	return SignalNone{}
 }
 
 func (i *Interpreter) EvalStatement(s parser.Statement) ControlSignal {
@@ -73,7 +95,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) ControlSignal {
 		}
 
 		i.env.Set(stmt.Name, val)
-		return SignalNone
+		return SignalNone{}
 
 	case *parser.ConstStatement:
 		val := i.EvalExpression(stmt.Value)
@@ -85,6 +107,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) ControlSignal {
 
 		// store const val
 		i.env.Set(stmt.Name, ConstValue{Value: val})
+		return SignalNone{}
 
 	case *parser.AssignmentStatement:
 		val := i.EvalExpression(stmt.Value)
@@ -103,18 +126,29 @@ func (i *Interpreter) EvalStatement(s parser.Statement) ControlSignal {
 		}
 
 		i.env.Set(stmt.Name, val)
-		return SignalNone
+		return SignalNone{}
+
+	case *parser.FuncStatement:
+		i.env.SetFunc(stmt.Name, &Func{Params: stmt.Params, Body: stmt.Body})
+		return SignalNone{}
+
+	case *parser.ReturnStatement:
+		val := i.EvalExpression(stmt.Value)
+		return SignalReturn{Value: val}
+
+	case *parser.ExpressionStatement:
+		i.EvalExpression(stmt.Expression)
 
 	case *parser.PrintStatement:
 		val := i.EvalExpression(stmt.Value)
 		fmt.Println(val)
-		return SignalNone
+		return SignalNone{}
 
 	case *parser.ScanlnStatement:
 		var input string
 		fmt.Scanln(&input)
 		i.env.Set(stmt.Name, input)
-		return SignalNone
+		return SignalNone{}
 
 	case *parser.IfStatement:
 		if stmt.Condition == nil {
@@ -134,39 +168,47 @@ func (i *Interpreter) EvalStatement(s parser.Statement) ControlSignal {
 				return i.EvalStatements(stmt.Alternative)
 			}
 		}
-		return SignalNone
+		return SignalNone{}
 
 	case *parser.ForStatement:
 		i.EvalStatement(stmt.Init)
 		for isTruthy(i.EvalExpression(stmt.Condition)) {
 			sig := i.EvalStatements(stmt.Body)
-			if sig == SignalBreak {
-				return SignalNone
-			}
-			if sig == SignalContinue {
+
+			switch sig.(type) {
+			case SignalBreak:
+				return SignalNone{}
+			case SignalContinue:
+				i.EvalStatement(stmt.Post)
 				continue
+			case SignalReturn:
+				return sig
 			}
 			i.EvalStatement(stmt.Post)
 		}
-		return SignalNone
+		return SignalNone{}
 	case *parser.WhileStatement:
 		for isTruthy(i.EvalExpression(stmt.Condition)) {
 			sig := i.EvalStatements(stmt.Body)
 
-			if sig == SignalBreak {
-				return SignalNone
-			}
-			if sig == SignalContinue {
+			switch sig.(type) {
+			case SignalBreak:
+				return SignalNone{}
+			case SignalContinue:
 				continue
+			case SignalReturn:
+				return sig
 			}
 		}
-		return SignalNone
+		return SignalNone{}
 
 	case *parser.BreakStatement:
-		return SignalBreak
+		return SignalBreak{}
+	case *parser.ContinueStatement:
+		return SignalContinue{}
 	}
 
-	return SignalNone
+	return SignalNone{}
 }
 
 func (i *Interpreter) EvalExpression(e parser.Expression) interface{} {
@@ -231,6 +273,47 @@ func (i *Interpreter) EvalExpression(e parser.Expression) interface{} {
 		default:
 			panic("unsupport string() conversion")
 		}
+
+	case *parser.FuncCall:
+		fn, ok := i.env.GetFunc(expr.Name)
+		if !ok {
+			panic("unknown function: " + expr.Name)
+		}
+
+		if len(fn.Params) != len(expr.Args) {
+			panic("wrong numbers of args")
+		}
+
+		// create new env for func call
+		newEnv := NewEnvironment()
+
+		// copy stores
+		for k, v := range i.env.store {
+			newEnv.store[k] = v
+		}
+
+		// copy funcs
+		for k, v := range i.env.funcs {
+			newEnv.funcs[k] = v
+		}
+
+		// set params
+		for idx, param := range fn.Params {
+			newEnv.Set(param, i.EvalExpression(expr.Args[idx]))
+		}
+
+		// execute body
+		oldEnv := i.env
+		i.env = newEnv
+
+		sig := i.EvalStatements(fn.Body)
+		i.env = oldEnv
+
+		if ret, ok := sig.(SignalReturn); ok {
+			return ret.Value
+		}
+
+		return nil
 
 	case *parser.InfixExpression:
 		if expr.Operator == "&&" {

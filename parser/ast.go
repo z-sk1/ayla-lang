@@ -68,6 +68,17 @@ type IfStatement struct {
 	Alternative []Statement // optional else block
 }
 
+type FuncStatement struct {
+	Name   string
+	Params []string
+	Body   []Statement
+}
+
+type FuncCall struct {
+	Name string
+	Args []Expression
+}
+
 type ForStatement struct {
 	Init      Statement  // egg i = 0;
 	Condition Expression // i < 5;
@@ -81,6 +92,11 @@ type WhileStatement struct {
 }
 
 type BreakStatement struct{}
+type ContinueStatement struct{}
+
+type ReturnStatement struct {
+	Value Expression
+}
 
 type IntLiteral struct {
 	Value int
@@ -104,6 +120,10 @@ type BoolLiteral struct {
 
 type Identifier struct {
 	Value string
+}
+
+type ExpressionStatement struct {
+	Expression Expression
 }
 
 type InfixExpression struct {

@@ -58,6 +58,8 @@ func (p *Parser) parseStatement() Statement {
 		return p.parseVarStatement()
 	case token.CONST:
 		return p.parseConstStatement()
+	case token.FUNC:
+		return p.parseFuncStatement()
 	case token.PRINT:
 		return p.parsePrintStatement()
 	case token.SCANLN:
@@ -69,11 +71,18 @@ func (p *Parser) parseStatement() Statement {
 	case token.WHILE:
 		return p.parseWhileStatement()
 	case token.BREAK:
-		return &BreakStatement{}
+		return p.parseBreakStatement()
+	case token.CONTINUE:
+		return p.parseContinueStatement()
+	case token.RETURN:
+		return p.parseReturnStatement()
 	case token.IDENT:
 		if p.peekTok.Type == token.ASSIGN {
 			return p.parseAssignStatement()
 		}
+		// function call
+		expr := p.parseExpression(LOWEST)
+		return &ExpressionStatement{Expression: expr}
 	}
 	return nil
 }
@@ -282,6 +291,89 @@ func (p *Parser) parseIfStatement() *IfStatement {
 	return stmt
 }
 
+func (p *Parser) parseFuncStatement() *FuncStatement {
+	stmt := &FuncStatement{}
+
+	// move to func name
+	p.nextToken()
+	if p.curTok.Type != token.IDENT {
+		return nil
+	}
+	stmt.Name = p.curTok.Literal
+
+	// expect '('
+	p.nextToken()
+	if p.curTok.Type != token.LPAREN {
+		return nil
+	}
+
+	// parse params
+	stmt.Params = []string{}
+	p.nextToken()
+	for p.curTok.Type != token.RPAREN {
+		if p.curTok.Type == token.IDENT {
+			stmt.Params = append(stmt.Params, p.curTok.Literal)
+		}
+
+		p.nextToken()
+		if p.curTok.Type == token.COMMA {
+			p.nextToken()
+		}
+	}
+
+	// expect '{'
+	if p.peekTok.Type != token.LBRACE {
+		return nil
+	}
+	p.nextToken() // move to '{'
+	stmt.Body = p.parseBlockStatement()
+
+	return stmt
+}
+
+func (p *Parser) parseFuncCall() Expression {
+	call := &FuncCall{Name: p.curTok.Literal}
+
+	// expect '('
+	p.nextToken()
+	if p.curTok.Type != token.LPAREN {
+		return nil
+	}
+
+	// parse args
+	call.Args = []Expression{}
+	p.nextToken()
+	for p.curTok.Type != token.RPAREN {
+		call.Args = append(call.Args, p.parseExpression(LOWEST))
+		p.nextToken()
+		if p.curTok.Type == token.COMMA {
+			p.nextToken()
+		}
+	}
+
+	return call
+}
+
+func (p *Parser) parseReturnStatement() *ReturnStatement {
+	stmt := &ReturnStatement{}
+
+	// move past return
+	p.nextToken()
+
+	// if next tok is not semicolon, eof, or }, parse expr 
+	if p.curTok.Type != token.SEMICOLON && p.curTok.Type != token.EOF && p.curTok.Type != token.RBRACE { 
+		stmt.Value = p.parseExpression(LOWEST)
+	} else {
+		stmt.Value = nil // no value provided, so empty return 
+	}
+	// optional semicolon
+	if p.peekTok.Type == token.SEMICOLON {
+		p.nextToken()
+	}
+
+	return stmt
+}
+
 func (p *Parser) parseForInit() Statement {
 	if p.curTok.Type == token.VAR {
 		return p.parseVarStatementNoSemicolon()
@@ -291,6 +383,28 @@ func (p *Parser) parseForInit() Statement {
 
 func (p *Parser) parseForPost() Statement {
 	return p.parseAssignmentNoSemicolon()
+}
+
+func (p *Parser) parseBreakStatement() *BreakStatement {
+	stmt := &BreakStatement{}
+
+	// optional semicolon
+	if p.peekTok.Type == token.SEMICOLON {
+		p.nextToken()
+	}
+
+	return stmt
+}
+
+func (p *Parser) parseContinueStatement() *ContinueStatement {
+	stmt := &ContinueStatement{}
+
+	// optional semicolon
+	if p.peekTok.Type == token.SEMICOLON {
+		p.nextToken()
+	}
+
+	return stmt
 }
 
 func (p *Parser) parseForStatement() *ForStatement {
@@ -465,6 +579,9 @@ func (p *Parser) parsePrimary() Expression {
 		return &BoolLiteral{Value: false}
 
 	case token.IDENT:
+		if p.peekTok.Type == token.LPAREN {
+			return p.parseFuncCall()
+		}
 		return &Identifier{Value: p.curTok.Literal}
 
 	case token.LPAREN:
