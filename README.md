@@ -44,7 +44,7 @@ ayla foo {
     explode("foo is no")
 }
 ```
-output: foo is yes
+> output: foo is yes
 
 ## if/else if/else
 
@@ -76,7 +76,7 @@ four egg i = 0; i < 5; i = i + 1 {
     explode(i) 
 }
 ```
-output: 1 2 3 4 5
+> output: 1 2 3 4 5
 
 ### why loop
 the while loop has been renamed to **why** loop, for convenience
@@ -94,7 +94,7 @@ why i < 7 {
     explode(i)
 }
 ```
-output: 1 2 3 4 5 6 7
+> output: 1 2 3 4 5 6 7
 
 ### kitkat and next
 *Take a break, take a kitkat*
@@ -116,7 +116,7 @@ why i < 7 {
     explode(i)
 }
 ```
-output: 1 2 3
+> output: 1 2 3
 
 ```
 egg i = 0
@@ -131,7 +131,7 @@ why i < 7 {
     explode(i)
 }
 ```
-output: 1 2 3 5 6 7
+> output: 1 2 3 5 6 7
 
 ## functions
 
@@ -166,7 +166,7 @@ egg foo = "12"
 
 explode(int(foo) + 5)
 ```
-output: 17
+> output: 17
 
 ## built in functions
 right now, there are two built in functions
@@ -177,7 +177,7 @@ explode writes to the console, some petty langs call it print
 
 tsaln corresponds to fmt.Scanln() in go, the parameter is not a prompt, but a reference to the variable to store the input in
 
-using the & symbol is unneeded though
+> using the & symbol is unneeded though
 
 ```
 egg name = ""
@@ -187,7 +187,7 @@ tsaln(name)
 
 explode("Hello " + name)
 ```
-output: Hello {name}
+> output: Hello {name}
 
 ## cli tooling and running scripts
 
