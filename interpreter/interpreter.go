@@ -28,6 +28,10 @@ type Func struct {
 	Body   []parser.Statement
 }
 
+type RuntimeError struct {
+	Message string
+}
+
 type Environment struct {
 	store map[string]Value
 	funcs map[string]*Func
@@ -46,6 +50,10 @@ func NewEnvironment() *Environment {
 		store: make(map[string]Value),
 		funcs: make(map[string]*Func),
 	}
+}
+
+func (e RuntimeError) Error() string {
+	return e.Message
 }
 
 func (e *Environment) Get(name string) (Value, bool) {
@@ -67,97 +75,152 @@ func (e *Environment) SetFunc(name string, f *Func) {
 	e.funcs[name] = f
 }
 
-func (i *Interpreter) EvalStatements(stmts []parser.Statement) ControlSignal {
+func (i *Interpreter) EvalStatements(stmts []parser.Statement) (ControlSignal, error) {
 	for _, s := range stmts {
-		sig := i.EvalStatement(s)
+		sig, err := i.EvalStatement(s)
+		if err != nil {
+			return SignalNone{}, err
+		}
 
 		switch sig.(type) {
 		case SignalReturn, SignalBreak, SignalContinue:
-			return sig
+			return sig, nil
 		}
 	}
-	return SignalNone{}
+	return SignalNone{}, nil
 }
 
-func (i *Interpreter) EvalStatement(s parser.Statement) ControlSignal {
+func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 	if s == nil {
-		panic("EvalStatement got nil statement")
+		return nil, RuntimeError{Message: "EvalStatement got nil statement"}
 	}
 
 	switch stmt := s.(type) {
 	case *parser.VarStatement:
-		val := i.EvalExpression(stmt.Value)
+		val, err := i.EvalExpression(stmt.Value)
+		if err != nil {
+			return nil, err
+		}
 
 		// variable must not exist
 		if _, ok := i.env.Get(stmt.Name); ok {
-			fmt.Printf("cant redeclare variable with egg, to reassign just do '%s = %v'\n", stmt.Name, stmt.Value)
-			panic("\ndeclaration to already defined variable " + stmt.Name)
+			return SignalNone{}, RuntimeError{Message: fmt.Sprintf("cant redeclare variable with egg, to reassign just do '%s = %v'\n", stmt.Name, stmt.Value)}
 		}
 
 		i.env.Set(stmt.Name, val)
-		return SignalNone{}
+		return SignalNone{}, nil
 
 	case *parser.ConstStatement:
-		val := i.EvalExpression(stmt.Value)
+		val, err := i.EvalExpression(stmt.Value)
+		if err != nil {
+			return nil, err
+		}
 
 		// check if variable already exist
 		if _, ok := i.env.Get(stmt.Name); ok {
-			panic("cant redeclare const " + stmt.Name)
+			return SignalNone{}, RuntimeError{Message: fmt.Sprintf("cant redeclare const %s", stmt.Name)}
 		}
 
 		// store const val
 		i.env.Set(stmt.Name, ConstValue{Value: val})
-		return SignalNone{}
+		return SignalNone{}, nil
 
 	case *parser.AssignmentStatement:
-		val := i.EvalExpression(stmt.Value)
+		val, err := i.EvalExpression(stmt.Value)
+		if err != nil {
+			return nil, err
+		}
 
 		// variable must already exist
 		if _, ok := i.env.Get(stmt.Name); !ok {
-			fmt.Println("declare variable with egg first, cant reassign undeclared var")
-			panic("\nassignment to undefined variable: " + stmt.Name)
+			return SignalNone{}, RuntimeError{Message: fmt.Sprintf("assignment to undefined variable: %s", stmt.Name)}
 		}
 
 		// check for const
 		if existingVal, ok := i.env.Get(stmt.Name); ok {
 			if _, isConst := existingVal.(ConstValue); isConst {
-				panic("cannot reassign to const: " + stmt.Name)
+				return SignalNone{}, RuntimeError{Message: fmt.Sprintf("cannot reassign to const: %s", stmt.Name)}
 			}
 		}
 
 		i.env.Set(stmt.Name, val)
-		return SignalNone{}
+		return SignalNone{}, nil
+
+	case *parser.IndexAssignmentStatement:
+		leftVal, err := i.EvalExpression(stmt.Left)
+		if err != nil {
+			return nil, err
+		}
+
+		arrVal, ok := leftVal.([]interface{})
+		if !ok {
+			return SignalNone{}, RuntimeError{Message: "assignment to non-array"}
+		}
+
+		idxVal, err := i.EvalExpression(stmt.Index)
+		if err != nil {
+			return nil, err
+		}
+
+		idx, ok := idxVal.(int)
+		if !ok {
+			return SignalNone{}, RuntimeError{Message: "array index must be int"}
+		}
+
+		if idx < 0 || idx >= len(arrVal) {
+			return SignalNone{}, RuntimeError{Message: "array index out of bounds"}
+		}
+
+		newVal, err := i.EvalExpression(stmt.Value)
+		if err != nil {
+			return nil, err
+		}
+
+		arrVal[idx] = newVal
+		return SignalNone{}, nil
 
 	case *parser.FuncStatement:
 		i.env.SetFunc(stmt.Name, &Func{Params: stmt.Params, Body: stmt.Body})
-		return SignalNone{}
+		return SignalNone{}, nil
 
 	case *parser.ReturnStatement:
-		val := i.EvalExpression(stmt.Value)
-		return SignalReturn{Value: val}
+		val, err := i.EvalExpression(stmt.Value)
+		if err != nil {
+			return nil, err
+		}
+
+		return SignalReturn{Value: val}, nil
 
 	case *parser.ExpressionStatement:
 		i.EvalExpression(stmt.Expression)
+		return SignalNone{}, nil
 
 	case *parser.PrintStatement:
-		val := i.EvalExpression(stmt.Value)
+		val, err := i.EvalExpression(stmt.Value)
+		if err != nil {
+			return nil, err
+		}
+
 		fmt.Println(val)
-		return SignalNone{}
+		return SignalNone{}, nil
 
 	case *parser.ScanlnStatement:
 		var input string
 		fmt.Scanln(&input)
 		i.env.Set(stmt.Name, input)
-		return SignalNone{}
+		return SignalNone{}, nil
 
 	case *parser.IfStatement:
 		if stmt.Condition == nil {
-			panic("if statement missing condition")
+			return SignalNone{}, RuntimeError{Message: "if statement missing condition"}
 		}
 		if stmt.Consequence == nil {
-			panic("if statement missing consequence")
+			return SignalNone{}, RuntimeError{Message: "if statement missing consequence"}
 		}
-		cond := i.EvalExpression(stmt.Condition)
+		cond, err := i.EvalExpression(stmt.Condition)
+		if err != nil {
+			return nil, err
+		}
 
 		if isTruthy(cond) {
 			if stmt.Consequence != nil {
@@ -168,120 +231,191 @@ func (i *Interpreter) EvalStatement(s parser.Statement) ControlSignal {
 				return i.EvalStatements(stmt.Alternative)
 			}
 		}
-		return SignalNone{}
+		return SignalNone{}, nil
 
 	case *parser.ForStatement:
 		i.EvalStatement(stmt.Init)
-		for isTruthy(i.EvalExpression(stmt.Condition)) {
-			sig := i.EvalStatements(stmt.Body)
+		for {
+			cond, err := i.EvalExpression(stmt.Condition)
+			if err != nil {
+				return SignalNone{}, err
+			}
+
+			if !isTruthy(cond) {
+				break
+			}
+
+			sig, err := i.EvalStatements(stmt.Body)
+			if err != nil {
+				return SignalNone{}, err
+			}
 
 			switch sig.(type) {
 			case SignalBreak:
-				return SignalNone{}
+				return SignalNone{}, nil
 			case SignalContinue:
 				i.EvalStatement(stmt.Post)
 				continue
 			case SignalReturn:
-				return sig
+				return sig, nil
 			}
 			i.EvalStatement(stmt.Post)
 		}
-		return SignalNone{}
+		return SignalNone{}, nil
+
 	case *parser.WhileStatement:
-		for isTruthy(i.EvalExpression(stmt.Condition)) {
-			sig := i.EvalStatements(stmt.Body)
+		for {
+			cond, err := i.EvalExpression(stmt.Condition)
+			if err != nil {
+				return SignalNone{}, err
+			}
+
+			if !isTruthy(cond) {
+				break
+			}
+
+			sig, err := i.EvalStatements(stmt.Body)
+			if err != nil {
+				return SignalNone{}, err
+			}
 
 			switch sig.(type) {
 			case SignalBreak:
-				return SignalNone{}
+				return SignalNone{}, nil
 			case SignalContinue:
 				continue
 			case SignalReturn:
-				return sig
+				return sig, nil
 			}
 		}
-		return SignalNone{}
+		return SignalNone{}, nil
 
 	case *parser.BreakStatement:
-		return SignalBreak{}
+		return SignalBreak{}, nil
+
 	case *parser.ContinueStatement:
-		return SignalContinue{}
+		return SignalContinue{}, nil
 	}
 
-	return SignalNone{}
+	return SignalNone{}, nil
 }
 
-func (i *Interpreter) EvalExpression(e parser.Expression) interface{} {
+func (i *Interpreter) EvalExpression(e parser.Expression) (interface{}, error) {
 	switch expr := e.(type) {
 	case *parser.IntLiteral:
-		return expr.Value
+		return expr.Value, nil
 
 	case *parser.StringLiteral:
-		return expr.Value
+		return expr.Value, nil
 
 	case *parser.BoolLiteral:
-		return expr.Value
+		return expr.Value, nil
 
 	case *parser.Identifier:
 		val, ok := i.env.Get(expr.Value)
 		if !ok {
-			panic("undefined variable: " + expr.Value)
+			return nil, RuntimeError{Message: fmt.Sprintf("undefined variable: %s", expr.Value)}
 		}
 
 		// unwrap const from ConstValue{}
 		if constVal, isConst := val.(ConstValue); isConst {
-			return constVal.Value
+			return constVal.Value, nil
 		}
 
-		return val
+		return val, nil
 
 	case *parser.IntCastExpression:
-		v := i.EvalExpression(expr.Value)
+		v, err := i.EvalExpression(expr.Value)
+		if err != nil {
+			return nil, err
+		}
 
 		switch x := v.(type) {
 		case int:
-			return x
+			return x, nil
 		case bool:
 			if x {
-				return 1
+				return 1, nil
 			}
-			return 0
+			return 0, nil
 		case string:
 			n, err := strconv.Atoi(x)
 			if err != nil {
-				panic("could not convert string to int")
+				return nil, RuntimeError{Message: "could not convert string to int"}
 			}
-			return n
+			return n, nil
 		default:
-			panic("unsupported int() conversion")
+			return nil, RuntimeError{Message: "unsupported int() conversion"}
 		}
 
+	case *parser.ArrayLiteral:
+		elements := []interface{}{}
+		for _, el := range expr.Elements {
+			val, err := i.EvalExpression(el)
+			if err != nil {
+				return nil, err
+			}
+
+			elements = append(elements, val)
+		}
+		return elements, nil
+
+	case *parser.IndexExpression:
+		left, err := i.EvalExpression(expr.Left)
+		if err != nil {
+			return nil, err
+		}
+
+		index, err := i.EvalExpression(expr.Index)
+		if err != nil {
+			return nil, err
+		}
+
+		arr, ok := left.([]interface{})
+		if !ok {
+			return nil, RuntimeError{Message: "indexing non-array"}
+		}
+
+		idx, ok := index.(int)
+		if !ok {
+			return nil, RuntimeError{Message: "array index must be int"}
+		}
+
+		if idx < 0 || idx >= len(arr) {
+			return nil, RuntimeError{Message: "array index out of bounds"}
+		}
+
+		return arr[idx], nil
+
 	case *parser.StringCastExpression:
-		v := i.EvalExpression(expr.Value)
+		v, err := i.EvalExpression(expr.Value)
+		if err != nil {
+			return nil, err
+		}
 
 		switch x := v.(type) {
 		case string:
-			return x
+			return x, nil
 		case bool:
 			if x {
-				return "true"
+				return "true", nil
 			}
-			return "false"
+			return "false", nil
 		case int:
 			n := strconv.Itoa(x)
-			return n
+			return n, nil
 		default:
-			panic("unsupport string() conversion")
+			return nil, RuntimeError{Message: "unsupported string() conversion"}
 		}
 
 	case *parser.FuncCall:
 		fn, ok := i.env.GetFunc(expr.Name)
 		if !ok {
-			panic("unknown function: " + expr.Name)
+			return nil, RuntimeError{Message: fmt.Sprintf("unknown function: %s", expr.Name)}
 		}
 
 		if len(fn.Params) != len(expr.Args) {
-			panic("wrong numbers of args")
+			return nil, RuntimeError{Message: "wrong numbers of args"}
 		}
 
 		// create new env for func call
@@ -299,123 +433,162 @@ func (i *Interpreter) EvalExpression(e parser.Expression) interface{} {
 
 		// set params
 		for idx, param := range fn.Params {
-			newEnv.Set(param, i.EvalExpression(expr.Args[idx]))
+			val, err := i.EvalExpression(expr.Args[idx])
+			if err != nil {
+				return nil, err
+			}
+
+			newEnv.Set(param, val)
 		}
 
 		// execute body
 		oldEnv := i.env
 		i.env = newEnv
 
-		sig := i.EvalStatements(fn.Body)
+		sig, err := i.EvalStatements(fn.Body)
+		if err != nil {
+			return nil, err
+		}
+
 		i.env = oldEnv
 
 		if ret, ok := sig.(SignalReturn); ok {
-			return ret.Value
+			return ret.Value, nil
 		}
 
-		return nil
+		return nil, nil
 
 	case *parser.InfixExpression:
 		if expr.Operator == "&&" {
-			left := i.EvalExpression(expr.Left)
-			if !isTruthy(left) {
-				return false
+			left, err := i.EvalExpression(expr.Left)
+			if err != nil {
+				return nil, err
 			}
-			right := i.EvalExpression(expr.Right)
-			return isTruthy(right)
+
+			if !isTruthy(left) {
+				return false, nil
+			}
+
+			right, err := i.EvalExpression(expr.Right)
+			if err != nil {
+				return nil, err
+			}
+
+			return isTruthy(right), nil
 		}
 
 		if expr.Operator == "||" {
-			left := i.EvalExpression(expr.Left)
-			if isTruthy(left) {
-				return true
+			left, err := i.EvalExpression(expr.Left)
+			if err != nil {
+				return nil, err
 			}
-			right := i.EvalExpression(expr.Right)
-			return isTruthy(right)
+
+			if isTruthy(left) {
+				return true, nil
+			}
+
+			right, err := i.EvalExpression(expr.Right)
+			if err != nil {
+				return nil, err
+			}
+
+			return isTruthy(right), nil
 		}
 
-		left := i.EvalExpression(expr.Left)
-		right := i.EvalExpression(expr.Right)
+		left, err := i.EvalExpression(expr.Left)
+		if err != nil {
+			return nil, err
+		}
+
+		right, err := i.EvalExpression(expr.Right)
+		if err != nil {
+			return nil, err
+		}
+
 		return evalInfix(left, expr.Operator, right)
 
 	case *parser.PrefixExpression:
-		right := i.EvalExpression(expr.Right)
-		return evalPrefix(expr.Operator, right)
+		right, err := i.EvalExpression(expr.Right)
+		if err != nil {
+			return nil, err
+		}
+
+		return evalPrefix(expr.Operator, right), nil
 
 	case *parser.GroupedExpression:
 		return i.EvalExpression(expr.Expression)
 
 	default:
-		return nil
+		return nil, nil
 	}
 }
 
-func evalInfix(left interface{}, operator string, right interface{}) interface{} {
+func evalInfix(left interface{}, operator string, right interface{}) (interface{}, error) {
 	switch l := left.(type) {
 
 	case int:
 		r, ok := right.(int)
 		if !ok {
-			panic("type mismatch: int compared to non-int")
+			return nil, RuntimeError{Message: "type mismatch: int compared to non-int"}
 		}
 
 		switch operator {
 		case "+":
-			return l + r
+			return l + r, nil
 		case "-":
-			return l - r
+			return l - r, nil
 		case "*":
-			return l * r
+			return l * r, nil
 		case "/":
-			return l / r
+			return l / r, nil
 		case "==":
-			return l == r
+			return l == r, nil
 		case "!=":
-			return l != r
+			return l != r, nil
 		case ">":
-			return l > r
+			return l > r, nil
 		case "<":
-			return l < r
+			return l < r, nil
 		case ">=":
-			return l >= r
+			return l >= r, nil
 		case "<=":
-			return l <= r
+			return l <= r, nil
 		}
 
 	case string:
 		r, ok := right.(string)
 		if !ok {
-			panic("type mismatch: string compared to non-string")
+			return nil, RuntimeError{Message: "type mismatch: string compared to non-string"}
 		}
 
 		switch operator {
 		case "+":
-			return l + r
+			return l + r, nil
 		case "==":
-			return l == r
+			return l == r, nil
 		case "!=":
-			return l != r
+			return l != r, nil
 		}
 
 	case bool:
 		r, ok := right.(bool)
 		if !ok {
-			panic("type mismatch: bool compared to non-bool")
+			return nil, RuntimeError{Message: "type mismatch: bool compared to non-bool"}
 		}
 
 		switch operator {
 		case "&&":
-			return l && r
+			return l && r, nil
 		case "||":
-			return l || r
+			return l || r, nil
 		case "==":
-			return l == r
+			return l == r, nil
 		case "!=":
-			return l != r
+			return l != r, nil
 		}
 	}
 
-	panic("unsupported operand types")
+	return nil, RuntimeError{Message: "unsupported operand types"}
 }
 
 func evalPrefix(operator string, right interface{}) interface{} {

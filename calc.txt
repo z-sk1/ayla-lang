@@ -1,0 +1,38 @@
+blueprint add(x, y) {
+    back x + y
+}
+
+blueprint multiply(x, y) {
+    back x * y
+}
+
+blueprint subtract(x, y) {
+    back x - y
+}
+
+blueprint divide(x, y) {
+    back x / y
+}
+
+egg firstNum = 0
+egg oper = ""
+egg secondNum = 0
+
+explode("Firstnum")
+tsaln(firstNum)
+
+explode("Operator")
+tsaln(oper)
+
+explode("Secondnum")
+tsaln(secondNum)
+
+ayla oper == "+" {
+    explode(firstNum + oper + secondNum + "=" + string(add(int(firstNum), int(secondNum))))
+} elen ayla oper == "-" {
+    explode(firstNum + oper + secondNum + "=" + string(subtract(int(firstNum), int(secondNum))))
+} elen ayla oper == "*" {
+    explode(firstNum + oper + secondNum + "=" + string(multiply(int(firstNum), int(secondNum))))
+} elen ayla oper == "/" {
+    explode(firstNum + oper + secondNum + "=" + string(divide(int(firstNum), int(secondNum))))
+}

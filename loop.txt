@@ -1,0 +1,8 @@
+four egg i = 0; i <= 5; i = i + 1 {
+
+    ayla i == 2 {
+        next
+    }
+    
+    explode(i)
+}

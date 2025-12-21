@@ -77,9 +77,16 @@ func (p *Parser) parseStatement() Statement {
 	case token.RETURN:
 		return p.parseReturnStatement()
 	case token.IDENT:
+		// arr[idx] = ???
+		if p.peekTok.Type == token.LBRACKET {
+			return p.parseIndexAssignment()
+		}
+
+		// reassignment
 		if p.peekTok.Type == token.ASSIGN {
 			return p.parseAssignStatement()
 		}
+
 		// function call
 		expr := p.parseExpression(LOWEST)
 		return &ExpressionStatement{Expression: expr}
@@ -123,6 +130,71 @@ func (p *Parser) parseVarStatementNoSemicolon() *VarStatement {
 	p.nextToken() // '='
 	p.nextToken()
 	stmt.Value = p.parseExpression(LOWEST)
+
+	return stmt
+}
+
+func (p *Parser) parseArrayLiteral() Expression {
+	arr := &ArrayLiteral{}
+	arr.Elements = []Expression{}
+
+	// move to first element or ]
+	p.nextToken()
+
+	if p.curTok.Type == token.RBRACKET {
+		return arr // empty array
+	}
+
+	arr.Elements = append(arr.Elements, p.parseExpression(LOWEST))
+
+	for p.peekTok.Type == token.COMMA {
+		p.nextToken() // ,
+		p.nextToken() // next element
+		arr.Elements = append(arr.Elements, p.parseExpression(LOWEST))
+	}
+
+	if p.peekTok.Type != token.RBRACKET {
+		return nil
+	}
+
+	p.nextToken() // ]
+
+	return arr
+}
+
+func (p *Parser) parseIndexAssignment() *IndexAssignmentStatement {
+	stmt := &IndexAssignmentStatement{}
+
+	// left ident
+	left := &Identifier{Value: p.curTok.Literal}
+
+	p.nextToken() // [
+
+	p.nextToken() // index
+	idx := p.parseExpression(LOWEST)
+
+	if p.peekTok.Type != token.RBRACKET {
+		return nil
+	}
+	p.nextToken() // ]
+
+	// expect '='
+	if p.peekTok.Type != token.ASSIGN {
+		return nil
+	}
+	p.nextToken() // =
+
+	p.nextToken() // value
+	val := p.parseExpression(LOWEST)
+
+	stmt.Left = left
+	stmt.Index = idx
+	stmt.Value = val
+
+	// optional semicolon
+	if p.peekTok.Type == token.SEMICOLON {
+		p.nextToken()
+	}
 
 	return stmt
 }
@@ -360,11 +432,11 @@ func (p *Parser) parseReturnStatement() *ReturnStatement {
 	// move past return
 	p.nextToken()
 
-	// if next tok is not semicolon, eof, or }, parse expr 
-	if p.curTok.Type != token.SEMICOLON && p.curTok.Type != token.EOF && p.curTok.Type != token.RBRACE { 
+	// if next tok is not semicolon, eof, or }, parse expr
+	if p.curTok.Type != token.SEMICOLON && p.curTok.Type != token.EOF && p.curTok.Type != token.RBRACE {
 		stmt.Value = p.parseExpression(LOWEST)
 	} else {
-		stmt.Value = nil // no value provided, so empty return 
+		stmt.Value = nil // no value provided, so empty return
 	}
 	// optional semicolon
 	if p.peekTok.Type == token.SEMICOLON {
@@ -498,6 +570,23 @@ func (p *Parser) parseExpression(precedence int) Expression {
 		left = p.parseInfixExpression(left)
 	}
 
+	for p.peekTok.Type == token.LBRACKET {
+		p.nextToken() // [
+		p.nextToken() // index expr
+
+		index := p.parseExpression(LOWEST)
+
+		if p.peekTok.Type != token.RBRACKET {
+			return nil
+		}
+		p.nextToken() // ]
+
+		left = &IndexExpression{
+			Left:  left,
+			Index: index,
+		}
+	}
+
 	return left
 }
 
@@ -594,6 +683,9 @@ func (p *Parser) parsePrimary() Expression {
 
 		p.nextToken()
 		return &GroupedExpression{Expression: exp}
+
+	case token.LBRACKET:
+		return p.parseArrayLiteral()
 
 	default:
 		return nil

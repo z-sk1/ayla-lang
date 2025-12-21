@@ -73,8 +73,8 @@ var keywords = map[string]TokenType{
 	"ayla": IF,
 	"elen": ELSE,
 
-	"func": FUNC,
-	"back": RETURN,
+	"blueprint": FUNC,
+	"back":      RETURN,
 
 	"int":    INT_TYPE,
 	"string": STRING_TYPE,
@@ -85,11 +85,11 @@ var keywords = map[string]TokenType{
 	"kitkat": BREAK,
 	"next":   CONTINUE,
 
-	"true":  TRUE,
-	"false": FALSE,
+	"yes": TRUE,
+	"no":  FALSE,
 
 	"explode": PRINT,
-	"scanln":  SCANLN,
+	"tsaln":  SCANLN,
 }
 
 func LookupIdent(ident string) TokenType {

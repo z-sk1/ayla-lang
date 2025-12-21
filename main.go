@@ -12,7 +12,7 @@ import (
 )
 
 func main() {
-	input, err := os.ReadFile("main.ayla")
+	input, err := os.ReadFile("array.txt")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -29,7 +29,11 @@ func main() {
 	fmt.Printf("AST: %#v\n", program)
 
 	interp := interpreter.New()
-	interp.EvalStatements(program)
+	if sig, err := interp.EvalStatements(program); err != nil {
+		fmt.Println("Runtime error:", err)
+	} else {
+		_ = sig
+	}
 
 	for {
 		tok := l.NextToken()

@@ -98,6 +98,22 @@ type ReturnStatement struct {
 	Value Expression
 }
 
+type ArrayLiteral struct {
+    Elements []Expression
+}
+
+type IndexExpression struct {
+    Left  Expression
+    Index Expression
+}
+
+type IndexAssignmentStatement struct {
+	Left Expression
+	Index Expression
+	Value Expression
+}
+
+
 type IntLiteral struct {
 	Value int
 }
