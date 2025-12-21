@@ -122,6 +122,14 @@ type IntCastExpression struct {
 	Value Expression
 }
 
+type FloatLiteral struct {
+	Value float64
+}
+
+type FloatCastExpression struct {
+	Value Expression
+}
+
 type StringLiteral struct {
 	Value string
 }

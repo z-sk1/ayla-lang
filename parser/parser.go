@@ -13,6 +13,11 @@ func atoi(a string) int {
 	return val
 }
 
+func atof(a string) float64 {
+	val, _ := strconv.ParseFloat(a, 64)
+	return val
+}
+
 func New(l *lexer.Lexer) *Parser {
 	p := &Parser{l: l}
 	p.nextToken()
@@ -619,7 +624,7 @@ func (p *Parser) parsePrimary() Expression {
 
 	case token.INT:
 		return &IntLiteral{Value: atoi(p.curTok.Literal)}
-
+		
 	case token.INT_TYPE:
 		// expect '('
 		p.nextToken()
@@ -638,6 +643,28 @@ func (p *Parser) parsePrimary() Expression {
 		p.nextToken()
 
 		return &IntCastExpression{Value: val}
+
+	case token.FLOAT:
+		return &FloatLiteral{Value: atof(p.curTok.Literal)}
+
+	case token.FLOAT_TYPE:
+		// expect '('
+		p.nextToken()
+		if p.curTok.Type != token.LPAREN {
+			return nil
+		}
+
+		// parse inner expresion
+		p.nextToken()
+		val := p.parseExpression(LOWEST)
+
+		// expect ')'
+		if p.peekTok.Type != token.RPAREN {
+			panic("expected ) after float(")
+		}
+		p.nextToken()
+
+		return &FloatCastExpression{Value: val}
 
 	case token.STRING:
 		return &StringLiteral{Value: p.curTok.Literal}

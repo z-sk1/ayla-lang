@@ -15,6 +15,7 @@ const (
 	IDENT  = "IDENT"
 	INT    = "INT"
 	STRING = "STRING"
+	FLOAT  = "FLOAT"
 	// operators
 	ASSIGN   = "="
 	PLUS     = "+"
@@ -62,6 +63,7 @@ const (
 	SCANLN = "SCANLN"
 
 	INT_TYPE    = "INT_TYPE"
+	FLOAT_TYPE  = "FLOAT_TYPE"
 	STRING_TYPE = "STRING_TYPE"
 	BOOL_TYPE   = "BOOL_TYPE"
 )
@@ -77,6 +79,7 @@ var keywords = map[string]TokenType{
 	"back":      RETURN,
 
 	"int":    INT_TYPE,
+	"float":  FLOAT_TYPE,
 	"string": STRING_TYPE,
 	"bool":   BOOL_TYPE,
 
@@ -89,7 +92,7 @@ var keywords = map[string]TokenType{
 	"no":  FALSE,
 
 	"explode": PRINT,
-	"tsaln":  SCANLN,
+	"tsaln":   SCANLN,
 }
 
 func LookupIdent(ident string) TokenType {

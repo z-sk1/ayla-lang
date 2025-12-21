@@ -28,11 +28,11 @@ explode("Secondnum")
 tsaln(secondNum)
 
 ayla oper == "+" {
-    explode(firstNum + oper + secondNum + "=" + string(add(int(firstNum), int(secondNum))))
+    explode(firstNum + oper + secondNum + "=" + string(add(float(firstNum), float(secondNum))))
 } elen ayla oper == "-" {
-    explode(firstNum + oper + secondNum + "=" + string(subtract(int(firstNum), int(secondNum))))
+    explode(firstNum + oper + secondNum + "=" + string(subtract(float(firstNum), float(secondNum))))
 } elen ayla oper == "*" {
-    explode(firstNum + oper + secondNum + "=" + string(multiply(int(firstNum), int(secondNum))))
+    explode(firstNum + oper + secondNum + "=" + string(multiply(float(firstNum), float(secondNum))))
 } elen ayla oper == "/" {
-    explode(firstNum + oper + secondNum + "=" + string(divide(int(firstNum), int(secondNum))))
+    explode(firstNum + oper + secondNum + "=" + string(divide(float(firstNum), float(secondNum))))
 }

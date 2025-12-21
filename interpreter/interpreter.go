@@ -333,6 +333,8 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (interface{}, error) {
 		switch x := v.(type) {
 		case int:
 			return x, nil
+		case float64:
+			return int(x), nil 
 		case bool:
 			if x {
 				return 1, nil
@@ -346,6 +348,56 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (interface{}, error) {
 			return n, nil
 		default:
 			return nil, RuntimeError{Message: "unsupported int() conversion"}
+		}
+
+	case *parser.FloatCastExpression:
+		v, err := i.EvalExpression(expr.Value)
+		if err != nil {
+			return nil, err
+		}
+
+		switch x := v.(type) {
+		case float64:
+			return x, nil
+		case int:
+			return float64(x), nil
+		case bool:
+			if x {
+				return 1.0, nil
+			}
+			return 0.0, nil
+		case string:
+			n, err := strconv.ParseFloat(x, 64)
+			if err != nil {
+				return nil, RuntimeError{Message: "could not convert string to float"}
+			}
+			return n, nil
+		default:
+			return nil, RuntimeError{Message: "unsupported float() conversion"}
+		}
+
+	case *parser.StringCastExpression:
+		v, err := i.EvalExpression(expr.Value)
+		if err != nil {
+			return nil, err
+		}
+
+		switch x := v.(type) {
+		case string:
+			return x, nil
+		case bool:
+			if x {
+				return "true", nil
+			}
+			return "false", nil
+		case int:
+			n := strconv.Itoa(x)
+			return n, nil
+		case float64:
+			n := strconv.FormatFloat(x, 'f', -1, 64)
+			return n, nil
+		default:
+			return nil, RuntimeError{Message: "unsupported string() conversion"}
 		}
 
 	case *parser.ArrayLiteral:
@@ -386,27 +438,6 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (interface{}, error) {
 		}
 
 		return arr[idx], nil
-
-	case *parser.StringCastExpression:
-		v, err := i.EvalExpression(expr.Value)
-		if err != nil {
-			return nil, err
-		}
-
-		switch x := v.(type) {
-		case string:
-			return x, nil
-		case bool:
-			if x {
-				return "true", nil
-			}
-			return "false", nil
-		case int:
-			n := strconv.Itoa(x)
-			return n, nil
-		default:
-			return nil, RuntimeError{Message: "unsupported string() conversion"}
-		}
 
 	case *parser.FuncCall:
 		fn, ok := i.env.GetFunc(expr.Name)
@@ -530,6 +561,39 @@ func evalInfix(left interface{}, operator string, right interface{}) (interface{
 		r, ok := right.(int)
 		if !ok {
 			return nil, RuntimeError{Message: "type mismatch: int compared to non-int"}
+		}
+
+		switch operator {
+		case "+":
+			return l + r, nil
+		case "-":
+			return l - r, nil
+		case "*":
+			return l * r, nil
+		case "/":
+			return l / r, nil
+		case "==":
+			return l == r, nil
+		case "!=":
+			return l != r, nil
+		case ">":
+			return l > r, nil
+		case "<":
+			return l < r, nil
+		case ">=":
+			return l >= r, nil
+		case "<=":
+			return l <= r, nil
+		}
+
+	case float64:
+		r, ok := right.(float64)
+		if !ok {
+			if ri, isInt := right.(int); isInt {
+				r = float64(ri)
+			} else {
+				return nil, RuntimeError{Message: "type mismatch: float compared to non-float"}
+			}
 		}
 
 		switch operator {

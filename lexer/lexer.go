@@ -1,6 +1,8 @@
 package lexer
 
 import (
+	"strings"
+
 	"github.com/z-sk1/ayla-lang/token"
 )
 
@@ -31,6 +33,10 @@ func isLetter(ch byte) bool {
 	return ('a' <= ch && ch <= 'z') || ('A' <= ch && ch <= 'Z') || ch == '_'
 }
 
+func isDigit(ch byte) bool {
+	return '0' <= ch && ch <= '9'
+}
+
 func (l *Lexer) readIdentifier() string {
 	start := l.position
 	for isLetter(l.ch) {
@@ -42,7 +48,16 @@ func (l *Lexer) readIdentifier() string {
 // read numbers
 func (l *Lexer) readNumber() string {
 	start := l.position
-	for '0' <= l.ch && l.ch <= '9' {
+	hasDot := false
+
+	for isDigit(l.ch) || l.ch == '.' {
+		if l.ch == '.' {
+			if hasDot { // second dot, invalid
+				break
+			}
+			hasDot = true
+		}
+
 		l.readChar()
 	}
 	return l.input[start:l.position]
@@ -161,10 +176,12 @@ func (l *Lexer) NextToken() token.Token {
 			tok.Type = token.LookupIdent(literal) // <-- keyword check
 			tok.Literal = literal
 			return tok // return early to avoid readChar() below
-		} else if '0' <= l.ch && l.ch <= '9' {
-			tok.Type = token.INT
-			tok.Literal = l.readNumber()
-			return tok // return early
+		} else if isDigit(l.ch) {
+			num := l.readNumber()
+			if strings.Contains(num, ".") {
+				return token.Token{Type: token.FLOAT, Literal: num}
+			}
+			return token.Token{Type: token.INT, Literal: num} // return early
 		} else {
 			tok = token.Token{Type: token.ILLEGAL, Literal: string(l.ch)}
 		}
