@@ -1,0 +1,5 @@
+egg arr = ["hi", 2, 3]
+
+arr[2] = 5
+
+explode(arr[0])

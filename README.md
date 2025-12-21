@@ -189,6 +189,35 @@ explode("Hello " + name)
 ```
 > output: Hello {name}
 
+## arrays
+to initialise an array use square brackets: **[]**
+
+```
+egg arr = [0, 1, 2, 3]
+
+explode(arr)
+```
+> output: [0 1 2 3]
+
+you can also index into an array, like normal
+
+```
+egg arr = [1, 2, 5]
+
+explode(arr[2])
+```
+> output: 5
+
+and you can reassign a specific index
+```
+egg arr = ["hello", 1]
+
+arr[1] = "world"
+
+explode(arr)
+```
+> output: [hello world]
+
 ## cli tooling and running scripts
 
 ### windows instructions
