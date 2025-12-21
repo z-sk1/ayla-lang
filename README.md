@@ -234,10 +234,8 @@ there isnt a REPL currently, so make sure to put **ayla** infront of every cmd
 to run a script do:
 
 ```
-ayla run <file>
+ayla run [--debug] [--timed] <file>
 ```
+> --debug will give debug info like ast, and tokens
 
-if you would like to receive debug information like ast, and tokens, use this instead:
-```
-ayla run --debug <file>
-```
+> --timed will time how long your program takes

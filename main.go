@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 
+	"time"
+
 	"github.com/z-sk1/ayla-lang/interpreter"
 	"github.com/z-sk1/ayla-lang/lexer"
 	"github.com/z-sk1/ayla-lang/parser"
@@ -12,17 +14,24 @@ import (
 
 func main() {
 	debug := false
+	timed := false
 
 	if len(os.Args) < 3 || os.Args[1] != "run" {
-		fmt.Println("usage: ayla run <file>")
+		fmt.Println("usage: ayla run [--debug] [--timed] <file>")
 		return
 	}
 
-	filename := os.Args[2]
+	filename := ""
 
-	if os.Args[2] == "--debug" {
-		debug = true
-		filename = os.Args[3]
+	for _, arg := range os.Args[2:] {
+		switch arg {
+		case "--timed":
+			timed = true
+		case "--debug":
+			debug = true
+		default:
+			filename = arg
+		}
 	}
 
 	if len(filename) < 5 || filename[len(filename)-5:] != ".ayla" {
@@ -53,10 +62,23 @@ func main() {
 		fmt.Printf("AST: %#v\n", program)
 	}
 
+	var started time.Time
+
+	if timed {
+		started = time.Now()
+	}
+
 	interp := interpreter.New()
 	if sig, err := interp.EvalStatements(program); err != nil {
 		fmt.Println("Runtime error:", err)
 	} else {
 		_ = sig
+	}
+
+	var elapsed time.Duration
+
+	if timed {
+		elapsed = time.Since(started)
+		fmt.Println(elapsed)
 	}
 }
