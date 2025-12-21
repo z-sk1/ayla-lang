@@ -334,7 +334,7 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (interface{}, error) {
 		case int:
 			return x, nil
 		case float64:
-			return int(x), nil 
+			return int(x), nil
 		case bool:
 			if x {
 				return 1, nil
@@ -571,6 +571,10 @@ func evalInfix(left interface{}, operator string, right interface{}) (interface{
 		case "*":
 			return l * r, nil
 		case "/":
+			if r == 0 {
+				return nil, RuntimeError{Message: "undefined: cant divide by zero"}
+			}
+
 			return l / r, nil
 		case "==":
 			return l == r, nil
@@ -604,6 +608,10 @@ func evalInfix(left interface{}, operator string, right interface{}) (interface{
 		case "*":
 			return l * r, nil
 		case "/":
+			if r == 0 {
+				return nil, RuntimeError{Message: "undefined: cant divide by zero"}
+			}
+
 			return l / r, nil
 		case "==":
 			return l == r, nil
