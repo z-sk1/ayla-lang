@@ -239,3 +239,17 @@ ayla run [--debug] [--timed] <file>
 > --debug will give debug info like ast, and tokens
 
 > --timed will time how long your program takes
+
+
+### miscellaneous
+version:
+
+```
+ayla --version
+```
+
+help:
+
+```
+ayla --help
+```
