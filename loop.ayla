@@ -1,8 +1,11 @@
-four egg i = 0; i <= 5; i = i + 1 {
+egg i = 0
 
-    ayla i == 2 {
+why i < 7 {
+    i = i + 1
+
+    ayla i == 4 {
         next
     }
-    
+
     explode(i)
 }
