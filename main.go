@@ -35,7 +35,7 @@ func main() {
 
 		run()
 	case "--version":
-		fmt.Println("ayla-lang v1.0.1")
+		fmt.Println("ayla-lang v1.1")
 	case "--help":
 		fmt.Println(strings.Join(cmds, "\n"))
 	default:
