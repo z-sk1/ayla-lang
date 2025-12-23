@@ -7,22 +7,6 @@ import (
 	"github.com/z-sk1/ayla-lang/parser"
 )
 
-type Value interface{}
-
-type ControlSignal interface{}
-
-type SignalNone struct{}
-type SignalBreak struct{}
-type SignalContinue struct{}
-
-type SignalReturn struct {
-	Value interface{}
-}
-
-type ConstValue struct {
-	Value interface{}
-}
-
 type Func struct {
 	Params []string
 	Body   []parser.Statement
@@ -34,8 +18,10 @@ type RuntimeError struct {
 	Column  int
 }
 
+type Binding interface{}
+
 type Environment struct {
-	store map[string]Value
+	store map[string]Binding
 	funcs map[string]*Func
 }
 
@@ -49,7 +35,7 @@ func New() *Interpreter {
 
 func NewEnvironment() *Environment {
 	return &Environment{
-		store: make(map[string]Value),
+		store: make(map[string]Binding),
 		funcs: make(map[string]*Func),
 	}
 }
@@ -63,12 +49,12 @@ func NewRuntimeError(node parser.Node, msg string) RuntimeError {
 	return RuntimeError{Message: msg, Line: line, Column: col}
 }
 
-func (e *Environment) Get(name string) (Value, bool) {
+func (e *Environment) Get(name string) (Binding, bool) {
 	val, ok := e.store[name]
 	return val, ok
 }
 
-func (e *Environment) Set(name string, val Value) Value {
+func (e *Environment) Set(name string, val Binding) Binding {
 	e.store[name] = val
 	return val
 }
@@ -99,14 +85,14 @@ func (i *Interpreter) EvalStatements(stmts []parser.Statement) (ControlSignal, e
 
 func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 	if s == nil {
-		return nil, RuntimeError{Message: "EvalStatement got nil statement"}
+		return NilValue{}, RuntimeError{Message: "EvalStatement got nil statement"}
 	}
 
 	switch stmt := s.(type) {
 	case *parser.VarStatement:
 		val, err := i.EvalExpression(stmt.Value)
 		if err != nil {
-			return nil, err
+			return NilValue{}, err
 		}
 
 		// variable must not exist
@@ -120,7 +106,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 	case *parser.ConstStatement:
 		val, err := i.EvalExpression(stmt.Value)
 		if err != nil {
-			return nil, err
+			return NilValue{}, err
 		}
 
 		// check if variable already exist
@@ -135,19 +121,16 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 	case *parser.AssignmentStatement:
 		val, err := i.EvalExpression(stmt.Value)
 		if err != nil {
-			return nil, err
+			return SignalNone{}, err
 		}
 
-		// variable must already exist
-		if _, ok := i.env.Get(stmt.Name); !ok {
-			return SignalNone{}, NewRuntimeError(s, fmt.Sprintf("assignment to undefined variable: %s", stmt.Name))
+		existingVal, ok := i.env.Get(stmt.Name)
+		if !ok {
+			return SignalNone{}, NewRuntimeError(s, "assignment to undefined variable")
 		}
 
-		// check for const
-		if existingVal, ok := i.env.Get(stmt.Name); ok {
-			if _, isConst := existingVal.(ConstValue); isConst {
-				return SignalNone{}, NewRuntimeError(s, fmt.Sprintf("cannot reassign to const: %s", stmt.Name))
-			}
+		if _, isConst := existingVal.(ConstValue); isConst {
+			return SignalNone{}, NewRuntimeError(s, "cannot reassign to const")
 		}
 
 		i.env.Set(stmt.Name, val)
@@ -156,34 +139,36 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 	case *parser.IndexAssignmentStatement:
 		leftVal, err := i.EvalExpression(stmt.Left)
 		if err != nil {
-			return nil, err
+			return NilValue{}, err
 		}
 
-		arrVal, ok := leftVal.([]interface{})
+		arrVal, ok := leftVal.(ArrayValue)
 		if !ok {
 			return SignalNone{}, NewRuntimeError(s, "assignment to non-array")
 		}
 
-		idxVal, err := i.EvalExpression(stmt.Index)
+		index, err := i.EvalExpression(stmt.Index)
 		if err != nil {
-			return nil, err
+			return SignalNone{}, err
 		}
 
-		idx, ok := idxVal.(int)
+		idxVal, ok := index.(IntValue)
 		if !ok {
 			return SignalNone{}, NewRuntimeError(s, "array index must be int")
 		}
 
-		if idx < 0 || idx >= len(arrVal) {
+		idx := idxVal.V
+
+		if idx < 0 || idx >= len(arrVal.Elements) {
 			return SignalNone{}, NewRuntimeError(s, "array index out of bounds")
 		}
 
 		newVal, err := i.EvalExpression(stmt.Value)
 		if err != nil {
-			return nil, err
+			return SignalNone{}, err
 		}
 
-		arrVal[idx] = newVal
+		arrVal.Elements[idx] = newVal
 		return SignalNone{}, nil
 
 	case *parser.FuncStatement:
@@ -193,7 +178,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 	case *parser.ReturnStatement:
 		val, err := i.EvalExpression(stmt.Value)
 		if err != nil {
-			return nil, err
+			return NilValue{}, err
 		}
 
 		return SignalReturn{Value: val}, nil
@@ -205,7 +190,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 	case *parser.PrintStatement:
 		val, err := i.EvalExpression(stmt.Value)
 		if err != nil {
-			return nil, err
+			return NilValue{}, err
 		}
 
 		fmt.Println(val)
@@ -226,7 +211,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		}
 		cond, err := i.EvalExpression(stmt.Condition)
 		if err != nil {
-			return nil, err
+			return NilValue{}, err
 		}
 
 		if isTruthy(cond) {
@@ -307,153 +292,157 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 	return SignalNone{}, nil
 }
 
-func (i *Interpreter) EvalExpression(e parser.Expression) (interface{}, error) {
+func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 	switch expr := e.(type) {
 	case *parser.IntLiteral:
-		return expr.Value, nil
+		return IntValue{V: expr.Value}, nil
+
+	case *parser.FloatLiteral:
+		return FloatValue{V: expr.Value}, nil
 
 	case *parser.StringLiteral:
-		return expr.Value, nil
+		return StringValue{V: expr.Value}, nil
 
 	case *parser.BoolLiteral:
-		return expr.Value, nil
+		return BoolValue{V: expr.Value}, nil
 
 	case *parser.Identifier:
-		val, ok := i.env.Get(expr.Value)
+		binding, ok := i.env.Get(expr.Value)
 		if !ok {
-			return nil, NewRuntimeError(e, fmt.Sprintf("undefined variable: %s", expr.Value))
+			return NilValue{}, NewRuntimeError(e, "undefined variable")
 		}
 
-		// unwrap const from ConstValue{}
-		if constVal, isConst := val.(ConstValue); isConst {
-			return constVal.Value, nil
+		if c, isConst := binding.(ConstValue); isConst {
+			return c.Value, nil
 		}
 
-		return val, nil
+		return binding.(Value), nil
 
 	case *parser.IntCastExpression:
 		v, err := i.EvalExpression(expr.Value)
 		if err != nil {
-			return nil, err
+			return NilValue{}, err
 		}
 
-		switch x := v.(type) {
-		case int:
-			return x, nil
-		case float64:
-			return int(x), nil
-		case bool:
-			if x {
-				return 1, nil
+		switch v.Type() {
+		case INT:
+			return IntValue{V: v.(IntValue).V}, nil
+		case FLOAT:
+			return IntValue{V: int(v.(FloatValue).V)}, nil
+		case BOOL:
+			if v.(BoolValue).V {
+				return IntValue{V: 1}, nil
 			}
-			return 0, nil
-		case string:
-			n, err := strconv.Atoi(x)
+			return IntValue{V: 0}, nil
+		case STRING:
+			n, err := strconv.Atoi(v.(StringValue).V)
 			if err != nil {
-				return nil, NewRuntimeError(e, "could not convert string to int")
+				return NilValue{}, NewRuntimeError(e, "could not convert string to int")
 			}
-			return n, nil
+			return IntValue{V: n}, nil
 		default:
-			return nil, NewRuntimeError(e, "unsupported int() conversion")
+			return NilValue{}, NewRuntimeError(e, "unsupported int() conversion")
 		}
 
 	case *parser.FloatCastExpression:
 		v, err := i.EvalExpression(expr.Value)
 		if err != nil {
-			return nil, err
+			return NilValue{}, err
 		}
 
-		switch x := v.(type) {
-		case float64:
-			return x, nil
-		case int:
-			return float64(x), nil
-		case bool:
-			if x {
-				return 1.0, nil
+		switch v.Type() {
+		case FLOAT:
+			return FloatValue{V: v.(FloatValue).V}, nil
+		case INT:
+			return FloatValue{V: float64(v.(IntValue).V)}, nil
+		case BOOL:
+			if v.(BoolValue).V {
+				return FloatValue{V: 1.0}, nil
 			}
-			return 0.0, nil
-		case string:
-			n, err := strconv.ParseFloat(x, 64)
+			return FloatValue{V: 0.0}, nil
+		case STRING:
+			n, err := strconv.ParseFloat(v.(StringValue).V, 64)
 			if err != nil {
-				return nil, NewRuntimeError(e, "could not convert string to float")
+				return NilValue{}, NewRuntimeError(e, "could not convert string to float")
 			}
-			return n, nil
+			return FloatValue{V: n}, nil
 		default:
-			return nil, NewRuntimeError(e, "unsupported float() conversion")
+			return NilValue{}, NewRuntimeError(e, "unsupported float() conversion")
 		}
 
 	case *parser.StringCastExpression:
 		v, err := i.EvalExpression(expr.Value)
 		if err != nil {
-			return nil, err
+			return NilValue{}, err
 		}
 
-		switch x := v.(type) {
-		case string:
-			return x, nil
-		case bool:
-			if x {
-				return "true", nil
+		switch v.Type() {
+		case STRING:
+			return StringValue{V: v.(StringValue).V}, nil
+		case BOOL:
+			if v.(BoolValue).V {
+				return StringValue{V: "true"}, nil
 			}
-			return "false", nil
-		case int:
-			n := strconv.Itoa(x)
-			return n, nil
-		case float64:
-			n := strconv.FormatFloat(x, 'f', -1, 64)
-			return n, nil
+			return StringValue{V: "false"}, nil
+		case INT:
+			n := strconv.Itoa(v.(IntValue).V)
+			return StringValue{V: n}, nil
+		case FLOAT:
+			n := strconv.FormatFloat(v.(FloatValue).V, 'f', -1, 64)
+			return StringValue{V: n}, nil
 		default:
-			return nil, NewRuntimeError(e, "unsupported string() conversion")
+			return NilValue{}, NewRuntimeError(e, "unsupported string() conversion")
 		}
 
 	case *parser.ArrayLiteral:
-		elements := []interface{}{}
+		elements := []Value{}
 		for _, el := range expr.Elements {
 			val, err := i.EvalExpression(el)
 			if err != nil {
-				return nil, err
+				return NilValue{}, err
 			}
 
 			elements = append(elements, val)
 		}
-		return elements, nil
+		return ArrayValue{Elements: elements}, nil
 
 	case *parser.IndexExpression:
 		left, err := i.EvalExpression(expr.Left)
 		if err != nil {
-			return nil, err
+			return NilValue{}, err
 		}
 
 		index, err := i.EvalExpression(expr.Index)
 		if err != nil {
-			return nil, err
+			return NilValue{}, err
 		}
 
-		arr, ok := left.([]interface{})
+		arr, ok := left.(ArrayValue)
 		if !ok {
-			return nil, NewRuntimeError(e, "indexing non-array")
+			return NilValue{}, NewRuntimeError(e, "indexing non-array")
 		}
 
-		idx, ok := index.(int)
+		idxVal, ok := index.(IntValue)
 		if !ok {
-			return nil, NewRuntimeError(e, "array index must be int")
+			return NilValue{}, NewRuntimeError(e, "array index must be int")
 		}
 
-		if idx < 0 || idx >= len(arr) {
-			return nil, NewRuntimeError(e, "array index out of bounds")
+		idx := idxVal.V
+
+		if idx < 0 || idx >= len(arr.Elements) {
+			return NilValue{}, NewRuntimeError(e, "array index out of bounds")
 		}
 
-		return arr[idx], nil
+		return arr.Elements[idx], nil
 
 	case *parser.FuncCall:
 		fn, ok := i.env.GetFunc(expr.Name)
 		if !ok {
-			return nil, NewRuntimeError(e, fmt.Sprintf("unknown function: %s", expr.Name))
+			return NilValue{}, NewRuntimeError(e, fmt.Sprintf("unknown function: %s", expr.Name))
 		}
 
 		if len(fn.Params) != len(expr.Args) {
-			return nil, NewRuntimeError(e, "wrong numbers of args")
+			return NilValue{}, NewRuntimeError(e, "wrong numbers of args")
 		}
 
 		// create new env for func call
@@ -473,7 +462,7 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (interface{}, error) {
 		for idx, param := range fn.Params {
 			val, err := i.EvalExpression(expr.Args[idx])
 			if err != nil {
-				return nil, err
+				return NilValue{}, err
 			}
 
 			newEnv.Set(param, val)
@@ -485,7 +474,7 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (interface{}, error) {
 
 		sig, err := i.EvalStatements(fn.Body)
 		if err != nil {
-			return nil, err
+			return NilValue{}, err
 		}
 
 		i.env = oldEnv
@@ -494,53 +483,53 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (interface{}, error) {
 			return ret.Value, nil
 		}
 
-		return nil, nil
+		return NilValue{}, nil
 
 	case *parser.InfixExpression:
 		if expr.Operator == "&&" {
 			left, err := i.EvalExpression(expr.Left)
 			if err != nil {
-				return nil, err
+				return NilValue{}, err
 			}
 
 			if !isTruthy(left) {
-				return false, nil
+				return BoolValue{V: false}, nil
 			}
 
 			right, err := i.EvalExpression(expr.Right)
 			if err != nil {
-				return nil, err
+				return NilValue{}, err
 			}
 
-			return isTruthy(right), nil
+			return BoolValue{V: isTruthy(right)}, nil
 		}
 
 		if expr.Operator == "||" {
 			left, err := i.EvalExpression(expr.Left)
 			if err != nil {
-				return nil, err
+				return NilValue{}, err
 			}
 
 			if isTruthy(left) {
-				return true, nil
+				return BoolValue{V: true}, nil
 			}
 
 			right, err := i.EvalExpression(expr.Right)
 			if err != nil {
-				return nil, err
+				return NilValue{}, err
 			}
 
-			return isTruthy(right), nil
+			return BoolValue{V: isTruthy(right)}, nil
 		}
 
 		left, err := i.EvalExpression(expr.Left)
 		if err != nil {
-			return nil, err
+			return NilValue{}, err
 		}
 
 		right, err := i.EvalExpression(expr.Right)
 		if err != nil {
-			return nil, err
+			return NilValue{}, err
 		}
 
 		return evalInfix(expr, left, expr.Operator, right)
@@ -548,7 +537,7 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (interface{}, error) {
 	case *parser.PrefixExpression:
 		right, err := i.EvalExpression(expr.Right)
 		if err != nil {
-			return nil, err
+			return NilValue{}, err
 		}
 
 		return evalPrefix(expr, expr.Operator, right)
@@ -557,136 +546,152 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (interface{}, error) {
 		return i.EvalExpression(expr.Expression)
 
 	default:
-		return nil, nil
+		return NilValue{}, nil
 	}
 }
 
-func evalInfix(node *parser.InfixExpression, left interface{}, operator string, right interface{}) (interface{}, error) {
-	switch l := left.(type) {
-
-	case int:
-		r, ok := right.(int)
-		if !ok {
-			return nil, NewRuntimeError(node, "type mismatch: int compared to non-int")
-		}
-
-		switch operator {
-		case "+":
-			return l + r, nil
-		case "-":
-			return l - r, nil
-		case "*":
-			return l * r, nil
-		case "/":
-			if r == 0 {
-				return nil, NewRuntimeError(node, "undefined: cant divide by zero")
-			}
-
-			return l / r, nil
-		case "==":
-			return l == r, nil
-		case "!=":
-			return l != r, nil
-		case ">":
-			return l > r, nil
-		case "<":
-			return l < r, nil
-		case ">=":
-			return l >= r, nil
-		case "<=":
-			return l <= r, nil
-		}
-
-	case float64:
-		r, ok := right.(float64)
-		if !ok {
-			if ri, isInt := right.(int); isInt {
-				r = float64(ri)
-			} else {
-				return nil, NewRuntimeError(node, "type mismatch: float compared to non-float")
-			}
-		}
-
-		switch operator {
-		case "+":
-			return l + r, nil
-		case "-":
-			return l - r, nil
-		case "*":
-			return l * r, nil
-		case "/":
-			if r == 0 {
-				return nil, NewRuntimeError(node, "undefined: cant divide by zero")
-			}
-
-			return l / r, nil
-		case "==":
-			return l == r, nil
-		case "!=":
-			return l != r, nil
-		case ">":
-			return l > r, nil
-		case "<":
-			return l < r, nil
-		case ">=":
-			return l >= r, nil
-		case "<=":
-			return l <= r, nil
-		}
-
-	case string:
-		r, ok := right.(string)
-		if !ok {
-			return nil, NewRuntimeError(node, "type mismatch: string compared to non-string")
-		}
-
-		switch operator {
-		case "+":
-			return l + r, nil
-		case "==":
-			return l == r, nil
-		case "!=":
-			return l != r, nil
-		}
-
-	case bool:
-		r, ok := right.(bool)
-		if !ok {
-			return nil, NewRuntimeError(node, "type mismatch: bool compared to non-bool")
-		}
-
-		switch operator {
-		case "&&":
-			return l && r, nil
-		case "||":
-			return l || r, nil
-		case "==":
-			return l == r, nil
-		case "!=":
-			return l != r, nil
-		}
+func evalInfix(node *parser.InfixExpression, left Value, op string, right Value) (Value, error) {
+	// type mismatch check
+	if left.Type() != right.Type() {
+		return NilValue{}, NewRuntimeError(node, fmt.Sprintf("type mismatch: %s %s %s", left.Type(), op, right.Type()))
 	}
 
-	return nil, NewRuntimeError(node, "unsupported operand types")
+	if left.Type() == INT && right.Type() == FLOAT {
+		return evalFloatInfix(node, FloatValue{V: float64(left.(IntValue).V)}, op, right.(FloatValue))
+	}
+
+	if left.Type() == FLOAT && right.Type() == INT {
+		return evalFloatInfix(node, left.(FloatValue), op, FloatValue{V: float64(left.(IntValue).V)})
+	}
+
+	switch left.Type() {
+	case INT:
+		return evalIntInfix(node, left.(IntValue), op, right.(IntValue))
+	case FLOAT:
+		return evalFloatInfix(node, left.(FloatValue), op, right.(FloatValue))
+	case STRING:
+		return evalStringInfix(node, left.(StringValue), op, right.(StringValue))
+	case BOOL:
+		return evalBoolInfix(node, left.(BoolValue), op, right.(BoolValue))
+	}
+
+	return NilValue{}, NewRuntimeError(node, "unsupported operand types")
 }
 
-func evalPrefix(node *parser.PrefixExpression, operator string, right interface{}) (interface{}, error) {
+func evalIntInfix(node *parser.InfixExpression, left IntValue, op string, right IntValue) (Value, error) {
+	switch op {
+	case "+":
+		return IntValue{V: left.V + right.V}, nil
+	case "-":
+		return IntValue{V: left.V - right.V}, nil
+	case "*":
+		return IntValue{V: left.V * right.V}, nil
+	case "/":
+		if right.V == 0 {
+			return NilValue{}, NewRuntimeError(node, "undefined: division by zero")
+		}
+
+		return IntValue{V: left.V / right.V}, nil
+	case "==":
+		return BoolValue{V: left.V == right.V}, nil
+	case "!=":
+		return BoolValue{V: left.V != right.V}, nil
+	case ">":
+		return BoolValue{V: left.V > right.V}, nil
+	case "<":
+		return BoolValue{V: left.V < right.V}, nil
+	case ">=":
+		return BoolValue{V: left.V >= right.V}, nil
+	case "<=":
+		return BoolValue{V: left.V <= right.V}, nil
+	}
+
+	return NilValue{}, NewRuntimeError(node, fmt.Sprintf("invalid operator %d %s %d", left.V, op, right.V))
+}
+
+func evalFloatInfix(node *parser.InfixExpression, left FloatValue, op string, right FloatValue) (Value, error) {
+	switch op {
+	case "+":
+		return FloatValue{V: left.V + right.V}, nil
+	case "-":
+		return FloatValue{V: left.V - right.V}, nil
+	case "*":
+		return FloatValue{V: left.V * right.V}, nil
+	case "/":
+		if right.V == 0 {
+			return NilValue{}, NewRuntimeError(node, "undefined: division by zero")
+		}
+
+		return FloatValue{V: left.V / right.V}, nil
+	case "==":
+		return BoolValue{V: left.V == right.V}, nil
+	case "!=":
+		return BoolValue{V: left.V != right.V}, nil
+	case ">":
+		return BoolValue{V: left.V > right.V}, nil
+	case "<":
+		return BoolValue{V: left.V < right.V}, nil
+	case ">=":
+		return BoolValue{V: left.V >= right.V}, nil
+	}
+
+	return NilValue{}, NewRuntimeError(node, fmt.Sprintf("invalid operator %f %s %f", left.V, op, right.V))
+}
+
+func evalStringInfix(node *parser.InfixExpression, left StringValue, op string, right StringValue) (Value, error) {
+	switch op {
+	case "+":
+		return StringValue{V: left.V + right.V}, nil
+	case "==":
+		return BoolValue{V: left.V == right.V}, nil
+	case "!=":
+		return BoolValue{V: left.V != right.V}, nil
+	}
+
+	return NilValue{}, NewRuntimeError(node, fmt.Sprintf("invalid operator %s %s %s", left.V, op, right.V))
+}
+
+func evalBoolInfix(node *parser.InfixExpression, left BoolValue, op string, right BoolValue) (Value, error) {
+	switch op {
+	case "==":
+		return BoolValue{V: left.V == right.V}, nil
+	case "!=":
+		return BoolValue{V: left.V != right.V}, nil
+	}
+
+	return NilValue{}, NewRuntimeError(node, fmt.Sprintf("invalid operator %t %s %t", left.V, op, right.V))
+}
+
+func evalPrefix(node *parser.PrefixExpression, operator string, right Value) (Value, error) {
 	switch operator {
 	case "!":
-		return !isTruthy(right), nil
+		return BoolValue{V: !isTruthy(right)}, nil
+	case "-":
+		switch v := right.(type) {
+		case IntValue:
+			return IntValue{V: -v.V}, nil
+		case FloatValue:
+			return FloatValue{V: -v.V}, nil
+		default:
+			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("invalid operand, %s, for unary '-'", right.String()))
+		}
 	default:
-		return nil, NewRuntimeError(node, fmt.Sprintf("unknown prefix operator: %s", operator))
+		return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unknown prefix operator: %s", operator))
 	}
 }
 
-func isTruthy(val interface{}) bool {
+func isTruthy(val Value) bool {
 	switch v := val.(type) {
-	case int:
-		return v != 0
-	case bool:
-		return v
-	case string:
-		return v != ""
+	case IntValue:
+		return v.V != 0
+	case FloatValue:
+		return v.V != 0
+	case BoolValue:
+		return v.V
+	case StringValue:
+		return v.V != ""
+	case NilValue:
+		return false
 	default:
 		return false
 	}

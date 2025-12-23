@@ -1,3 +1,6 @@
-rock i = 0
+egg p = 2
+egg q = 2
 
-i = i + 1
+ayla (p > 1) || (q > 4) {
+    explode("wow")
+}

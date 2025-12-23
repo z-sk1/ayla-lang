@@ -1,5 +1,5 @@
 egg arr = ["hi", 2, 3]
 
-arr[5] = 5
+arr[2] = 5
 
-explode(arr[0])
+explode(arr)
