@@ -94,13 +94,14 @@ func (p *Parser) parseStatement() Statement {
 
 		// function call
 		expr := p.parseExpression(LOWEST)
-		return &ExpressionStatement{Expression: expr}
+		return &ExpressionStatement{NodeBase: NodeBase{Token: p.curTok}, Expression: expr}
 	}
 	return nil
 }
 
 func (p *Parser) parseVarStatement() *VarStatement {
 	stmt := &VarStatement{}
+	stmt.NodeBase = NodeBase{Token: p.curTok}
 
 	// Expect next token to be identifier
 	p.nextToken()
@@ -129,6 +130,8 @@ func (p *Parser) parseVarStatement() *VarStatement {
 
 func (p *Parser) parseVarStatementNoSemicolon() *VarStatement {
 	stmt := &VarStatement{}
+	stmt.NodeBase = NodeBase{Token: p.curTok}
+
 	p.nextToken() // name
 	stmt.Name = p.curTok.Literal
 
@@ -141,6 +144,8 @@ func (p *Parser) parseVarStatementNoSemicolon() *VarStatement {
 
 func (p *Parser) parseArrayLiteral() Expression {
 	arr := &ArrayLiteral{}
+	arr.NodeBase = NodeBase{Token: p.curTok}
+
 	arr.Elements = []Expression{}
 
 	// move to first element or ]
@@ -169,9 +174,10 @@ func (p *Parser) parseArrayLiteral() Expression {
 
 func (p *Parser) parseIndexAssignment() *IndexAssignmentStatement {
 	stmt := &IndexAssignmentStatement{}
+	stmt.NodeBase = NodeBase{Token: p.curTok}
 
 	// left ident
-	left := &Identifier{Value: p.curTok.Literal}
+	left := &Identifier{NodeBase: NodeBase{Token: p.curTok}, Value: p.curTok.Literal}
 
 	p.nextToken() // [
 
@@ -206,6 +212,7 @@ func (p *Parser) parseIndexAssignment() *IndexAssignmentStatement {
 
 func (p *Parser) parseConstStatement() *ConstStatement {
 	stmt := &ConstStatement{}
+	stmt.NodeBase = NodeBase{Token: p.curTok}
 
 	// move to ident
 	p.nextToken()
@@ -234,6 +241,7 @@ func (p *Parser) parseConstStatement() *ConstStatement {
 
 func (p *Parser) parseAssignStatement() *AssignmentStatement {
 	stmt := &AssignmentStatement{}
+	stmt.NodeBase = NodeBase{Token: p.curTok}
 
 	// current token is IDENT
 	stmt.Name = p.curTok.Literal
@@ -258,6 +266,7 @@ func (p *Parser) parseAssignStatement() *AssignmentStatement {
 
 func (p *Parser) parseAssignmentNoSemicolon() *AssignmentStatement {
 	stmt := &AssignmentStatement{}
+	stmt.NodeBase = NodeBase{Token: p.curTok}
 	stmt.Name = p.curTok.Literal
 
 	// consume '='
@@ -270,6 +279,7 @@ func (p *Parser) parseAssignmentNoSemicolon() *AssignmentStatement {
 
 func (p *Parser) parsePrintStatement() *PrintStatement {
 	stmt := &PrintStatement{}
+	stmt.NodeBase = NodeBase{Token: p.curTok}
 
 	// Expect '('
 	p.nextToken()
@@ -297,6 +307,7 @@ func (p *Parser) parsePrintStatement() *PrintStatement {
 
 func (p *Parser) parseScanlnStatement() *ScanlnStatement {
 	stmt := &ScanlnStatement{}
+	stmt.NodeBase = NodeBase{Token: p.curTok}
 
 	// expect '('
 	p.nextToken()
@@ -327,6 +338,7 @@ func (p *Parser) parseScanlnStatement() *ScanlnStatement {
 
 func (p *Parser) parseIfStatement() *IfStatement {
 	stmt := &IfStatement{}
+	stmt.NodeBase = NodeBase{Token: p.curTok}
 
 	// move to condition
 	p.nextToken()
@@ -370,6 +382,7 @@ func (p *Parser) parseIfStatement() *IfStatement {
 
 func (p *Parser) parseFuncStatement() *FuncStatement {
 	stmt := &FuncStatement{}
+	stmt.NodeBase = NodeBase{Token: p.curTok}
 
 	// move to func name
 	p.nextToken()
@@ -409,7 +422,7 @@ func (p *Parser) parseFuncStatement() *FuncStatement {
 }
 
 func (p *Parser) parseFuncCall() Expression {
-	call := &FuncCall{Name: p.curTok.Literal}
+	call := &FuncCall{NodeBase: NodeBase{Token: p.curTok}, Name: p.curTok.Literal}
 
 	// expect '('
 	p.nextToken()
@@ -433,6 +446,7 @@ func (p *Parser) parseFuncCall() Expression {
 
 func (p *Parser) parseReturnStatement() *ReturnStatement {
 	stmt := &ReturnStatement{}
+	stmt.NodeBase = NodeBase{Token: p.curTok}
 
 	// move past return
 	p.nextToken()
@@ -464,6 +478,7 @@ func (p *Parser) parseForPost() Statement {
 
 func (p *Parser) parseBreakStatement() *BreakStatement {
 	stmt := &BreakStatement{}
+	stmt.NodeBase = NodeBase{Token: p.curTok}
 
 	// optional semicolon
 	if p.peekTok.Type == token.SEMICOLON {
@@ -475,6 +490,7 @@ func (p *Parser) parseBreakStatement() *BreakStatement {
 
 func (p *Parser) parseContinueStatement() *ContinueStatement {
 	stmt := &ContinueStatement{}
+	stmt.NodeBase = NodeBase{Token: p.curTok}
 
 	// optional semicolon
 	if p.peekTok.Type == token.SEMICOLON {
@@ -486,6 +502,7 @@ func (p *Parser) parseContinueStatement() *ContinueStatement {
 
 func (p *Parser) parseForStatement() *ForStatement {
 	stmt := &ForStatement{}
+	stmt.NodeBase = NodeBase{Token: p.curTok}
 
 	// init
 	p.nextToken() // move to VAR or IDENT
@@ -532,6 +549,7 @@ func (p *Parser) parseForStatement() *ForStatement {
 
 func (p *Parser) parseWhileStatement() *WhileStatement {
 	stmt := &WhileStatement{}
+	stmt.NodeBase = NodeBase{Token: p.curTok}
 
 	// move to condition
 	p.nextToken()
@@ -587,8 +605,9 @@ func (p *Parser) parseExpression(precedence int) Expression {
 		p.nextToken() // ]
 
 		left = &IndexExpression{
-			Left:  left,
-			Index: index,
+			NodeBase: NodeBase{Token: p.curTok},
+			Left:     left,
+			Index:    index,
 		}
 	}
 
@@ -597,6 +616,7 @@ func (p *Parser) parseExpression(precedence int) Expression {
 
 func (p *Parser) parseInfixExpression(left Expression) Expression {
 	expr := &InfixExpression{
+		NodeBase: NodeBase{Token: p.curTok},
 		Left:     left,
 		Operator: p.curTok.Literal,
 	}
@@ -618,13 +638,14 @@ func (p *Parser) parsePrimary() Expression {
 			return nil
 		}
 		return &PrefixExpression{
+			NodeBase: NodeBase{Token: p.curTok},
 			Operator: operator,
 			Right:    right,
 		}
 
 	case token.INT:
-		return &IntLiteral{Value: atoi(p.curTok.Literal)}
-		
+		return &IntLiteral{NodeBase: NodeBase{Token: p.curTok}, Value: atoi(p.curTok.Literal)}
+
 	case token.INT_TYPE:
 		// expect '('
 		p.nextToken()
@@ -642,10 +663,10 @@ func (p *Parser) parsePrimary() Expression {
 		}
 		p.nextToken()
 
-		return &IntCastExpression{Value: val}
+		return &IntCastExpression{NodeBase: NodeBase{Token: p.curTok}, Value: val}
 
 	case token.FLOAT:
-		return &FloatLiteral{Value: atof(p.curTok.Literal)}
+		return &FloatLiteral{NodeBase: NodeBase{Token: p.curTok}, Value: atof(p.curTok.Literal)}
 
 	case token.FLOAT_TYPE:
 		// expect '('
@@ -664,10 +685,10 @@ func (p *Parser) parsePrimary() Expression {
 		}
 		p.nextToken()
 
-		return &FloatCastExpression{Value: val}
+		return &FloatCastExpression{NodeBase: NodeBase{Token: p.curTok}, Value: val}
 
 	case token.STRING:
-		return &StringLiteral{Value: p.curTok.Literal}
+		return &StringLiteral{NodeBase: NodeBase{Token: p.curTok}, Value: p.curTok.Literal}
 
 	case token.STRING_TYPE:
 		// expect '('
@@ -686,19 +707,19 @@ func (p *Parser) parsePrimary() Expression {
 		}
 		p.nextToken()
 
-		return &StringCastExpression{Value: val}
+		return &StringCastExpression{NodeBase: NodeBase{Token: p.curTok}, Value: val}
 
 	case token.TRUE:
-		return &BoolLiteral{Value: true}
+		return &BoolLiteral{NodeBase: NodeBase{Token: p.curTok}, Value: true}
 
 	case token.FALSE:
-		return &BoolLiteral{Value: false}
+		return &BoolLiteral{NodeBase: NodeBase{Token: p.curTok}, Value: false}
 
 	case token.IDENT:
 		if p.peekTok.Type == token.LPAREN {
 			return p.parseFuncCall()
 		}
-		return &Identifier{Value: p.curTok.Literal}
+		return &Identifier{NodeBase: NodeBase{Token: p.curTok}, Value: p.curTok.Literal}
 
 	case token.LPAREN:
 		p.nextToken()
@@ -709,7 +730,7 @@ func (p *Parser) parsePrimary() Expression {
 		}
 
 		p.nextToken()
-		return &GroupedExpression{Expression: exp}
+		return &GroupedExpression{NodeBase: NodeBase{Token: p.curTok}, Expression: exp}
 
 	case token.LBRACKET:
 		return p.parseArrayLiteral()

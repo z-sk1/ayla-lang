@@ -95,7 +95,7 @@ func run() {
 
 	interp := interpreter.New()
 	if sig, err := interp.EvalStatements(program); err != nil {
-		fmt.Println("Runtime error:", err)
+		fmt.Println(err)
 	} else {
 		_ = sig
 	}

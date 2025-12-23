@@ -30,6 +30,8 @@ type Func struct {
 
 type RuntimeError struct {
 	Message string
+	Line    int
+	Column  int
 }
 
 type Environment struct {
@@ -53,7 +55,12 @@ func NewEnvironment() *Environment {
 }
 
 func (e RuntimeError) Error() string {
-	return e.Message
+	return fmt.Sprintf("Runtime error at %d:%d: %s", e.Line, e.Column, e.Message)
+}
+
+func NewRuntimeError(node parser.Node, msg string) RuntimeError {
+	line, col := node.Pos()
+	return RuntimeError{Message: msg, Line: line, Column: col}
 }
 
 func (e *Environment) Get(name string) (Value, bool) {
@@ -104,7 +111,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 
 		// variable must not exist
 		if _, ok := i.env.Get(stmt.Name); ok {
-			return SignalNone{}, RuntimeError{Message: fmt.Sprintf("cant redeclare variable with egg, to reassign just do '%s = %v'\n", stmt.Name, stmt.Value)}
+			return SignalNone{}, NewRuntimeError(s, fmt.Sprintf("cant redeclare var: %s", stmt.Name))
 		}
 
 		i.env.Set(stmt.Name, val)
@@ -118,7 +125,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 
 		// check if variable already exist
 		if _, ok := i.env.Get(stmt.Name); ok {
-			return SignalNone{}, RuntimeError{Message: fmt.Sprintf("cant redeclare const %s", stmt.Name)}
+			return SignalNone{}, NewRuntimeError(s, fmt.Sprintf("cant redeclare const %s", stmt.Name))
 		}
 
 		// store const val
@@ -133,13 +140,13 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 
 		// variable must already exist
 		if _, ok := i.env.Get(stmt.Name); !ok {
-			return SignalNone{}, RuntimeError{Message: fmt.Sprintf("assignment to undefined variable: %s", stmt.Name)}
+			return SignalNone{}, NewRuntimeError(s, fmt.Sprintf("assignment to undefined variable: %s", stmt.Name))
 		}
 
 		// check for const
 		if existingVal, ok := i.env.Get(stmt.Name); ok {
 			if _, isConst := existingVal.(ConstValue); isConst {
-				return SignalNone{}, RuntimeError{Message: fmt.Sprintf("cannot reassign to const: %s", stmt.Name)}
+				return SignalNone{}, NewRuntimeError(s, fmt.Sprintf("cannot reassign to const: %s", stmt.Name))
 			}
 		}
 
@@ -154,7 +161,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 
 		arrVal, ok := leftVal.([]interface{})
 		if !ok {
-			return SignalNone{}, RuntimeError{Message: "assignment to non-array"}
+			return SignalNone{}, NewRuntimeError(s, "assignment to non-array")
 		}
 
 		idxVal, err := i.EvalExpression(stmt.Index)
@@ -164,11 +171,11 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 
 		idx, ok := idxVal.(int)
 		if !ok {
-			return SignalNone{}, RuntimeError{Message: "array index must be int"}
+			return SignalNone{}, NewRuntimeError(s, "array index must be int")
 		}
 
 		if idx < 0 || idx >= len(arrVal) {
-			return SignalNone{}, RuntimeError{Message: "array index out of bounds"}
+			return SignalNone{}, NewRuntimeError(s, "array index out of bounds")
 		}
 
 		newVal, err := i.EvalExpression(stmt.Value)
@@ -212,10 +219,10 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 
 	case *parser.IfStatement:
 		if stmt.Condition == nil {
-			return SignalNone{}, RuntimeError{Message: "if statement missing condition"}
+			return SignalNone{}, NewRuntimeError(s, "if statement missing condition")
 		}
 		if stmt.Consequence == nil {
-			return SignalNone{}, RuntimeError{Message: "if statement missing consequence"}
+			return SignalNone{}, NewRuntimeError(s, "if statement missing consequence")
 		}
 		cond, err := i.EvalExpression(stmt.Condition)
 		if err != nil {
@@ -314,7 +321,7 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (interface{}, error) {
 	case *parser.Identifier:
 		val, ok := i.env.Get(expr.Value)
 		if !ok {
-			return nil, RuntimeError{Message: fmt.Sprintf("undefined variable: %s", expr.Value)}
+			return nil, NewRuntimeError(e, fmt.Sprintf("undefined variable: %s", expr.Value))
 		}
 
 		// unwrap const from ConstValue{}
@@ -343,11 +350,11 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (interface{}, error) {
 		case string:
 			n, err := strconv.Atoi(x)
 			if err != nil {
-				return nil, RuntimeError{Message: "could not convert string to int"}
+				return nil, NewRuntimeError(e, "could not convert string to int")
 			}
 			return n, nil
 		default:
-			return nil, RuntimeError{Message: "unsupported int() conversion"}
+			return nil, NewRuntimeError(e, "unsupported int() conversion")
 		}
 
 	case *parser.FloatCastExpression:
@@ -369,11 +376,11 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (interface{}, error) {
 		case string:
 			n, err := strconv.ParseFloat(x, 64)
 			if err != nil {
-				return nil, RuntimeError{Message: "could not convert string to float"}
+				return nil, NewRuntimeError(e, "could not convert string to float")
 			}
 			return n, nil
 		default:
-			return nil, RuntimeError{Message: "unsupported float() conversion"}
+			return nil, NewRuntimeError(e, "unsupported float() conversion")
 		}
 
 	case *parser.StringCastExpression:
@@ -397,7 +404,7 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (interface{}, error) {
 			n := strconv.FormatFloat(x, 'f', -1, 64)
 			return n, nil
 		default:
-			return nil, RuntimeError{Message: "unsupported string() conversion"}
+			return nil, NewRuntimeError(e, "unsupported string() conversion")
 		}
 
 	case *parser.ArrayLiteral:
@@ -425,16 +432,16 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (interface{}, error) {
 
 		arr, ok := left.([]interface{})
 		if !ok {
-			return nil, RuntimeError{Message: "indexing non-array"}
+			return nil, NewRuntimeError(e, "indexing non-array")
 		}
 
 		idx, ok := index.(int)
 		if !ok {
-			return nil, RuntimeError{Message: "array index must be int"}
+			return nil, NewRuntimeError(e, "array index must be int")
 		}
 
 		if idx < 0 || idx >= len(arr) {
-			return nil, RuntimeError{Message: "array index out of bounds"}
+			return nil, NewRuntimeError(e, "array index out of bounds")
 		}
 
 		return arr[idx], nil
@@ -442,11 +449,11 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (interface{}, error) {
 	case *parser.FuncCall:
 		fn, ok := i.env.GetFunc(expr.Name)
 		if !ok {
-			return nil, RuntimeError{Message: fmt.Sprintf("unknown function: %s", expr.Name)}
+			return nil, NewRuntimeError(e, fmt.Sprintf("unknown function: %s", expr.Name))
 		}
 
 		if len(fn.Params) != len(expr.Args) {
-			return nil, RuntimeError{Message: "wrong numbers of args"}
+			return nil, NewRuntimeError(e, "wrong numbers of args")
 		}
 
 		// create new env for func call
@@ -536,7 +543,7 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (interface{}, error) {
 			return nil, err
 		}
 
-		return evalInfix(left, expr.Operator, right)
+		return evalInfix(expr, left, expr.Operator, right)
 
 	case *parser.PrefixExpression:
 		right, err := i.EvalExpression(expr.Right)
@@ -544,7 +551,7 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (interface{}, error) {
 			return nil, err
 		}
 
-		return evalPrefix(expr.Operator, right), nil
+		return evalPrefix(expr, expr.Operator, right)
 
 	case *parser.GroupedExpression:
 		return i.EvalExpression(expr.Expression)
@@ -554,13 +561,13 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (interface{}, error) {
 	}
 }
 
-func evalInfix(left interface{}, operator string, right interface{}) (interface{}, error) {
+func evalInfix(node *parser.InfixExpression, left interface{}, operator string, right interface{}) (interface{}, error) {
 	switch l := left.(type) {
 
 	case int:
 		r, ok := right.(int)
 		if !ok {
-			return nil, RuntimeError{Message: "type mismatch: int compared to non-int"}
+			return nil, NewRuntimeError(node, "type mismatch: int compared to non-int")
 		}
 
 		switch operator {
@@ -572,7 +579,7 @@ func evalInfix(left interface{}, operator string, right interface{}) (interface{
 			return l * r, nil
 		case "/":
 			if r == 0 {
-				return nil, RuntimeError{Message: "undefined: cant divide by zero"}
+				return nil, NewRuntimeError(node, "undefined: cant divide by zero")
 			}
 
 			return l / r, nil
@@ -596,7 +603,7 @@ func evalInfix(left interface{}, operator string, right interface{}) (interface{
 			if ri, isInt := right.(int); isInt {
 				r = float64(ri)
 			} else {
-				return nil, RuntimeError{Message: "type mismatch: float compared to non-float"}
+				return nil, NewRuntimeError(node, "type mismatch: float compared to non-float")
 			}
 		}
 
@@ -609,7 +616,7 @@ func evalInfix(left interface{}, operator string, right interface{}) (interface{
 			return l * r, nil
 		case "/":
 			if r == 0 {
-				return nil, RuntimeError{Message: "undefined: cant divide by zero"}
+				return nil, NewRuntimeError(node, "undefined: cant divide by zero")
 			}
 
 			return l / r, nil
@@ -630,7 +637,7 @@ func evalInfix(left interface{}, operator string, right interface{}) (interface{
 	case string:
 		r, ok := right.(string)
 		if !ok {
-			return nil, RuntimeError{Message: "type mismatch: string compared to non-string"}
+			return nil, NewRuntimeError(node, "type mismatch: string compared to non-string")
 		}
 
 		switch operator {
@@ -645,7 +652,7 @@ func evalInfix(left interface{}, operator string, right interface{}) (interface{
 	case bool:
 		r, ok := right.(bool)
 		if !ok {
-			return nil, RuntimeError{Message: "type mismatch: bool compared to non-bool"}
+			return nil, NewRuntimeError(node, "type mismatch: bool compared to non-bool")
 		}
 
 		switch operator {
@@ -660,15 +667,15 @@ func evalInfix(left interface{}, operator string, right interface{}) (interface{
 		}
 	}
 
-	return nil, RuntimeError{Message: "unsupported operand types"}
+	return nil, NewRuntimeError(node, "unsupported operand types")
 }
 
-func evalPrefix(operator string, right interface{}) interface{} {
+func evalPrefix(node *parser.PrefixExpression, operator string, right interface{}) (interface{}, error) {
 	switch operator {
 	case "!":
-		return !isTruthy(right)
+		return !isTruthy(right), nil
 	default:
-		panic("unknown prefix operator: " + operator)
+		return nil, NewRuntimeError(node, fmt.Sprintf("unknown prefix operator: %s", operator))
 	}
 }
 

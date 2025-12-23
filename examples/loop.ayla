@@ -1,11 +1,3 @@
-egg i = 0
+rock i = 0
 
-why i < 7 {
-    i = i + 1
-
-    ayla i == 4 {
-        next
-    }
-
-    explode(i)
-}
+i = i + 1

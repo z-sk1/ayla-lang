@@ -11,10 +11,18 @@ type Lexer struct {
 	position     int
 	readPosition int
 	ch           byte
+
+	line   int
+	column int
 }
 
 func New(input string) *Lexer {
-	l := &Lexer{input: input}
+	l := &Lexer{
+		input:  input,
+		line:   1,
+		column: 0,
+	}
+
 	l.readChar()
 	return l
 }
@@ -27,6 +35,13 @@ func (l *Lexer) readChar() {
 	}
 	l.position = l.readPosition
 	l.readPosition++
+
+	if l.ch == '\n' {
+		l.line++
+		l.column = 0
+	} else {
+		l.column++
+	}
 }
 
 func isLetter(ch byte) bool {
@@ -99,91 +114,93 @@ func (l *Lexer) NextToken() token.Token {
 		if l.peekChar() == '=' {
 			ch := l.ch
 			l.readChar()
-			tok = token.Token{Type: token.EQ, Literal: string(ch) + string(l.ch)}
+			tok = token.Token{Type: token.EQ, Literal: string(ch) + string(l.ch), Line: l.line, Column: l.column}
 		} else {
-			tok = token.Token{Type: token.ASSIGN, Literal: "="}
+			tok = token.Token{Type: token.ASSIGN, Literal: "=", Line: l.line, Column: l.column}
 		}
 	case '+':
-		tok = token.Token{Type: token.PLUS, Literal: "+"}
+		tok = token.Token{Type: token.PLUS, Literal: "+", Line: l.line, Column: l.column}
 	case '-':
-		tok = token.Token{Type: token.MINUS, Literal: "-"}
+		tok = token.Token{Type: token.MINUS, Literal: "-", Line: l.line, Column: l.column}
 	case ';':
-		tok = token.Token{Type: token.SEMICOLON, Literal: ";"}
+		tok = token.Token{Type: token.SEMICOLON, Literal: ";", Line: l.line, Column: l.column}
 	case '/':
-		tok = token.Token{Type: token.SLASH, Literal: "/"}
+		tok = token.Token{Type: token.SLASH, Literal: "/", Line: l.line, Column: l.column}
 	case '"':
-		tok = token.Token{Type: token.STRING, Literal: l.readString()}
+		tok = token.Token{Type: token.STRING, Literal: l.readString(), Line: l.line, Column: l.column}
 		return tok
 	case ',':
-		tok = token.Token{Type: token.COMMA, Literal: ","}
+		tok = token.Token{Type: token.COMMA, Literal: ",", Line: l.line, Column: l.column}
 	case ':':
-		tok = token.Token{Type: token.COLON, Literal: ":"}
+		tok = token.Token{Type: token.COLON, Literal: ":", Line: l.line, Column: l.column}
 	case '*':
-		tok = token.Token{Type: token.ASTERISK, Literal: "*"}
+		tok = token.Token{Type: token.ASTERISK, Literal: "*", Line: l.line, Column: l.column}
 	case '<':
 		if l.peekChar() == '=' {
 			ch := l.ch
 			l.readChar()
-			tok = token.Token{Type: token.LTE, Literal: string(ch) + string(l.ch)}
+			tok = token.Token{Type: token.LTE, Literal: string(ch) + string(l.ch), Line: l.line, Column: l.column}
 		} else {
-			tok = token.Token{Type: token.LT, Literal: "<"}
+			tok = token.Token{Type: token.LT, Literal: "<", Line: l.line, Column: l.column}
 		}
 	case '>':
 		if l.peekChar() == '=' {
 			ch := l.ch
 			l.readChar()
-			tok = token.Token{Type: token.GTE, Literal: string(ch) + string(l.ch)}
+			tok = token.Token{Type: token.GTE, Literal: string(ch) + string(l.ch), Line: l.line, Column: l.column}
 		} else {
-			tok = token.Token{Type: token.GT, Literal: ">"}
+			tok = token.Token{Type: token.GT, Literal: ">", Line: l.line, Column: l.column}
 		}
 	case '!':
 		if l.peekChar() == '=' {
 			ch := l.ch
 			l.readChar()
-			tok = token.Token{Type: token.NOT_EQ, Literal: string(ch) + string(l.ch)}
+			tok = token.Token{Type: token.NOT_EQ, Literal: string(ch) + string(l.ch), Line: l.line, Column: l.column}
 		} else {
-			tok = token.Token{Type: token.BANG, Literal: "!"}
+			tok = token.Token{Type: token.BANG, Literal: "!", Line: l.line, Column: l.column}
 		}
 	case '&':
 		if l.peekChar() == '&' {
 			ch := l.ch
 			l.readChar()
-			tok = token.Token{Type: token.AND, Literal: string(ch) + string(l.ch)}
+			tok = token.Token{Type: token.AND, Literal: string(ch) + string(l.ch), Line: l.line, Column: l.column}
 		}
 	case '|':
 		if l.peekChar() == '|' {
 			ch := l.ch
 			l.readChar()
-			tok = token.Token{Type: token.OR, Literal: string(ch) + string(l.ch)}
+			tok = token.Token{Type: token.OR, Literal: string(ch) + string(l.ch), Line: l.line, Column: l.column}
 		}
 	case 0:
-		tok = token.Token{Type: token.EOF, Literal: ""}
+		tok = token.Token{Type: token.EOF, Literal: "", Line: l.line, Column: l.column}
 	case '(':
-		tok = token.Token{Type: token.LPAREN, Literal: "("}
+		tok = token.Token{Type: token.LPAREN, Literal: "(", Line: l.line, Column: l.column}
 	case ')':
-		tok = token.Token{Type: token.RPAREN, Literal: ")"}
+		tok = token.Token{Type: token.RPAREN, Literal: ")", Line: l.line, Column: l.column}
 	case '{':
-		tok = token.Token{Type: token.LBRACE, Literal: "{"}
+		tok = token.Token{Type: token.LBRACE, Literal: "{", Line: l.line, Column: l.column}
 	case '}':
-		tok = token.Token{Type: token.RBRACE, Literal: "}"}
+		tok = token.Token{Type: token.RBRACE, Literal: "}", Line: l.line, Column: l.column}
 	case '[':
-		tok = token.Token{Type: token.LBRACKET, Literal: "["}
+		tok = token.Token{Type: token.LBRACKET, Literal: "[", Line: l.line, Column: l.column}
 	case ']':
-		tok = token.Token{Type: token.RBRACKET, Literal: "]"}
+		tok = token.Token{Type: token.RBRACKET, Literal: "]", Line: l.line, Column: l.column}
 	default:
 		if isLetter(l.ch) {
 			literal := l.readIdentifier()
 			tok.Type = token.LookupIdent(literal) // <-- keyword check
 			tok.Literal = literal
+			tok.Line = l.line
+			tok.Column = l.column
 			return tok // return early to avoid readChar() below
 		} else if isDigit(l.ch) {
 			num := l.readNumber()
 			if strings.Contains(num, ".") {
-				return token.Token{Type: token.FLOAT, Literal: num}
+				return token.Token{Type: token.FLOAT, Literal: num, Line: l.line, Column: l.column}
 			}
-			return token.Token{Type: token.INT, Literal: num} // return early
+			return token.Token{Type: token.INT, Literal: num, Line: l.line, Column: l.column} // return early
 		} else {
-			tok = token.Token{Type: token.ILLEGAL, Literal: string(l.ch)}
+			tok = token.Token{Type: token.ILLEGAL, Literal: string(l.ch), Line: l.line, Column: l.column}
 		}
 	}
 
