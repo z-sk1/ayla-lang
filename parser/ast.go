@@ -74,11 +74,6 @@ type AssignmentStatement struct {
 	Value Expression
 }
 
-type ScanlnStatement struct {
-	NodeBase
-	Name string
-}
-
 type IfStatement struct {
 	NodeBase
 	Condition   Expression

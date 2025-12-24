@@ -56,7 +56,7 @@ func (f FloatValue) Type() ValueType {
 }
 
 func (f FloatValue) String() string {
-	return fmt.Sprintf("%g", f.V)
+	return fmt.Sprintf("%.6f", f.V)
 }
 
 type StringValue struct {

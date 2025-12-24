@@ -2,6 +2,7 @@ package interpreter
 
 import (
 	"fmt"
+	"math/rand"
 	"strconv"
 
 	"github.com/z-sk1/ayla-lang/parser"
@@ -95,6 +96,85 @@ func registerBuiltins(env *Environment) {
 			return NilValue{}, nil
 		},
 	}
+
+	env.builtins["randi"] = &BuiltinFunc{
+		Name:  "randi",
+		Arity: -1,
+		Fn: func(node *parser.FuncCall, args []Value) (Value, error) {
+			switch len(args) {
+			case 0:
+				n := rand.Intn(2)
+				return IntValue{V: n}, nil
+			case 1:
+				maxV, ok := args[0].(IntValue)
+				if !ok {
+					return NilValue{}, NewRuntimeError(node, "randi expects (int <= 0)")
+				}
+
+				if maxV.V <= 0 {
+					return NilValue{}, NewRuntimeError(node, "randi expects (int <= 0)")
+				}
+
+				max := maxV.V
+				n := rand.Intn(max) + 1
+
+				return IntValue{V: n}, nil
+			case 2:
+				minV, ok1 := args[0].(IntValue)
+				maxV, ok2 := args[1].(IntValue)
+
+				if !ok1 || !ok2 {
+					return NilValue{}, NewRuntimeError(node, "randi expects 0-2 args")
+				}
+
+				min := minV.V
+				max := maxV.V
+
+				if min > max {
+					min, max = max, min
+				}
+
+				n := rand.Intn(max-min+1) + min
+				return IntValue{V: n}, nil
+			}
+			return NilValue{}, NewRuntimeError(node, "invalid amount of args, randi expects 0-2 args")
+		},
+	}
+
+	env.builtins["randf"] = &BuiltinFunc{
+		Name:  "randf",
+		Arity: -1,
+		Fn: func(node *parser.FuncCall, args []Value) (Value, error) {
+			switch len(args) {
+			case 0:
+				n := rand.Float64()
+				return FloatValue{V: n}, nil
+			case 1:
+				maxV, ok := toFloat(args[0])
+				if !ok {
+					return NilValue{}, NewRuntimeError(node, "randf expects 0-2 args")
+				}
+
+				n := rand.Float64() * maxV
+				return FloatValue{V: n}, nil
+			case 2:
+				minV, ok1 := toFloat(args[0])
+				maxV, ok2 := toFloat(args[1])
+
+				if !ok1 || !ok2 {
+					return NilValue{}, NewRuntimeError(node, "randf expects 0-2 args")
+				}
+
+				if minV > maxV {
+					minV, maxV = maxV, minV
+				}
+
+				n := rand.Float64()*(maxV-minV+1) + minV
+				return FloatValue{V: n}, nil
+			}
+			return NilValue{}, NewRuntimeError(node, "invalid amount of args, randf expects 0-2 args")
+		},
+	}
 }
 
 func NewEnvironment() *Environment {
@@ -131,6 +211,17 @@ func (e *Environment) GetFunc(name string) (*Func, bool) {
 
 func (e *Environment) SetFunc(name string, f *Func) {
 	e.funcs[name] = f
+}
+
+func toFloat(v Value) (float64, bool) {
+	switch x := v.(type) {
+	case FloatValue:
+		return x.V, true
+	case IntValue:
+		return float64(x.V), true
+	default:
+		return 0, false
+	}
 }
 
 func (i *Interpreter) EvalStatements(stmts []parser.Statement) (ControlSignal, error) {

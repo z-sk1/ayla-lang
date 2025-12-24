@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"strings"
+	"math/rand"
 
 	"github.com/z-sk1/ayla-lang/interpreter"
 	"github.com/z-sk1/ayla-lang/lexer"
@@ -15,6 +16,8 @@ import (
 )
 
 func main() {
+	rand.Seed(time.Now().Unix())
+
 	cmds := []string{
 		"run: ayla run [--debug] [--timed] <file>, runs the ayla script",
 		"--version: ayla --version, returns the current version",
