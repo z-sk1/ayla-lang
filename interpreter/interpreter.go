@@ -12,6 +12,12 @@ type Func struct {
 	Body   []parser.Statement
 }
 
+type BuiltinFunc struct {
+	Name  string
+	Arity int
+	Fn    func(node *parser.FuncCall, args []Value) (Value, error)
+}
+
 type RuntimeError struct {
 	Message string
 	Line    int
@@ -21,8 +27,9 @@ type RuntimeError struct {
 type Binding interface{}
 
 type Environment struct {
-	store map[string]Binding
-	funcs map[string]*Func
+	store    map[string]Binding
+	funcs    map[string]*Func
+	builtins map[string]*BuiltinFunc
 }
 
 type Interpreter struct {
@@ -30,13 +37,71 @@ type Interpreter struct {
 }
 
 func New() *Interpreter {
-	return &Interpreter{env: NewEnvironment()}
+	env := NewEnvironment()
+	registerBuiltins(env)
+	return &Interpreter{env: env}
+}
+
+func registerBuiltins(env *Environment) {
+	env.builtins["len"] = &BuiltinFunc{
+		Name:  "len",
+		Arity: 1,
+		Fn: func(node *parser.FuncCall, args []Value) (Value, error) {
+			v := args[0]
+			switch v.Type() {
+			case STRING:
+				return IntValue{V: len(v.(StringValue).V)}, nil
+			case ARRAY:
+				return IntValue{V: len(v.(ArrayValue).Elements)}, nil
+			default:
+				return NilValue{}, NewRuntimeError(node, fmt.Sprintf("len() not supported for type %s", v.Type()))
+			}
+		},
+	}
+
+	env.builtins["explode"] = &BuiltinFunc{
+		Name:  "explode",
+		Arity: -1,
+		Fn: func(node *parser.FuncCall, args []Value) (Value, error) {
+			for _, v := range args {
+				fmt.Println(v.String())
+			}
+			return NilValue{}, nil
+		},
+	}
+
+	env.builtins["tsaln"] = &BuiltinFunc{
+		Name:  "tsaln",
+		Arity: 1,
+		Fn: func(node *parser.FuncCall, args []Value) (Value, error) {
+			ident, ok := node.Args[0].(*parser.Identifier)
+			if !ok {
+				return NilValue{}, NewRuntimeError(node, "tsaln expects a variable")
+			}
+
+			varName := ident.Value
+
+			// is it const?
+			if v, ok := env.Get(varName); ok {
+				if _, isConst := v.(ConstValue); isConst {
+					return NilValue{}, NewRuntimeError(node, fmt.Sprintf("cannot assign to const %s", varName))
+				}
+			}
+
+			var input string
+			fmt.Scanln(&input)
+			env.Set(varName, StringValue{V: input})
+
+			return NilValue{}, nil
+		},
+	}
 }
 
 func NewEnvironment() *Environment {
 	return &Environment{
-		store: make(map[string]Binding),
-		funcs: make(map[string]*Func),
+		store:    make(map[string]Binding),
+		funcs:    make(map[string]*Func),
+		builtins: make(map[string]*BuiltinFunc),
 	}
 }
 
@@ -185,21 +250,6 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 
 	case *parser.ExpressionStatement:
 		i.EvalExpression(stmt.Expression)
-		return SignalNone{}, nil
-
-	case *parser.PrintStatement:
-		val, err := i.EvalExpression(stmt.Value)
-		if err != nil {
-			return NilValue{}, err
-		}
-
-		fmt.Println(val)
-		return SignalNone{}, nil
-
-	case *parser.ScanlnStatement:
-		var input string
-		fmt.Scanln(&input)
-		i.env.Set(stmt.Name, input)
 		return SignalNone{}, nil
 
 	case *parser.IfStatement:
@@ -436,6 +486,26 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 		return arr.Elements[idx], nil
 
 	case *parser.FuncCall:
+		// built in?
+		if b, ok := i.env.builtins[expr.Name]; ok {
+			args := []Value{}
+
+			for _, a := range expr.Args {
+				v, err := i.EvalExpression(a)
+				if err != nil {
+					return NilValue{}, err
+				}
+				args = append(args, v)
+			}
+
+			if b.Arity >= 0 && len(args) != b.Arity {
+				return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("expected %d args, got %d", b.Arity, len(args)))
+			}
+
+			return b.Fn(expr, args)
+		}
+
+		// user-defined
 		fn, ok := i.env.GetFunc(expr.Name)
 		if !ok {
 			return NilValue{}, NewRuntimeError(e, fmt.Sprintf("unknown function: %s", expr.Name))

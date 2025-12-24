@@ -5,8 +5,8 @@ type TokenType string
 type Token struct {
 	Type    TokenType
 	Literal string
-	Line int
-	Column int
+	Line    int
+	Column  int
 }
 
 const (
@@ -62,8 +62,6 @@ const (
 	TRUE     = "TRUE"
 	FALSE    = "FALSE"
 
-	SCANLN = "SCANLN"
-
 	INT_TYPE    = "INT_TYPE"
 	FLOAT_TYPE  = "FLOAT_TYPE"
 	STRING_TYPE = "STRING_TYPE"
@@ -92,9 +90,6 @@ var keywords = map[string]TokenType{
 
 	"yes": TRUE,
 	"no":  FALSE,
-
-	"explode": PRINT,
-	"tsaln":   SCANLN,
 }
 
 func LookupIdent(ident string) TokenType {

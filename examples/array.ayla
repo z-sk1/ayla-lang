@@ -3,3 +3,9 @@ egg arr = ["hi", 2, 3]
 arr[2] = 5
 
 explode(arr)
+explode(len(arr))
+
+explode(len(arr[0]))
+
+egg str = "wefff"
+explode(len(str))

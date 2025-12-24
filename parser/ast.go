@@ -74,11 +74,6 @@ type AssignmentStatement struct {
 	Value Expression
 }
 
-type PrintStatement struct {
-	NodeBase
-	Value Expression
-}
-
 type ScanlnStatement struct {
 	NodeBase
 	Name string

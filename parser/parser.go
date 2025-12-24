@@ -65,10 +65,6 @@ func (p *Parser) parseStatement() Statement {
 		return p.parseConstStatement()
 	case token.FUNC:
 		return p.parseFuncStatement()
-	case token.PRINT:
-		return p.parsePrintStatement()
-	case token.SCANLN:
-		return p.parseScanlnStatement()
 	case token.IF:
 		return p.parseIfStatement()
 	case token.FOR:
@@ -274,65 +270,6 @@ func (p *Parser) parseAssignmentNoSemicolon() *AssignmentStatement {
 	p.nextToken()
 
 	stmt.Value = p.parseExpression(LOWEST)
-	return stmt
-}
-
-func (p *Parser) parsePrintStatement() *PrintStatement {
-	stmt := &PrintStatement{}
-	stmt.NodeBase = NodeBase{Token: p.curTok}
-
-	// Expect '('
-	p.nextToken()
-	if p.curTok.Type != token.LPAREN {
-		return nil
-	}
-
-	// Parse the expression inside parentheses
-	p.nextToken()
-	stmt.Value = p.parseExpression(LOWEST)
-
-	// Expect ')'
-	p.nextToken()
-	if p.curTok.Type != token.RPAREN {
-		return nil
-	}
-
-	// Optional semicolon
-	if p.peekTok.Type == token.SEMICOLON {
-		p.nextToken()
-	}
-
-	return stmt
-}
-
-func (p *Parser) parseScanlnStatement() *ScanlnStatement {
-	stmt := &ScanlnStatement{}
-	stmt.NodeBase = NodeBase{Token: p.curTok}
-
-	// expect '('
-	p.nextToken()
-	if p.curTok.Type != token.LPAREN {
-		return nil
-	}
-
-	// expect the ident and store it
-	p.nextToken()
-	if p.curTok.Type != token.IDENT {
-		return nil
-	}
-	stmt.Name = p.curTok.Literal
-
-	// expect ')'
-	p.nextToken()
-	if p.curTok.Type != token.RPAREN {
-		return nil
-	}
-
-	// optional semicolon
-	if p.peekTok.Type == token.SEMICOLON {
-		p.nextToken()
-	}
-
 	return stmt
 }
 
