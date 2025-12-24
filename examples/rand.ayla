@@ -1,1 +1,1 @@
-explode(randi(5, 10))
+explode(len("ayla wow"))

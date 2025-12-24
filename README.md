@@ -157,6 +157,51 @@ func test() int {
 
 so uh have fun with that :-)
 
+## built in functions!
+
+## **len**:
+### supports strings and arrays
+
+```
+egg arr = [1, 2, 3, 4]
+
+explode(len(arr))
+```
+> output: 4
+
+```
+egg str = "ayla wow"
+
+explode(len(str))
+```
+> output: 8
+
+## **randi**:
+returns a random integer
+
+### if zero args are present will return either 0 or 1
+
+```
+explode(randi())
+```
+> output: 0 or 1
+
+### if there is 1 arg, it will return a random number between 0 and the arg
+```
+explode(randi(5))
+```
+> output: 0 - 5
+
+### if there are 2 args, it will return a random number between the first and second arg *(min, max)*
+```
+explode(randi(5, 10))
+```
+> output: 5 - 10
+
+## **randf**
+
+### all the same features as randi, but for floats
+
 ## type casting
 
 as of now, you can cast int(), string(), and float()
@@ -167,27 +212,6 @@ egg foo = "12"
 explode(int(foo) + 5)
 ```
 > output: 17
-
-## built in functions
-right now, there are two built in functions
-
-explode, and tsaln
-
-explode writes to the console, some petty langs call it print
-
-tsaln corresponds to fmt.Scanln() in go, the parameter is not a prompt, but a reference to the variable to store the input in
-
-> using the & symbol is unneeded though
-
-```
-egg name = ""
-
-explode("What is your name?")
-tsaln(name)
-
-explode("Hello " + name)
-```
-> output: Hello {name}
 
 ## arrays
 to initialise an array use square brackets: **[]**
