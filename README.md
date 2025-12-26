@@ -1,33 +1,48 @@
+# ayla lang
+ayla lang is a small interpreted language written in go, designed to make you forget everything
+
+*Because fuck you.* - Linus Torvalds
+
 # about
 
 ## our team
 - **Me: z-sk1, Co-Owner**
 - **and Mregg55, Co-Owner (link: https://github.com/mregg55)**
 
-
-
 # the features
 
 ## declaration and assignment
 to declare a normal mutable, reassignable variable use **egg** 
-```
+```ayla
 egg x = "wowie"
 ```
 
+variables can be declared without an initial value, like so.
+```ayla
+egg x
+```
+they default to `nil`
+
 to declare a constant, use **rock**
 
-```
+```ayla
 rock x = "i will never change"
 ```
 
+constants cannot be declared without an intitial value.
+```ayla
+rock x
+```
+> output: Runtime error at 1:5: const x must be initialised
+
 ## semicolon
 semicolons are optional! put them if you want, or leave them out if you're more comfortable with that
-```
+```ayla
 egg x = 5;
 ```
 this is totally fine
 
-```
+```ayla
 egg x = 5
 ```
 also valid
@@ -35,7 +50,7 @@ also valid
 ## booleans
 booleans can be either yes or no
 
-```
+```ayla
 egg foo = yes
 
 ayla foo {
@@ -46,12 +61,29 @@ ayla foo {
 ```
 > output: foo is yes
 
+## strings 
+you can concatenate strings using the **+** operator.
+
+```ayla
+egg a = "hello "
+egg b = "world"
+
+explode(a + b)
+```
+> output: hello world
+
+you can also concatenate strings with other types by casting.
+```ayla 
+explode(string(4) + 2)
+```
+> output: 42
+
 ## if/else if/else
 
 in ayla-lang, if has been renamed to **ayla**, and else renamed to **elen**. therefore else if has been aptly renamed to **elen ayla**.
 
 
-```
+```ayla
 egg x = 5
 
 ayla x <= 9 {
@@ -71,7 +103,7 @@ oh yea also no brackets
 
 *for convenience*
 
-```
+```ayla
 four egg i = 0; i < 5; i = i + 1 {
     explode(i) 
 }
@@ -85,7 +117,7 @@ no brackets here either
 
 :>
 
-```
+```ayla
 egg i = 0
 
 why i < 7 {
@@ -103,7 +135,7 @@ because we are so nice, we renamed break to **kitkat** so it sticks in your memo
 
 oh yea we also renamed continue to **next**
 
-```
+```ayla
 egg i = 0
 
 why i < 7 {
@@ -118,7 +150,7 @@ why i < 7 {
 ```
 > output: 1 2 3
 
-```
+```ayla
 egg i = 0
 
 why i < 7 {
@@ -139,7 +171,7 @@ nuh uh now theyre called blueprints
 
 return has been renamed to back, haha
 
-```
+```ayla
 blueprint add(x, y) {
     back x + y
 }
@@ -149,69 +181,13 @@ explode(add(5, 7))
 output: 12
 
 you cant have a designated return type like this, yet
-```
+```ayla
 func test() int {
     return something
 }
 ```
 
 so uh have fun with that :-)
-
-## built in functions!
-
-## **len**:
-### supports strings and arrays
-
-```
-egg arr = [1, 2, 3, 4]
-
-explode(len(arr))
-```
-> output: 4
-
-```
-egg str = "ayla wow"
-
-explode(len(str))
-```
-> output: 8
-
-## **randi**:
-returns a random integer
-
-### if zero args are present will return either 0 or 1
-
-```
-explode(randi())
-```
-> output: 0 or 1
-
-### if there is 1 arg, it will return a random number between 0 and the arg
-```
-explode(randi(5))
-```
-> output: 0 - 5
-
-### if there are 2 args, it will return a random number between the first and second arg *(min, max)*
-```
-explode(randi(5, 10))
-```
-> output: 5 - 10
-
-## **randf**
-
-### all the same features as randi, but for floats
-
-## type casting
-
-as of now, you can cast int(), string(), and float()
-
-```
-egg foo = "12"
-
-explode(int(foo) + 5)
-```
-> output: 17
 
 ## arrays
 to initialise an array use square brackets: **[]**
@@ -221,7 +197,7 @@ egg arr = [0, 1, 2, 3]
 
 explode(arr)
 ```
-> output: [0 1 2 3]
+> output: [0, 1, 2, 3]
 
 you can also index into an array, like normal
 
@@ -240,7 +216,26 @@ arr[1] = "world"
 
 explode(arr)
 ```
-> output: [hello world]
+> output: [hello, world]
+
+## built in functions!
+- `explode(...)` – prints values to stdout
+- `tsaln(x)` – scans console input and stores it in variable
+- `bool(x)` – converts a value to boolean
+- `string(x)` – converts a value to string
+- `int(x)` – converts a value to integer
+- `float(x)` – converts a value to float
+- `type(x)` – returns type of value as string
+- `len(x)` – returns length of arrays or strings
+- `push(arr, val)` – append to array
+- `pop(arr)` – remove and return last element
+- `insert(arr, index, val)` – insert value
+- `remove(arr, index)` – remove element at index
+- `clear(arr)` – remove all elements
+- `randi()` or `randi(max)` or `randi(min, max)`
+- `randf()` or `randf(max)` or `randf(min, max)`
+
+See [docs/builtins.md](docs/builtins.md) for more about built-in functions.
 
 ## cli tooling and running scripts
 
@@ -257,7 +252,7 @@ there isnt a REPL currently, so make sure to put **ayla** infront of every cmd
 
 to run a script do:
 
-```
+```bash
 ayla run [--debug] [--timed] <file>
 ```
 > --debug will give debug info like ast, and tokens
@@ -268,12 +263,12 @@ ayla run [--debug] [--timed] <file>
 ### miscellaneous
 version:
 
-```
+```ayla
 ayla --version
 ```
 
 help:
 
-```
+```ayla
 ayla --help
 ```

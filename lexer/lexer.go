@@ -52,12 +52,21 @@ func isDigit(ch byte) bool {
 	return '0' <= ch && ch <= '9'
 }
 
+func isIdentStart(ch byte) bool {
+    return isLetter(ch) || ch == '_'
+}
+
+func isIdentPart(ch byte) bool {
+    return isLetter(ch) || isDigit(ch) || ch == '_'
+}
+
+
 func (l *Lexer) readIdentifier() string {
-	start := l.position
-	for isLetter(l.ch) {
-		l.readChar()
-	}
-	return l.input[start:l.position]
+    pos := l.position
+    for isIdentPart(l.ch) {
+        l.readChar()
+    }
+    return l.input[pos:l.position]
 }
 
 // read numbers
@@ -186,19 +195,19 @@ func (l *Lexer) NextToken() token.Token {
 	case ']':
 		tok = token.Token{Type: token.RBRACKET, Literal: "]", Line: l.line, Column: l.column}
 	default:
-		if isLetter(l.ch) {
+		if isIdentStart(l.ch) {
 			literal := l.readIdentifier()
-			tok.Type = token.LookupIdent(literal) // <-- keyword check
+			tok.Type = token.LookupIdent(literal)
 			tok.Literal = literal
 			tok.Line = l.line
 			tok.Column = l.column
-			return tok // return early to avoid readChar() below
+			return tok
 		} else if isDigit(l.ch) {
 			num := l.readNumber()
 			if strings.Contains(num, ".") {
 				return token.Token{Type: token.FLOAT, Literal: num, Line: l.line, Column: l.column}
 			}
-			return token.Token{Type: token.INT, Literal: num, Line: l.line, Column: l.column} // return early
+			return token.Token{Type: token.INT, Literal: num, Line: l.line, Column: l.column}
 		} else {
 			tok = token.Token{Type: token.ILLEGAL, Literal: string(l.ch), Line: l.line, Column: l.column}
 		}

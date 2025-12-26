@@ -80,7 +80,11 @@ func (b BoolValue) Type() ValueType {
 }
 
 func (b BoolValue) String() string {
-	return fmt.Sprintf("%t", b.V)
+	if b.V {
+		return "yes"
+	}
+
+	return "no"
 }
 
 type ArrayValue struct {

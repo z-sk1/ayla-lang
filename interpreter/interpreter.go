@@ -44,6 +44,109 @@ func New() *Interpreter {
 }
 
 func registerBuiltins(env *Environment) {
+	env.builtins["int"] = &BuiltinFunc{
+		Name:  "int",
+		Arity: 1,
+		Fn: func(node *parser.FuncCall, args []Value) (Value, error) {
+			v := args[0]
+
+			switch v.Type() {
+			case INT:
+				return IntValue{V: v.(IntValue).V}, nil
+			case FLOAT:
+				return IntValue{V: int(v.(FloatValue).V)}, nil
+			case BOOL:
+				if v.(BoolValue).V {
+					return IntValue{V: 1}, nil
+				}
+				return IntValue{V: 0}, nil
+			case STRING:
+				n, err := strconv.Atoi(v.(StringValue).V)
+				if err != nil {
+					return NilValue{}, NewRuntimeError(node, "could not convert string to int")
+				}
+				return IntValue{V: n}, nil
+			default:
+				return NilValue{}, NewRuntimeError(node, "unsupported int() conversion")
+			}
+		},
+	}
+
+	env.builtins["float"] = &BuiltinFunc{
+		Name:  "float",
+		Arity: 1,
+		Fn: func(node *parser.FuncCall, args []Value) (Value, error) {
+			v := args[0]
+
+			switch v.Type() {
+			case FLOAT:
+				return FloatValue{V: v.(FloatValue).V}, nil
+			case INT:
+				return FloatValue{V: float64(v.(IntValue).V)}, nil
+			case BOOL:
+				if v.(BoolValue).V {
+					return FloatValue{V: 1.0}, nil
+				}
+				return FloatValue{V: 0.0}, nil
+			case STRING:
+				n, err := strconv.ParseFloat(v.(StringValue).V, 64)
+				if err != nil {
+					return NilValue{}, NewRuntimeError(node, "could not convert string to float")
+				}
+				return FloatValue{V: n}, nil
+			default:
+				return NilValue{}, NewRuntimeError(node, "unsupported float() conversion")
+			}
+		},
+	}
+
+	env.builtins["string"] = &BuiltinFunc{
+		Name:  "string",
+		Arity: 1,
+		Fn: func(node *parser.FuncCall, args []Value) (Value, error) {
+			v := args[0]
+
+			switch v.Type() {
+			case STRING:
+				return StringValue{V: v.(StringValue).V}, nil
+			case BOOL:
+				if v.(BoolValue).V {
+					return StringValue{V: "true"}, nil
+				}
+				return StringValue{V: "false"}, nil
+			case INT:
+				n := strconv.Itoa(v.(IntValue).V)
+				return StringValue{V: n}, nil
+			case FLOAT:
+				n := strconv.FormatFloat(v.(FloatValue).V, 'f', -1, 64)
+				return StringValue{V: n}, nil
+			default:
+				return NilValue{}, NewRuntimeError(node, "unsupported string() conversion")
+			}
+		},
+	}
+
+	env.builtins["bool"] = &BuiltinFunc{
+		Name:  "bool",
+		Arity: 1,
+		Fn: func(node *parser.FuncCall, args []Value) (Value, error) {
+			v := args[0]
+
+			switch v.Type() {
+			case BOOL:
+				return BoolValue{V: v.(BoolValue).V}, nil
+			case INT:
+				return BoolValue{V: v.(IntValue).V != 0}, nil
+			case FLOAT:
+				return BoolValue{V: v.(FloatValue).V != 0}, nil
+			case STRING:
+				return BoolValue{V: v.(StringValue).V != ""}, nil
+			default:
+				return NilValue{}, NewRuntimeError(node, "unsupported bool() conversion")
+			}
+		},
+	}
+
 	env.builtins["len"] = &BuiltinFunc{
 		Name:  "len",
 		Arity: 1,
@@ -60,12 +163,23 @@ func registerBuiltins(env *Environment) {
 		},
 	}
 
+	env.builtins["type"] = &BuiltinFunc{
+		Name:  "type",
+		Arity: 1,
+		Fn: func(node *parser.FuncCall, args []Value) (Value, error) {
+			v := args[0]
+			return StringValue{V: string(v.Type())}, nil
+		},
+	}
+
 	env.builtins["explode"] = &BuiltinFunc{
 		Name:  "explode",
 		Arity: -1,
 		Fn: func(node *parser.FuncCall, args []Value) (Value, error) {
 			for _, v := range args {
-				fmt.Println(v.String())
+				if v.Type() != NIL {
+					fmt.Println(v.String())
+				}
 			}
 			return NilValue{}, nil
 		},
@@ -92,6 +206,141 @@ func registerBuiltins(env *Environment) {
 			var input string
 			fmt.Scanln(&input)
 			env.Set(varName, StringValue{V: input})
+
+			return NilValue{}, nil
+		},
+	}
+
+	env.builtins["push"] = &BuiltinFunc{
+		Name:  "push",
+		Arity: 2,
+		Fn: func(node *parser.FuncCall, args []Value) (Value, error) {
+			arr, ok := args[0].(ArrayValue)
+			if !ok {
+				return NilValue{}, NewRuntimeError(node, "push expects (arr, val)")
+			}
+
+			val := args[1]
+
+			arr.Elements = append(arr.Elements, val)
+
+			// write back
+			if ident, ok := node.Args[0].(*parser.Identifier); ok {
+				env.Set(ident.Value, arr)
+			}
+
+			return NilValue{}, nil
+		},
+	}
+
+	env.builtins["pop"] = &BuiltinFunc{
+		Name:  "pop",
+		Arity: 1,
+		Fn: func(node *parser.FuncCall, args []Value) (Value, error) {
+			arr, ok := args[0].(ArrayValue)
+			if !ok {
+				return NilValue{}, NewRuntimeError(node, "pop expects array")
+			}
+
+			if len(arr.Elements) == 0 {
+				return NilValue{}, NewRuntimeError(node, "pop from empty array")
+			}
+
+			// get last element
+			lastIdx := len(arr.Elements) - 1
+			val := arr.Elements[lastIdx]
+
+			// shrink array
+			arr.Elements = arr.Elements[:lastIdx]
+
+			// write back
+			if ident, ok := node.Args[0].(*parser.Identifier); ok {
+				env.Set(ident.Value, arr)
+			}
+
+			return val, nil
+		},
+	}
+
+	env.builtins["insert"] = &BuiltinFunc{
+		Name:  "insert",
+		Arity: 3,
+		Fn: func(node *parser.FuncCall, args []Value) (Value, error) {
+			arr, ok := args[0].(ArrayValue)
+			if !ok {
+				return NilValue{}, NewRuntimeError(node, "insert expects (arr, index, val)")
+			}
+
+			idxVal, ok := args[1].(IntValue)
+			if !ok {
+				return NilValue{}, NewRuntimeError(node, "insert expects (arr, index, val)")
+			}
+			idx := idxVal.V
+
+			if idx < 0 || idx > len(arr.Elements) {
+				return NilValue{}, NewRuntimeError(node, fmt.Sprintf("insert index %d out of bounds", idx))
+			}
+
+			val := args[2]
+
+			// actual insert
+			arr.Elements = append(arr.Elements[:idx], append([]Value{val}, arr.Elements[idx:]...)...)
+
+			// write back
+			if ident, ok := node.Args[0].(*parser.Identifier); ok {
+				env.Set(ident.Value, arr)
+			}
+
+			return NilValue{}, nil
+		},
+	}
+
+	env.builtins["remove"] = &BuiltinFunc{
+		Name:  "remove",
+		Arity: 2,
+		Fn: func(node *parser.FuncCall, args []Value) (Value, error) {
+			arr, ok := args[0].(ArrayValue)
+			if !ok {
+				return NilValue{}, NewRuntimeError(node, "remove expects (arr, index)")
+			}
+
+			idxVal, ok := args[1].(IntValue)
+			if !ok {
+				return NilValue{}, NewRuntimeError(node, "remove expects (arr, index)")
+			}
+			idx := idxVal.V
+
+			if idx < 0 || idx > len(arr.Elements) {
+				return NilValue{}, NewRuntimeError(node, fmt.Sprintf("remove index %d is out of bounds", idx))
+			}
+
+			removed := arr.Elements[idx]
+
+			// remove element
+			arr.Elements = append(arr.Elements[:idx], arr.Elements[idx+1:]...)
+
+			if ident, ok := node.Args[0].(*parser.Identifier); ok {
+				env.Set(ident.Value, arr)
+			}
+
+			return removed, nil
+		},
+	}
+
+	env.builtins["clear"] = &BuiltinFunc{
+		Name:  "clear",
+		Arity: 1,
+		Fn: func(node *parser.FuncCall, args []Value) (Value, error) {
+			arr, ok := args[0].(ArrayValue)
+			if !ok {
+				return NilValue{}, NewRuntimeError(node, "clear expects (arr)")
+			}
+
+			arr.Elements = arr.Elements[:0]
+
+			if ident, ok := node.Args[0].(*parser.Identifier); ok {
+				env.Set(ident.Value, arr)
+			}
 
 			return NilValue{}, nil
 		},
@@ -246,9 +495,16 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 
 	switch stmt := s.(type) {
 	case *parser.VarStatement:
-		val, err := i.EvalExpression(stmt.Value)
-		if err != nil {
-			return NilValue{}, err
+		var val Value
+
+		if stmt.Value == nil {
+			val = NilValue{}
+		} else {
+			var err error
+			val, err = i.EvalExpression(stmt.Value)
+			if err != nil {
+				return NilValue{}, err
+			}
 		}
 
 		// variable must not exist
@@ -260,9 +516,16 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		return SignalNone{}, nil
 
 	case *parser.ConstStatement:
-		val, err := i.EvalExpression(stmt.Value)
-		if err != nil {
-			return NilValue{}, err
+		var val Value
+
+		if stmt.Value == nil {
+			return SignalNone{}, NewRuntimeError(s, fmt.Sprintf("const %s must be initialised", stmt.Name))
+		} else {
+			var err error
+			val, err = i.EvalExpression(stmt.Value)
+			if err != nil {
+				return NilValue{}, err
+			}
 		}
 
 		// check if variable already exist
@@ -340,8 +603,11 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		return SignalReturn{Value: val}, nil
 
 	case *parser.ExpressionStatement:
-		i.EvalExpression(stmt.Expression)
-		return SignalNone{}, nil
+		val, err := i.EvalExpression(stmt.Expression)
+		if err != nil {
+			return NilValue{}, err
+		}
+		return val, nil
 
 	case *parser.IfStatement:
 		if stmt.Condition == nil {
@@ -458,82 +724,6 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 		}
 
 		return binding.(Value), nil
-
-	case *parser.IntCastExpression:
-		v, err := i.EvalExpression(expr.Value)
-		if err != nil {
-			return NilValue{}, err
-		}
-
-		switch v.Type() {
-		case INT:
-			return IntValue{V: v.(IntValue).V}, nil
-		case FLOAT:
-			return IntValue{V: int(v.(FloatValue).V)}, nil
-		case BOOL:
-			if v.(BoolValue).V {
-				return IntValue{V: 1}, nil
-			}
-			return IntValue{V: 0}, nil
-		case STRING:
-			n, err := strconv.Atoi(v.(StringValue).V)
-			if err != nil {
-				return NilValue{}, NewRuntimeError(e, "could not convert string to int")
-			}
-			return IntValue{V: n}, nil
-		default:
-			return NilValue{}, NewRuntimeError(e, "unsupported int() conversion")
-		}
-
-	case *parser.FloatCastExpression:
-		v, err := i.EvalExpression(expr.Value)
-		if err != nil {
-			return NilValue{}, err
-		}
-
-		switch v.Type() {
-		case FLOAT:
-			return FloatValue{V: v.(FloatValue).V}, nil
-		case INT:
-			return FloatValue{V: float64(v.(IntValue).V)}, nil
-		case BOOL:
-			if v.(BoolValue).V {
-				return FloatValue{V: 1.0}, nil
-			}
-			return FloatValue{V: 0.0}, nil
-		case STRING:
-			n, err := strconv.ParseFloat(v.(StringValue).V, 64)
-			if err != nil {
-				return NilValue{}, NewRuntimeError(e, "could not convert string to float")
-			}
-			return FloatValue{V: n}, nil
-		default:
-			return NilValue{}, NewRuntimeError(e, "unsupported float() conversion")
-		}
-
-	case *parser.StringCastExpression:
-		v, err := i.EvalExpression(expr.Value)
-		if err != nil {
-			return NilValue{}, err
-		}
-
-		switch v.Type() {
-		case STRING:
-			return StringValue{V: v.(StringValue).V}, nil
-		case BOOL:
-			if v.(BoolValue).V {
-				return StringValue{V: "true"}, nil
-			}
-			return StringValue{V: "false"}, nil
-		case INT:
-			n := strconv.Itoa(v.(IntValue).V)
-			return StringValue{V: n}, nil
-		case FLOAT:
-			n := strconv.FormatFloat(v.(FloatValue).V, 'f', -1, 64)
-			return StringValue{V: n}, nil
-		default:
-			return NilValue{}, NewRuntimeError(e, "unsupported string() conversion")
-		}
 
 	case *parser.ArrayLiteral:
 		elements := []Value{}
@@ -707,7 +897,7 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 		return i.EvalExpression(expr.Expression)
 
 	default:
-		return NilValue{}, nil
+		return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("unhandled expression type: %T", e))
 	}
 }
 
@@ -722,7 +912,7 @@ func evalInfix(node *parser.InfixExpression, left Value, op string, right Value)
 	}
 
 	if left.Type() == FLOAT && right.Type() == INT {
-		return evalFloatInfix(node, left.(FloatValue), op, FloatValue{V: float64(left.(IntValue).V)})
+		return evalFloatInfix(node, left.(FloatValue), op, FloatValue{V: float64(right.(IntValue).V)})
 	}
 
 	switch left.Type() {

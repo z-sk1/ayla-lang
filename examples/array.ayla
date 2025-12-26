@@ -1,11 +1,4 @@
-egg arr = ["hi", 2, 3]
+egg arr = [1, 2, 3, 4]
 
-arr[2] = 5
-
+clear(arr)
 explode(arr)
-explode(len(arr))
-
-explode(len(arr[0]))
-
-egg str = "wefff"
-explode(len(str))

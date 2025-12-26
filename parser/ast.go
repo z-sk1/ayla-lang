@@ -144,29 +144,14 @@ type IntLiteral struct {
 	Value int
 }
 
-type IntCastExpression struct {
-	NodeBase
-	Value Expression
-}
-
 type FloatLiteral struct {
 	NodeBase
 	Value float64
 }
 
-type FloatCastExpression struct {
-	NodeBase
-	Value Expression
-}
-
 type StringLiteral struct {
 	NodeBase
 	Value string
-}
-
-type StringCastExpression struct {
-	NodeBase
-	Value Expression
 }
 
 type BoolLiteral struct {

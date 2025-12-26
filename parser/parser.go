@@ -580,77 +580,57 @@ func (p *Parser) parsePrimary() Expression {
 			Right:    right,
 		}
 
+	case token.MINUS:
+		operator := p.curTok.Literal
+		p.nextToken()
+		right := p.parsePrimary()
+		if right == nil {
+			return nil
+		}
+		return &PrefixExpression{
+			NodeBase: NodeBase{Token: p.curTok},
+			Operator: operator,
+			Right: right,
+		}
+
 	case token.INT:
 		return &IntLiteral{NodeBase: NodeBase{Token: p.curTok}, Value: atoi(p.curTok.Literal)}
 
 	case token.INT_TYPE:
-		// expect '('
-		p.nextToken()
-		if p.curTok.Type != token.LPAREN {
-			return nil
+		if p.peekTok.Type == token.LPAREN {
+			return p.parseFuncCall()
 		}
-
-		// parse inner expression
-		p.nextToken()
-		val := p.parseExpression(LOWEST)
-
-		// expect ')'
-		if p.peekTok.Type != token.RPAREN {
-			panic("expected ) after int(")
-		}
-		p.nextToken()
-
-		return &IntCastExpression{NodeBase: NodeBase{Token: p.curTok}, Value: val}
+		return nil
 
 	case token.FLOAT:
 		return &FloatLiteral{NodeBase: NodeBase{Token: p.curTok}, Value: atof(p.curTok.Literal)}
 
 	case token.FLOAT_TYPE:
-		// expect '('
-		p.nextToken()
-		if p.curTok.Type != token.LPAREN {
-			return nil
+		if p.peekTok.Type == token.LPAREN {
+			return p.parseFuncCall()
 		}
-
-		// parse inner expresion
-		p.nextToken()
-		val := p.parseExpression(LOWEST)
-
-		// expect ')'
-		if p.peekTok.Type != token.RPAREN {
-			panic("expected ) after float(")
-		}
-		p.nextToken()
-
-		return &FloatCastExpression{NodeBase: NodeBase{Token: p.curTok}, Value: val}
+		return nil
 
 	case token.STRING:
 		return &StringLiteral{NodeBase: NodeBase{Token: p.curTok}, Value: p.curTok.Literal}
 
 	case token.STRING_TYPE:
-		// expect '('
-		p.nextToken()
-		if p.curTok.Type != token.LPAREN {
-			return nil
+		if p.peekTok.Type == token.LPAREN {
+			return p.parseFuncCall()
 		}
-
-		// parse inner expression
-		p.nextToken()
-		val := p.parseExpression(LOWEST)
-
-		// expect ')'
-		if p.peekTok.Type != token.RPAREN {
-			panic("expected ) after string(")
-		}
-		p.nextToken()
-
-		return &StringCastExpression{NodeBase: NodeBase{Token: p.curTok}, Value: val}
+		return nil
 
 	case token.TRUE:
 		return &BoolLiteral{NodeBase: NodeBase{Token: p.curTok}, Value: true}
 
 	case token.FALSE:
 		return &BoolLiteral{NodeBase: NodeBase{Token: p.curTok}, Value: false}
+
+	case token.BOOL_TYPE:
+		if p.peekTok.Type == token.LPAREN {
+			return p.parseFuncCall()
+		}
+		return nil
 
 	case token.IDENT:
 		if p.peekTok.Type == token.LPAREN {
