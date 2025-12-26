@@ -61,7 +61,7 @@ ayla foo {
 ```
 > output: foo is yes
 
-## strings 
+## string concatenation
 you can concatenate strings using the **+** operator.
 
 ```ayla
