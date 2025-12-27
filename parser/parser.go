@@ -3,10 +3,43 @@ package parser
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/z-sk1/ayla-lang/lexer"
 	"github.com/z-sk1/ayla-lang/token"
 )
+
+type Parser struct {
+	NodeBase
+	l       *lexer.Lexer
+	curTok  token.Token
+	peekTok token.Token
+
+	errors []error
+}
+
+type ParseError struct {
+	Message string
+	Line    int
+	Column  int
+	Token   token.Token
+}
+
+func (e ParseError) Error() string {
+	if e.Token.Literal == "" {
+		e.Token.Literal = "nothing"
+	}
+
+	return fmt.Sprintf("parse error at %d:%d: %s (got %s)", e.Line, e.Column, e.Message, e.Token.Literal)
+}
+
+func (p *Parser) Errors() []error {
+	return p.errors
+}
+
+func (p *Parser) addError(msg string) {
+	p.errors = append(p.errors, &ParseError{Message: msg, Line: p.curTok.Line, Column: p.curTok.Column, Token: p.curTok})
+}
 
 func atoi(a string) int {
 	val, _ := strconv.Atoi(a)
@@ -102,14 +135,16 @@ func (p *Parser) parseVarStatement() *VarStatement {
 	// Expect next token to be identifier
 	p.nextToken()
 	if p.curTok.Type != token.IDENT {
+		p.addError("expected identifier after 'egg'")
 		return nil
 	}
 	stmt.Name = p.curTok.Literal
 
 	// Expect '='
 	p.nextToken()
-	if p.curTok.Type != token.ASSIGN {
-		return nil
+	if p.curTok.Type == token.ASSIGN {
+		stmt.Value = nil
+		return stmt
 	}
 
 	// Expression after '='
@@ -160,6 +195,7 @@ func (p *Parser) parseArrayLiteral() Expression {
 	}
 
 	if p.peekTok.Type != token.RBRACKET {
+		p.addError("expected ']' to close array")
 		return nil
 	}
 
@@ -181,13 +217,17 @@ func (p *Parser) parseIndexAssignment() *IndexAssignmentStatement {
 	idx := p.parseExpression(LOWEST)
 
 	if p.peekTok.Type != token.RBRACKET {
+		p.addError("expected ']' to close index")
 		return nil
 	}
 	p.nextToken() // ]
 
 	// expect '='
 	if p.peekTok.Type != token.ASSIGN {
-		return nil
+		stmt.Left = left
+		stmt.Index = idx
+		stmt.Value = nil
+		return stmt
 	}
 	p.nextToken() // =
 
@@ -213,6 +253,7 @@ func (p *Parser) parseConstStatement() *ConstStatement {
 	// move to ident
 	p.nextToken()
 	if p.curTok.Type != token.IDENT {
+		p.addError("expected identifier after 'rock'")
 		return nil
 	}
 	stmt.Name = p.curTok.Literal
@@ -220,6 +261,7 @@ func (p *Parser) parseConstStatement() *ConstStatement {
 	// expect '='
 	p.nextToken()
 	if p.curTok.Type != token.ASSIGN {
+		p.addError("expected '=' after identifier")
 		return nil
 	}
 
@@ -284,7 +326,7 @@ func (p *Parser) parseIfStatement() *IfStatement {
 	// expect '{'
 	if p.peekTok.Type != token.LBRACE {
 		fmt.Println("Error: missing '{' in if")
-		return stmt
+		return nil
 	}
 
 	p.nextToken() // move to '{'
@@ -324,6 +366,7 @@ func (p *Parser) parseFuncStatement() *FuncStatement {
 	// move to func name
 	p.nextToken()
 	if p.curTok.Type != token.IDENT {
+		p.addError("expected identifier after 'blueprint'")
 		return nil
 	}
 	stmt.Name = p.curTok.Literal
@@ -331,6 +374,7 @@ func (p *Parser) parseFuncStatement() *FuncStatement {
 	// expect '('
 	p.nextToken()
 	if p.curTok.Type != token.LPAREN {
+		p.addError("expected '(' after identifier")
 		return nil
 	}
 
@@ -350,6 +394,7 @@ func (p *Parser) parseFuncStatement() *FuncStatement {
 
 	// expect '{'
 	if p.peekTok.Type != token.LBRACE {
+		p.addError("expected '{' after ')'")
 		return nil
 	}
 	p.nextToken() // move to '{'
@@ -364,6 +409,7 @@ func (p *Parser) parseFuncCall() Expression {
 	// expect '('
 	p.nextToken()
 	if p.curTok.Type != token.LPAREN {
+
 		return nil
 	}
 
@@ -445,11 +491,13 @@ func (p *Parser) parseForStatement() *ForStatement {
 	p.nextToken() // move to VAR or IDENT
 	stmt.Init = p.parseForInit()
 	if stmt.Init == nil {
+		p.addError("expected init declaration after 'four'")
 		return nil
 	}
 
 	// expect ';'
 	if p.peekTok.Type != token.SEMICOLON {
+		p.addError("expected ';' after four statement init")
 		return nil
 	}
 	p.nextToken() // consume ';'
@@ -458,11 +506,13 @@ func (p *Parser) parseForStatement() *ForStatement {
 	p.nextToken()
 	stmt.Condition = p.parseExpression(LOWEST)
 	if stmt.Condition == nil {
+		p.addError("expected condition after ';'")
 		return nil
 	}
 
 	// expect ';'
 	if p.peekTok.Type != token.SEMICOLON {
+		p.addError("expected ';' after condition")
 		return nil
 	}
 	p.nextToken() // consume ';'
@@ -471,11 +521,13 @@ func (p *Parser) parseForStatement() *ForStatement {
 	p.nextToken()
 	stmt.Post = p.parseForPost()
 	if stmt.Post == nil {
+		p.addError("expected post expression after ';'")
 		return nil
 	}
 
 	// expect '{'
 	if p.peekTok.Type != token.LBRACE {
+		p.addError("expected '{' after post expression")
 		return nil
 	}
 	p.nextToken() // move to '{'
@@ -492,11 +544,13 @@ func (p *Parser) parseWhileStatement() *WhileStatement {
 	p.nextToken()
 	stmt.Condition = p.parseExpression(LOWEST)
 	if stmt.Condition == nil {
+		p.addError("expected condition after 'why'")
 		return nil
 	}
 
 	// expect '{'
 	if p.peekTok.Type != token.LBRACE {
+		p.addError("expected '{' after condition")
 		return nil
 	}
 	p.nextToken() // move to '{'
@@ -537,6 +591,7 @@ func (p *Parser) parseExpression(precedence int) Expression {
 		index := p.parseExpression(LOWEST)
 
 		if p.peekTok.Type != token.RBRACKET {
+			p.addError("expected ']'")
 			return nil
 		}
 		p.nextToken() // ]
@@ -565,6 +620,55 @@ func (p *Parser) parseInfixExpression(left Expression) Expression {
 	return expr
 }
 
+func (p *Parser) parseStringLiteral() Expression {
+	raw := p.curTok.Literal
+
+	if !strings.Contains(raw, "${") {
+		return &StringLiteral{NodeBase: NodeBase{Token: p.curTok}, Value: raw}
+	}
+
+	parts := []Expression{}
+	i := 0
+
+	for i < len(raw) {
+		if raw[i] == '$' && i+1 < len(raw) && raw[i+1] == '{' {
+			i += 2 // skip ${
+			start := i
+			depth := 1
+
+			for i < len(raw) && depth > 0 {
+				switch raw[i] {
+				case '{':
+					depth++
+				case '}':
+					depth--
+				}
+				i++
+			}
+
+			exprSrc := raw[start : i-1]
+
+			expr := p.parseExpressionFromString(exprSrc)
+			parts = append(parts, expr)
+		} else {
+			start := i
+			for i < len(raw) && !(raw[i] == '$' && i+1 < len(raw) && raw[i+1] == '{') {
+				i++
+			}
+
+			parts = append(parts, &StringLiteral{Value: raw[start:i]})
+		}
+	}
+
+	return &InterpolatedString{Parts: parts}
+}
+
+func (p *Parser) parseExpressionFromString(src string) Expression {
+	l := lexer.New(src)
+	subParser := New(l)
+	return subParser.parseExpression(LOWEST)
+}
+
 func (p *Parser) parsePrimary() Expression {
 	switch p.curTok.Type {
 	case token.BANG:
@@ -590,7 +694,7 @@ func (p *Parser) parsePrimary() Expression {
 		return &PrefixExpression{
 			NodeBase: NodeBase{Token: p.curTok},
 			Operator: operator,
-			Right: right,
+			Right:    right,
 		}
 
 	case token.INT:
@@ -612,7 +716,7 @@ func (p *Parser) parsePrimary() Expression {
 		return nil
 
 	case token.STRING:
-		return &StringLiteral{NodeBase: NodeBase{Token: p.curTok}, Value: p.curTok.Literal}
+		return p.parseStringLiteral()
 
 	case token.STRING_TYPE:
 		if p.peekTok.Type == token.LPAREN {

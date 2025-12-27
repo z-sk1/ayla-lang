@@ -87,9 +87,10 @@ func (l *Lexer) readNumber() string {
 	return l.input[start:l.position]
 }
 
-func (l *Lexer) readString() string {
+func (l *Lexer) readString() string {	
 	// skip the opening quote
 	l.readChar()
+
 	start := l.position
 	for l.ch != '"' && l.ch != 0 {
 		l.readChar()

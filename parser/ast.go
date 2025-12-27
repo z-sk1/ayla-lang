@@ -1,7 +1,6 @@
 package parser
 
 import (
-	"github.com/z-sk1/ayla-lang/lexer"
 	"github.com/z-sk1/ayla-lang/token"
 )
 
@@ -154,6 +153,11 @@ type StringLiteral struct {
 	Value string
 }
 
+type InterpolatedString struct {
+	NodeBase
+	Parts []Expression
+}
+
 type BoolLiteral struct {
 	NodeBase
 	Value bool
@@ -185,11 +189,4 @@ type PrefixExpression struct {
 type GroupedExpression struct {
 	NodeBase
 	Expression Expression
-}
-
-type Parser struct {
-	NodeBase
-	l       *lexer.Lexer
-	curTok  token.Token
-	peekTok token.Token
 }

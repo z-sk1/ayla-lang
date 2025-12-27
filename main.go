@@ -6,8 +6,8 @@ import (
 
 	"time"
 
-	"strings"
 	"math/rand"
+	"strings"
 
 	"github.com/z-sk1/ayla-lang/interpreter"
 	"github.com/z-sk1/ayla-lang/lexer"
@@ -88,6 +88,13 @@ func run() {
 	program := p.ParseProgram()
 	if debug {
 		fmt.Printf("AST: %#v\n", program)
+	}
+
+	if len(p.Errors()) > 0 {
+		for _, err := range p.Errors() {
+			fmt.Println(err)
+		}
+		return
 	}
 
 	var started time.Time

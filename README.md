@@ -78,6 +78,18 @@ explode(string(4) + 2)
 ```
 > output: 42
 
+## string interpolation
+you can also interpolate strings using **${}**
+
+> unlike JavaScript, you just use the normal quotation marks, " ", not ` `
+
+```ayla
+egg rand = randi(10)
+
+explode("Random number: ${rand}")
+```
+> output: 0 - 10
+
 ## if/else if/else
 
 in ayla-lang, if has been renamed to **ayla**, and else renamed to **elen**. therefore else if has been aptly renamed to **elen ayla**.

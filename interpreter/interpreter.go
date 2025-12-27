@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/rand"
 	"strconv"
+	"strings"
 
 	"github.com/z-sk1/ayla-lang/parser"
 )
@@ -41,6 +42,53 @@ func New() *Interpreter {
 	env := NewEnvironment()
 	registerBuiltins(env)
 	return &Interpreter{env: env}
+}
+
+func NewEnvironment() *Environment {
+	return &Environment{
+		store:    make(map[string]Binding),
+		funcs:    make(map[string]*Func),
+		builtins: make(map[string]*BuiltinFunc),
+	}
+}
+
+func (e RuntimeError) Error() string {
+	return fmt.Sprintf("runtime error at %d:%d: %s", e.Line, e.Column, e.Message)
+}
+
+func NewRuntimeError(node parser.Node, msg string) RuntimeError {
+	line, col := node.Pos()
+	return RuntimeError{Message: msg, Line: line, Column: col}
+}
+
+func (e *Environment) Get(name string) (Binding, bool) {
+	val, ok := e.store[name]
+	return val, ok
+}
+
+func (e *Environment) Set(name string, val Binding) Binding {
+	e.store[name] = val
+	return val
+}
+
+func (e *Environment) GetFunc(name string) (*Func, bool) {
+	f, ok := e.funcs[name]
+	return f, ok
+}
+
+func (e *Environment) SetFunc(name string, f *Func) {
+	e.funcs[name] = f
+}
+
+func toFloat(v Value) (float64, bool) {
+	switch x := v.(type) {
+	case FloatValue:
+		return x.V, true
+	case IntValue:
+		return float64(x.V), true
+	default:
+		return 0, false
+	}
 }
 
 func registerBuiltins(env *Environment) {
@@ -426,53 +474,6 @@ func registerBuiltins(env *Environment) {
 	}
 }
 
-func NewEnvironment() *Environment {
-	return &Environment{
-		store:    make(map[string]Binding),
-		funcs:    make(map[string]*Func),
-		builtins: make(map[string]*BuiltinFunc),
-	}
-}
-
-func (e RuntimeError) Error() string {
-	return fmt.Sprintf("Runtime error at %d:%d: %s", e.Line, e.Column, e.Message)
-}
-
-func NewRuntimeError(node parser.Node, msg string) RuntimeError {
-	line, col := node.Pos()
-	return RuntimeError{Message: msg, Line: line, Column: col}
-}
-
-func (e *Environment) Get(name string) (Binding, bool) {
-	val, ok := e.store[name]
-	return val, ok
-}
-
-func (e *Environment) Set(name string, val Binding) Binding {
-	e.store[name] = val
-	return val
-}
-
-func (e *Environment) GetFunc(name string) (*Func, bool) {
-	f, ok := e.funcs[name]
-	return f, ok
-}
-
-func (e *Environment) SetFunc(name string, f *Func) {
-	e.funcs[name] = f
-}
-
-func toFloat(v Value) (float64, bool) {
-	switch x := v.(type) {
-	case FloatValue:
-		return x.V, true
-	case IntValue:
-		return float64(x.V), true
-	default:
-		return 0, false
-	}
-}
-
 func (i *Interpreter) EvalStatements(stmts []parser.Statement) (ControlSignal, error) {
 	for _, s := range stmts {
 		sig, err := i.EvalStatement(s)
@@ -519,7 +520,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		var val Value
 
 		if stmt.Value == nil {
-			return SignalNone{}, NewRuntimeError(s, fmt.Sprintf("const %s must be initialised", stmt.Name))
+			return NilValue{}, NewRuntimeError(s, fmt.Sprintf("const %s must be initialised", stmt.Name))
 		} else {
 			var err error
 			val, err = i.EvalExpression(stmt.Value)
@@ -585,6 +586,10 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		newVal, err := i.EvalExpression(stmt.Value)
 		if err != nil {
 			return SignalNone{}, err
+		}
+
+		if newVal == nil {
+			return SignalNone{}, nil
 		}
 
 		arrVal.Elements[idx] = newVal
@@ -895,6 +900,20 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 
 	case *parser.GroupedExpression:
 		return i.EvalExpression(expr.Expression)
+
+	case *parser.InterpolatedString:
+		is := expr
+		var out strings.Builder
+
+		for _, part := range is.Parts {
+			val, err := i.EvalExpression(part)
+			if err != nil {
+				return NilValue{}, err
+			}
+			out.WriteString(val.String())
+		}
+
+		return &StringValue{V: out.String()}, nil
 
 	default:
 		return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("unhandled expression type: %T", e))
