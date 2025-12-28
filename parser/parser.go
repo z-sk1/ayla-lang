@@ -142,7 +142,7 @@ func (p *Parser) parseVarStatement() *VarStatement {
 
 	// Expect '='
 	p.nextToken()
-	if p.curTok.Type == token.ASSIGN {
+	if p.curTok.Type != token.ASSIGN {
 		stmt.Value = nil
 		return stmt
 	}
