@@ -1,0 +1,25 @@
+{
+  "name": "ayla",
+  "displayName": "ayla",
+  "description": "AYLA LANG SUPPORT YAY",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.107.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [{
+      "id": "ayla",
+      "aliases": ["ayla", "ayla"],
+      "extensions": [".ayl",".ayla"],
+      "configuration": "./language-configuration.json"
+    }],
+    "grammars": [{
+      "language": "ayla",
+      "scopeName": "source.ayla",
+      "path": "./syntaxes/ayla.tmLanguage.json"
+    }]
+  }
+}

@@ -14,16 +14,16 @@ blueprint divide(x, y) {
     back x / y
 }
 
-egg firstNum = 0
-egg oper = ""
-egg secondNum = 0
+egg firstNum
+egg oper
+egg secondNum
 
 explode("Firstnum")
 tsaln(firstNum)
 
 explode("Operator")
 tsaln(oper)
-
+ 
 explode("Secondnum")
 tsaln(secondNum)
 

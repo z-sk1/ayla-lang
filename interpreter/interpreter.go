@@ -718,6 +718,9 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 	case *parser.BoolLiteral:
 		return BoolValue{V: expr.Value}, nil
 
+	case *parser.NilLiteral:
+		return NilValue{}, nil
+
 	case *parser.Identifier:
 		binding, ok := i.env.Get(expr.Value)
 		if !ok {
@@ -921,6 +924,14 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 }
 
 func evalInfix(node *parser.InfixExpression, left Value, op string, right Value) (Value, error) {
+	// nil handling first
+	if _, ok := left.(NilValue); ok {
+		return evalNilInfix(node, op, right)
+	}
+	if _, ok := right.(NilValue); ok {
+		return evalNilInfix(node, op, left)
+	}
+
 	// type mismatch check
 	if left.Type() != right.Type() {
 		return NilValue{}, NewRuntimeError(node, fmt.Sprintf("type mismatch: %s %s %s", left.Type(), op, right.Type()))
@@ -1030,6 +1041,19 @@ func evalBoolInfix(node *parser.InfixExpression, left BoolValue, op string, righ
 	}
 
 	return NilValue{}, NewRuntimeError(node, fmt.Sprintf("invalid operator %t %s %t", left.V, op, right.V))
+}
+
+func evalNilInfix(node *parser.InfixExpression, op string, other Value) (Value, error) {
+	switch op {
+	case "==":
+		_, isNil := other.(NilValue)
+		return BoolValue{V: isNil}, nil
+	case "!=":
+		_, isNil := other.(NilValue)
+		return BoolValue{V: !isNil}, nil
+	default:
+		return NilValue{}, NewRuntimeError(node, fmt.Sprintf("invalid operator nil %s %s", op, other.String()))
+	}
 }
 
 func evalPrefix(node *parser.PrefixExpression, operator string, right Value) (Value, error) {

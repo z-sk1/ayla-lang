@@ -61,6 +61,7 @@ const (
 	BREAK    = "BREAK"
 	TRUE     = "TRUE"
 	FALSE    = "FALSE"
+	NIL      = "NIL"
 
 	INT_TYPE    = "INT_TYPE"
 	FLOAT_TYPE  = "FLOAT_TYPE"
@@ -90,6 +91,7 @@ var keywords = map[string]TokenType{
 
 	"yes": TRUE,
 	"no":  FALSE,
+	"nil": NIL,
 }
 
 func LookupIdent(ident string) TokenType {

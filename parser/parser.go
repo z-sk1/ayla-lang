@@ -742,6 +742,9 @@ func (p *Parser) parsePrimary() Expression {
 	case token.FALSE:
 		return &BoolLiteral{NodeBase: NodeBase{Token: p.curTok}, Value: false}
 
+	case token.NIL:
+		return &NilLiteral{NodeBase: NodeBase{Token: p.curTok}}
+
 	case token.BOOL_TYPE:
 		if p.peekTok.Type == token.LPAREN {
 			return p.parseFuncCall()

@@ -163,6 +163,10 @@ type BoolLiteral struct {
 	Value bool
 }
 
+type NilLiteral struct {
+	NodeBase
+}
+
 type Identifier struct {
 	NodeBase
 	Value string

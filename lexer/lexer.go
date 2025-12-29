@@ -116,7 +116,7 @@ func (l *Lexer) skipWhitespace() {
 
 func (l *Lexer) NextToken() token.Token {
 	l.skipWhitespace()
-
+	
 	var tok token.Token
 
 	switch l.ch {
