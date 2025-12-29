@@ -1,9 +1,10 @@
 {
   "name": "ayla",
   "displayName": "ayla",
-  "description": "ayla lang support with syntax highlighting",
+  "description": "ayla lang support with syntax highlighting and ayla icon",
   "publisher": "z-sk1",
   "version": "0.0.1",
+  "icon": "icon.png",
   "engines": {
     "vscode": "^1.107.0"
   },
@@ -21,6 +22,13 @@
       "language": "ayla",
       "scopeName": "source.ayla",
       "path": "./syntaxes/ayla.tmLanguage.json"
-    }]
+    }],
+    "iconThemes": [
+      {
+        "id": "ayla-icons",
+        "label": "ayla Icons",
+        "path": "./icons/ayla-file-icons.json"
+      }
+    ]
   }
 }
