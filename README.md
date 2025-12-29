@@ -9,6 +9,11 @@ ayla lang is a small interpreted language written in go, designed to make you fo
 - **Me: z-sk1, Co-Owner**
 - **and Mregg55, Co-Owner (link: https://github.com/mregg55)**
 
+## vs code extension
+https://marketplace.visualstudio.com/items?itemName=z-sk1.ayla
+
+this will add syntax highlighting
+
 # the features
 
 ## declaration and assignment
