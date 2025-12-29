@@ -149,6 +149,12 @@ func (p *Parser) parseVarStatement() *VarStatement {
 
 	// Expression after '='
 	p.nextToken()
+
+	if p.curTok.Literal == "" {
+		p.addError("expected expression after '='")
+		return nil
+	}
+
 	stmt.Value = p.parseExpression(LOWEST)
 
 	// Optional semicolon
@@ -321,11 +327,17 @@ func (p *Parser) parseIfStatement() *IfStatement {
 
 	// move to condition
 	p.nextToken()
+
+	if p.curTok.Type == token.LBRACE {
+		p.addError("missing condition in if")
+		return nil
+	}
+
 	stmt.Condition = p.parseExpression(LOWEST)
 
 	// expect '{'
 	if p.peekTok.Type != token.LBRACE {
-		fmt.Println("Error: missing '{' in if")
+		p.addError("missing '{' in if")
 		return nil
 	}
 

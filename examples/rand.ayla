@@ -1,1 +1,3 @@
-rock rand
+egg rand = randi(5, 10)
+
+explode("Random: ${rand}")
