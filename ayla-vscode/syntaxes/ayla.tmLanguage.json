@@ -23,7 +23,7 @@
       "patterns": [
         {
           "name": "keyword.control.ayla",
-          "match": "\\b(ayla|elen|for|why|back|kitkat|next|explode|tsaln|bool|string|int|float|type|len|push|pop|insert|remove|clear|randi|randf)\\b"
+          "match": "\\b(ayla|elen|four|why|back|kitkat|next|explode|tsaln|bool|string|int|float|type|len|push|pop|insert|remove|clear|randi|randf)\\b"
         }
       ]
     },
