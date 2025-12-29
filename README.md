@@ -1,4 +1,6 @@
 # ayla lang
+<img width="512" height="512" alt="ayla-512" src="https://github.com/user-attachments/assets/1a266fdd-0d0d-4f95-83fa-1fd5d7bca0f9" />
+
 ayla lang is a small interpreted language written in go, designed to make you forget everything
 
 *Because fuck you.* - Linus Torvalds
