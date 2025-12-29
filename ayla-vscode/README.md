@@ -1,4 +1,4 @@
 # ayla extension
 
-syntax highlighting 
+syntax highlighting and ayla file icons
 
