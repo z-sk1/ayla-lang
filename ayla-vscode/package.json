@@ -5,6 +5,9 @@
   "publisher": "z-sk1",
   "version": "0.1.0",
   "icon": "icon.png",
+  "repository": {
+    "url": "https://github.com/z-sk1/ayla-lang"
+  },
   "engines": {
     "vscode": "^1.107.0"
   },
