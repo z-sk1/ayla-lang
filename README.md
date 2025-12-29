@@ -249,6 +249,30 @@ explode(arr)
 
 See [docs/builtins.md](docs/builtins.md) for more about built-in functions.
 
+## runtime errors
+error handling for runtime errors
+```ayla
+rock i = 1
+
+i = 2
+```
+> Runtime error at 3:2: cannot reassign to const: i
+
+## parse errors
+error handling for parse errors
+```ayla
+ayla {
+
+}
+```
+> output: parse error at 1:6: missing condition in if (got {)
+
+parse errors will default to (got nothing) if there is nothing after the token
+```ayla
+egg x =
+```
+> output: parse error at 1:8: expected expression after '=' (got nothing)
+
 ## cli tooling and running scripts
 
 ### windows instructions

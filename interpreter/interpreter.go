@@ -520,7 +520,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		var val Value
 
 		if stmt.Value == nil {
-			return NilValue{}, NewRuntimeError(s, fmt.Sprintf("const %s must be initialised", stmt.Name))
+			return NilValue{}, NewRuntimeError(s, fmt.Sprintf("const, %s, must be initialised", stmt.Name))
 		} else {
 			var err error
 			val, err = i.EvalExpression(stmt.Value)
@@ -531,7 +531,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 
 		// check if variable already exist
 		if _, ok := i.env.Get(stmt.Name); ok {
-			return SignalNone{}, NewRuntimeError(s, fmt.Sprintf("cant redeclare const %s", stmt.Name))
+			return SignalNone{}, NewRuntimeError(s, fmt.Sprintf("cant redeclare const: %s", stmt.Name))
 		}
 
 		// store const val
@@ -546,11 +546,11 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 
 		existingVal, ok := i.env.Get(stmt.Name)
 		if !ok {
-			return SignalNone{}, NewRuntimeError(s, "assignment to undefined variable")
+			return SignalNone{}, NewRuntimeError(s, fmt.Sprintf("assignment to undefined variable: %v", stmt.Name))
 		}
 
 		if _, isConst := existingVal.(ConstValue); isConst {
-			return SignalNone{}, NewRuntimeError(s, "cannot reassign to const")
+			return SignalNone{}, NewRuntimeError(s, fmt.Sprintf("cannot reassign to const: %s", stmt.Name))
 		}
 
 		i.env.Set(stmt.Name, val)
@@ -564,7 +564,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 
 		arrVal, ok := leftVal.(ArrayValue)
 		if !ok {
-			return SignalNone{}, NewRuntimeError(s, "assignment to non-array")
+			return SignalNone{}, NewRuntimeError(s, fmt.Sprintf("assignment to non-array: %v", leftVal.String()))
 		}
 
 		index, err := i.EvalExpression(stmt.Index)
@@ -574,13 +574,13 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 
 		idxVal, ok := index.(IntValue)
 		if !ok {
-			return SignalNone{}, NewRuntimeError(s, "array index must be int")
+			return SignalNone{}, NewRuntimeError(s, fmt.Sprintf("array index: %v, must be int", idxVal.V))
 		}
 
 		idx := idxVal.V
 
 		if idx < 0 || idx >= len(arrVal.Elements) {
-			return SignalNone{}, NewRuntimeError(s, "array index out of bounds")
+			return SignalNone{}, NewRuntimeError(s, fmt.Sprintf("array index: %d, out of bounds", idx))
 		}
 
 		newVal, err := i.EvalExpression(stmt.Value)
@@ -721,7 +721,7 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 	case *parser.Identifier:
 		binding, ok := i.env.Get(expr.Value)
 		if !ok {
-			return NilValue{}, NewRuntimeError(e, "undefined variable")
+			return NilValue{}, NewRuntimeError(e, fmt.Sprintf("undefined variable: %s", expr.Value))
 		}
 
 		if c, isConst := binding.(ConstValue); isConst {
@@ -755,18 +755,18 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 
 		arr, ok := left.(ArrayValue)
 		if !ok {
-			return NilValue{}, NewRuntimeError(e, "indexing non-array")
+			return NilValue{}, NewRuntimeError(e, fmt.Sprintf("indexing non-array: %s", left.String()))
 		}
 
 		idxVal, ok := index.(IntValue)
 		if !ok {
-			return NilValue{}, NewRuntimeError(e, "array index must be int")
+			return NilValue{}, NewRuntimeError(e, fmt.Sprintf("array index: %v, must be int", idxVal.V))
 		}
 
 		idx := idxVal.V
 
 		if idx < 0 || idx >= len(arr.Elements) {
-			return NilValue{}, NewRuntimeError(e, "array index out of bounds")
+			return NilValue{}, NewRuntimeError(e, fmt.Sprintf("array index: %d, out of bounds", idx))
 		}
 
 		return arr.Elements[idx], nil
