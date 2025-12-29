@@ -5,6 +5,7 @@
         }
     },
     "fileExtensions": {
-        "ayla": "ayla-file"
+        "ayla": "ayla-file",
+        "ayl": "ayla-file"
     }
 }

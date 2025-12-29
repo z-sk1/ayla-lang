@@ -62,7 +62,7 @@ func run() {
 		}
 	}
 
-	if len(filename) < 5 || filename[len(filename)-5:] != ".ayla" {
+	if len(filename) < 4 || (filename[len(filename)-5:] != ".ayla" && filename[len(filename)-4:] != ".ayl") {
 		filename += ".ayla"
 	}
 
