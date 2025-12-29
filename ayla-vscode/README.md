@@ -2,6 +2,8 @@
 
 syntax highlighting and ayla file icons
 
+https://github.com/z-sk1/ayla-lang
+
 # ayla lang
 ayla lang is a small interpreted language written in go, designed to make you forget everything
 
