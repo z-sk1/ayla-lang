@@ -62,17 +62,16 @@ func run() {
 		}
 	}
 
-	if len(filename) < 4 || (filename[len(filename)-5:] != ".ayla" && filename[len(filename)-4:] != ".ayl") {
-		filename += ".ayla"
-	}
-
-	content, err := os.ReadFile(filename)
-	if err != nil {
-		fmt.Printf("Failed to read file: %v\n", err)
+	if filename == "" {
+		fmt.Println("No input file provided")
 		return
 	}
 
-	source := string(content)
+	source, err := readSourceFile(filename)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 
 	if debug {
 		l := lexer.New(string(source))
@@ -116,4 +115,21 @@ func run() {
 		elapsed = time.Since(started)
 		fmt.Println(elapsed)
 	}
+}
+
+func readSourceFile(name string) (string, error) {
+	candidates := []string{
+		name,
+		name + ".ayl",
+		name + ".ayla",
+	}
+
+	for _, file := range candidates {
+		data, err := os.ReadFile(file)
+		if err == nil {
+			return string(data), nil
+		}
+	}
+
+	return "", fmt.Errorf("file not found: %s (.ayla or .ayl)", name)
 }
