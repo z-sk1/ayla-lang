@@ -304,6 +304,24 @@ ayla run [--debug] [--timed] <file>
 
 > --timed will time how long your program takes
 
+```bash
+ayla run test.ayl
+```
+and also for the other extension
+```bash
+ayla run test.ayla
+```
+
+you can also do it without putting a file extension
+```bash
+ayla run test
+```
+this will first try appending .ayla, then if not found it will try appending .ayl
+
+if test.(ayl/ayla) does not exist then ayla CLI will throw an error:
+```bash
+file not found: test.ayla (.ayla or .ayl) 
+```
 
 ### miscellaneous
 version:
