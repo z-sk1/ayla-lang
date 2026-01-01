@@ -7,13 +7,15 @@ import (
 type ValueType string
 
 const (
-	INT      ValueType = "int"
-	FLOAT    ValueType = "float"
-	STRING   ValueType = "string"
-	BOOL     ValueType = "bool"
-	ARRAY    ValueType = "array"
-	FUNCTION ValueType = "function"
-	NIL      ValueType = "nil"
+	INT         ValueType = "int"
+	FLOAT       ValueType = "float"
+	STRING      ValueType = "string"
+	BOOL        ValueType = "bool"
+	ARRAY       ValueType = "array"
+	FUNCTION    ValueType = "function"
+	STRUCT_TYPE ValueType = "struct_type"
+	STRUCT      ValueType = "struct"
+	NIL         ValueType = "nil"
 )
 
 type Value interface {
@@ -105,6 +107,36 @@ func (a ArrayValue) String() string {
 	}
 	out += "]"
 	return out
+}
+
+type StructType struct {
+	Name   string
+	Fields map[string]ValueType
+}
+
+func (st StructType) Type() ValueType {
+	return STRUCT_TYPE
+}
+
+func (st StructType) String() string {
+	return "struct type " + st.Name
+}
+
+type StructValue struct {
+	TypeName *StructType
+	Fields   map[string]Value
+}
+
+func (s *StructValue) Type() ValueType {
+	return STRUCT
+}
+
+func (s *StructValue) String() string {
+	if s.TypeName == nil {
+		return "struct"
+	}
+
+	return "struct " + s.TypeName.String()
 }
 
 type NilValue struct{}

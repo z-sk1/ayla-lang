@@ -91,7 +91,7 @@ func run() {
 
 	if len(p.Errors()) > 0 {
 		for _, err := range p.Errors() {
-			fmt.Println(err)
+			fmt.Printf("%s: %v\n", filename, err)
 		}
 		return
 	}

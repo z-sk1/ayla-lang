@@ -53,20 +53,19 @@ func isDigit(ch byte) bool {
 }
 
 func isIdentStart(ch byte) bool {
-    return isLetter(ch) || ch == '_'
+	return isLetter(ch) || ch == '_'
 }
 
 func isIdentPart(ch byte) bool {
-    return isLetter(ch) || isDigit(ch) || ch == '_'
+	return isLetter(ch) || isDigit(ch) || ch == '_'
 }
 
-
 func (l *Lexer) readIdentifier() string {
-    pos := l.position
-    for isIdentPart(l.ch) {
-        l.readChar()
-    }
-    return l.input[pos:l.position]
+	pos := l.position
+	for isIdentPart(l.ch) {
+		l.readChar()
+	}
+	return l.input[pos:l.position]
 }
 
 // read numbers
@@ -87,7 +86,7 @@ func (l *Lexer) readNumber() string {
 	return l.input[start:l.position]
 }
 
-func (l *Lexer) readString() string {	
+func (l *Lexer) readString() string {
 	// skip the opening quote
 	l.readChar()
 
@@ -116,7 +115,7 @@ func (l *Lexer) skipWhitespace() {
 
 func (l *Lexer) NextToken() token.Token {
 	l.skipWhitespace()
-	
+
 	var tok token.Token
 
 	switch l.ch {
@@ -143,6 +142,8 @@ func (l *Lexer) NextToken() token.Token {
 		tok = token.Token{Type: token.COMMA, Literal: ",", Line: l.line, Column: l.column}
 	case ':':
 		tok = token.Token{Type: token.COLON, Literal: ":", Line: l.line, Column: l.column}
+	case '.':
+		tok = token.Token{Type: token.DOT, Literal: ".", Line: l.line, Column: l.column}
 	case '*':
 		tok = token.Token{Type: token.ASTERISK, Literal: "*", Line: l.line, Column: l.column}
 	case '<':

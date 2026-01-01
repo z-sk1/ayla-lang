@@ -39,6 +39,7 @@ const (
 	COMMA     = ","
 	SEMICOLON = ";"
 	COLON     = ":"
+	DOT       = "."
 
 	LPAREN   = "("
 	RPAREN   = ")"
@@ -50,6 +51,7 @@ const (
 	// keywords
 	VAR      = "VAR"
 	CONST    = "CONST"
+	STRUCT   = "STRUCT"
 	PRINT    = "PRINT"
 	IF       = "IF"
 	ELSE     = "ELSE"
@@ -70,8 +72,9 @@ const (
 )
 
 var keywords = map[string]TokenType{
-	"egg":  VAR,
-	"rock": CONST,
+	"egg":    VAR,
+	"rock":   CONST,
+	"struct": STRUCT,
 
 	"ayla": IF,
 	"elen": ELSE,

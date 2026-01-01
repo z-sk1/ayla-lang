@@ -96,6 +96,8 @@ func (p *Parser) parseStatement() Statement {
 		return p.parseVarStatement()
 	case token.CONST:
 		return p.parseConstStatement()
+	case token.STRUCT:
+		return p.parseStructStatement()
 	case token.FUNC:
 		return p.parseFuncStatement()
 	case token.IF:
@@ -119,6 +121,11 @@ func (p *Parser) parseStatement() Statement {
 		// reassignment
 		if p.peekTok.Type == token.ASSIGN {
 			return p.parseAssignStatement()
+		}
+
+		// member assignment
+		if p.peekTok.Type == token.DOT {
+			return p.parseMemberAssignment()
 		}
 
 		// function call
@@ -283,6 +290,198 @@ func (p *Parser) parseConstStatement() *ConstStatement {
 	return stmt
 }
 
+func (p *Parser) parseStructStatement() *StructStatement {
+	stmt := &StructStatement{}
+	stmt.NodeBase = NodeBase{Token: p.curTok}
+
+	if p.peekTok.Type != token.IDENT {
+		p.addError("expected identifier after 'struct'")
+		return nil
+	}
+
+	p.nextToken()
+	stmt.Name = &Identifier{
+		NodeBase: NodeBase{Token: p.curTok},
+		Value:    p.curTok.Literal,
+	}
+
+	if p.peekTok.Type != token.LBRACE {
+		p.addError("expected '{' after idenfified")
+		return nil
+	}
+	p.nextToken()
+
+	stmt.Fields = []*Identifier{}
+
+	// move to first field or }
+	p.nextToken()
+
+	for p.curTok.Type != token.RBRACE {
+		if p.curTok.Type != token.IDENT {
+			p.addError("expected field inside struct")
+			return nil
+		}
+
+		field := &Identifier{
+			NodeBase: NodeBase{Token: p.curTok},
+			Value:    p.curTok.Literal,
+		}
+		stmt.Fields = append(stmt.Fields, field)
+
+		p.nextToken()
+	}
+
+	return stmt
+}
+
+func (p *Parser) parseStructLiteral(left Expression) Expression {
+	ident, ok := left.(*Identifier)
+	if !ok {
+		p.addError("struct literals must start with identifiers")
+		return nil
+	}
+
+	lit := &StructLiteral{
+		NodeBase: NodeBase{Token: p.curTok},
+		TypeName: ident,
+		Fields:   make(map[string]Expression),
+	}
+
+	// empty struct {}
+	if p.peekTok.Type == token.RBRACE {
+		p.nextToken()
+		return lit
+	}
+
+	p.nextToken() // move to first field key
+
+	for {
+		if p.curTok.Type != token.IDENT {
+			p.addError("expected field names in struct literal")
+			return nil
+		}
+
+		fieldName := p.curTok.Literal
+
+		if p.peekTok.Type != token.COLON {
+			p.addError("expected ':' after field name")
+			return nil
+		}
+		p.nextToken()
+
+		p.nextToken() // value
+		lit.Fields[fieldName] = p.parseExpression(LOWEST)
+
+		if p.peekTok.Type == token.COMMA {
+			p.nextToken() // ,
+			p.nextToken() // next field name
+			continue
+		}
+
+		if p.peekTok.Type == token.RBRACE {
+			p.nextToken() // }
+			break
+		}
+
+		p.addError("expected ',' or '}' after struct field")
+		return nil
+	}
+
+	return lit
+}
+
+func (p *Parser) parseAnonymousStructLiteral() Expression {
+	lit := &AnonymousStructLiteral{
+		NodeBase: NodeBase{Token: p.curTok},
+		Fields:   make(map[string]Expression),
+	}
+
+	// empty struct {}
+	if p.peekTok.Type == token.RBRACE {
+		p.nextToken() // }
+		return lit
+	}
+
+	p.nextToken() // move to first field name
+
+	for {
+		if p.curTok.Type != token.IDENT {
+			p.addError("expected field names in anonymous struct literal")
+			return nil
+		}
+
+		fieldName := p.curTok.Literal
+
+		if p.peekTok.Type != token.COLON {
+			p.addError("expected ':' after field name")
+			return nil
+		}
+		p.nextToken()
+
+		p.nextToken() // value
+		lit.Fields[fieldName] = p.parseExpression(LOWEST)
+
+		if p.peekTok.Type == token.COMMA {
+			p.nextToken() // , or }
+			if p.peekTok.Type == token.RBRACE {
+				p.nextToken() // }
+				break
+			}
+
+			p.nextToken() // next field name
+			continue
+		}
+
+		if p.peekTok.Type == token.RBRACE {
+			p.nextToken() // }
+			break
+		}
+
+		p.addError("expected ',' or '}' after anonymous struct field")
+		return nil
+	}
+
+	return lit
+}
+
+func (p *Parser) parseMemberAssignment() *MemberAssignmentStatement {
+	// p
+	obj := &Identifier{
+		NodeBase: NodeBase{Token: p.curTok},
+		Value:    p.curTok.Literal,
+	}
+
+	p.nextToken() // .
+	p.nextToken() // field
+
+	if p.curTok.Type != token.IDENT {
+		p.addError("expected field name after '.'")
+		return nil
+	}
+
+	field := &Identifier{
+		NodeBase: NodeBase{Token: p.curTok},
+		Value:    p.curTok.Literal,
+	}
+
+	if p.peekTok.Type != token.ASSIGN {
+		p.addError("expected '=' after member")
+		return nil
+	}
+
+	p.nextToken() // =
+	p.nextToken() // value
+
+	val := p.parseExpression(LOWEST)
+
+	return &MemberAssignmentStatement{
+		NodeBase: NodeBase{Token: p.curTok},
+		Object:   obj,
+		Field:    field,
+		Value:    val,
+	}
+}
+
 func (p *Parser) parseAssignStatement() *AssignmentStatement {
 	stmt := &AssignmentStatement{}
 	stmt.NodeBase = NodeBase{Token: p.curTok}
@@ -337,7 +536,7 @@ func (p *Parser) parseIfStatement() *IfStatement {
 
 	// expect '{'
 	if p.peekTok.Type != token.LBRACE {
-		p.addError("missing '{' in if")
+		p.addError("expected '{' after conditional")
 		return nil
 	}
 
@@ -590,29 +789,55 @@ func (p *Parser) parseBlockStatement() []Statement {
 func (p *Parser) parseExpression(precedence int) Expression {
 	left := p.parsePrimary()
 
-	for p.peekTok.Type != token.SEMICOLON && precedence < p.peekPrecedence() {
-		p.nextToken() // move to operator
+	for {
 
+		if p.peekTok.Type == token.LBRACKET {
+			p.nextToken() // [
+			p.nextToken() // index expr
+
+			index := p.parseExpression(LOWEST)
+
+			if p.peekTok.Type != token.RBRACKET {
+				p.addError("expected ']'")
+				return nil
+			}
+			p.nextToken() // ]
+
+			left = &IndexExpression{
+				NodeBase: NodeBase{Token: p.curTok},
+				Left:     left,
+				Index:    index,
+			}
+			continue
+		}
+
+		if p.peekTok.Type == token.DOT {
+			p.nextToken() // move to dot
+			p.nextToken() // move to identifier
+
+			if p.curTok.Type != token.IDENT {
+				p.addError("expected property name idenfifier after '.'")
+				return nil
+			}
+
+			left = &MemberExpression{
+				NodeBase: NodeBase{Token: p.curTok},
+				Left:     left,
+				Field: &Identifier{
+					NodeBase: NodeBase{Token: p.curTok},
+					Value:    p.curTok.Literal,
+				},
+			}
+
+			continue
+		}
+
+		if precedence >= p.peekPrecedence() {
+			break
+		}
+
+		p.nextToken()
 		left = p.parseInfixExpression(left)
-	}
-
-	for p.peekTok.Type == token.LBRACKET {
-		p.nextToken() // [
-		p.nextToken() // index expr
-
-		index := p.parseExpression(LOWEST)
-
-		if p.peekTok.Type != token.RBRACKET {
-			p.addError("expected ']'")
-			return nil
-		}
-		p.nextToken() // ]
-
-		left = &IndexExpression{
-			NodeBase: NodeBase{Token: p.curTok},
-			Left:     left,
-			Index:    index,
-		}
 	}
 
 	return left
@@ -752,10 +977,18 @@ func (p *Parser) parsePrimary() Expression {
 		return nil
 
 	case token.IDENT:
+		ident := &Identifier{NodeBase: NodeBase{Token: p.curTok}, Value: p.curTok.Literal}
+
 		if p.peekTok.Type == token.LPAREN {
 			return p.parseFuncCall()
 		}
-		return &Identifier{NodeBase: NodeBase{Token: p.curTok}, Value: p.curTok.Literal}
+
+		if p.peekTok.Type == token.LBRACE {
+			p.nextToken() // move to {
+			return p.parseStructLiteral(ident)
+		}
+
+		return ident
 
 	case token.LPAREN:
 		p.nextToken()
@@ -770,6 +1003,9 @@ func (p *Parser) parsePrimary() Expression {
 
 	case token.LBRACKET:
 		return p.parseArrayLiteral()
+
+	case token.LBRACE:
+		return p.parseAnonymousStructLiteral()
 
 	default:
 		return nil

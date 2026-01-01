@@ -34,6 +34,7 @@ const (
 	SUM         // + -
 	PRODUCT     // * /
 	PREFIX      // !x -z
+	MEMBER      // p.x
 )
 
 var precedences = map[token.TokenType]int{
@@ -53,6 +54,8 @@ var precedences = map[token.TokenType]int{
 
 	token.ASTERISK: PRODUCT,
 	token.SLASH:    PRODUCT,
+
+	token.DOT: MEMBER,
 }
 
 type VarStatement struct {
@@ -105,6 +108,12 @@ type WhileStatement struct {
 	NodeBase
 	Condition Expression // i < 5
 	Body      []Statement
+}
+
+type StructStatement struct {
+	NodeBase
+	Name   *Identifier
+	Fields []*Identifier
 }
 
 type BreakStatement struct {
@@ -165,6 +174,30 @@ type BoolLiteral struct {
 
 type NilLiteral struct {
 	NodeBase
+}
+
+type StructLiteral struct {
+	NodeBase
+	TypeName *Identifier
+	Fields   map[string]Expression
+}
+
+type AnonymousStructLiteral struct {
+	NodeBase
+	Fields map[string]Expression
+}
+
+type MemberExpression struct {
+	NodeBase
+	Left  Expression  // p
+	Field *Identifier // x
+}
+
+type MemberAssignmentStatement struct {
+	NodeBase
+	Object Expression  // p
+	Field  *Identifier // x
+	Value  Expression
 }
 
 type Identifier struct {

@@ -504,7 +504,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			var err error
 			val, err = i.EvalExpression(stmt.Value)
 			if err != nil {
-				return NilValue{}, err
+				return SignalNone{}, err
 			}
 		}
 
@@ -520,12 +520,12 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		var val Value
 
 		if stmt.Value == nil {
-			return NilValue{}, NewRuntimeError(s, fmt.Sprintf("const, %s, must be initialised", stmt.Name))
+			return SignalNone{}, NewRuntimeError(s, fmt.Sprintf("const, %s, must be initialised", stmt.Name))
 		} else {
 			var err error
 			val, err = i.EvalExpression(stmt.Value)
 			if err != nil {
-				return NilValue{}, err
+				return SignalNone{}, err
 			}
 		}
 
@@ -595,6 +595,29 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		arrVal.Elements[idx] = newVal
 		return SignalNone{}, nil
 
+	case *parser.MemberAssignmentStatement:
+		objVal, err := i.EvalExpression(stmt.Object)
+		if err != nil {
+			return SignalNone{}, nil
+		}
+
+		structVal, ok := objVal.(*StructValue)
+		if !ok {
+			return SignalNone{}, NewRuntimeError(s, "cannot assign field on non-struct")
+		}
+
+		val, err := i.EvalExpression(stmt.Value)
+		if err != nil {
+			return SignalNone{}, err
+		}
+
+		if _, ok := structVal.Fields[stmt.Field.Value]; !ok {
+			return SignalNone{}, NewRuntimeError(s, fmt.Sprintf("unknown struct field: %s", stmt.Field.Value))
+		}
+
+		structVal.Fields[stmt.Field.Value] = val
+		return SignalNone{}, nil
+
 	case *parser.FuncStatement:
 		i.env.SetFunc(stmt.Name, &Func{Params: stmt.Params, Body: stmt.Body})
 		return SignalNone{}, nil
@@ -602,17 +625,33 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 	case *parser.ReturnStatement:
 		val, err := i.EvalExpression(stmt.Value)
 		if err != nil {
-			return NilValue{}, err
+			return SignalNone{}, err
 		}
 
 		return SignalReturn{Value: val}, nil
 
 	case *parser.ExpressionStatement:
-		val, err := i.EvalExpression(stmt.Expression)
+		_, err := i.EvalExpression(stmt.Expression)
 		if err != nil {
-			return NilValue{}, err
+			return SignalNone{}, err
 		}
-		return val, nil
+		return SignalNone{}, nil
+
+	case *parser.StructStatement:
+		fields := make(map[string]ValueType)
+
+		for _, field := range stmt.Fields {
+			fields[field.Value] = ValueType(field.Token.Type)
+		}
+
+		structType := &StructType{
+			Name:   stmt.Name.Value,
+			Fields: fields,
+		}
+
+		i.env.Set(stmt.Name.Value, structType)
+
+		return SignalNone{}, nil
 
 	case *parser.IfStatement:
 		if stmt.Condition == nil {
@@ -623,7 +662,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		}
 		cond, err := i.EvalExpression(stmt.Condition)
 		if err != nil {
-			return NilValue{}, err
+			return SignalNone{}, err
 		}
 
 		if isTruthy(cond) {
@@ -721,6 +760,14 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 	case *parser.NilLiteral:
 		return NilValue{}, nil
 
+	case *parser.MemberExpression:
+		leftVal, err := i.EvalExpression(expr.Left)
+		if err != nil {
+			return NilValue{}, err
+		}
+
+		return evalMemberExpression(expr, leftVal, expr.Field.Value)
+
 	case *parser.Identifier:
 		binding, ok := i.env.Get(expr.Value)
 		if !ok {
@@ -773,6 +820,48 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 		}
 
 		return arr.Elements[idx], nil
+
+	case *parser.StructLiteral:
+		val, ok := i.env.Get(expr.TypeName.Value)
+		if !ok {
+			return NilValue{}, NewRuntimeError(expr, "unknown struct type "+expr.TypeName.Value)
+		}
+
+		structType, ok := val.(*StructType)
+		if !ok {
+			return NilValue{}, NewRuntimeError(expr, expr.TypeName.Value+" is not a struct type")
+		}
+
+		fields := make(map[string]Value)
+
+		for name, e := range expr.Fields {
+			v, err := i.EvalExpression(e)
+			if err != nil {
+				return NilValue{}, err
+			}
+			fields[name] = v
+		}
+
+		return &StructValue{
+			TypeName: structType,
+			Fields:   fields,
+		}, nil
+
+	case *parser.AnonymousStructLiteral:
+		fields := make(map[string]Value)
+
+		for name, e := range expr.Fields {
+			v, err := i.EvalExpression(e)
+			if err != nil {
+				return NilValue{}, err
+			}
+			fields[name] = v
+		}
+
+		return &StructValue{
+			TypeName: nil,
+			Fields:   fields,
+		}, nil
 
 	case *parser.FuncCall:
 		// built in?
@@ -921,6 +1010,20 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 	default:
 		return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("unhandled expression type: %T", e))
 	}
+}
+
+func evalMemberExpression(node parser.Expression, left Value, field string) (Value, error) {
+	obj, ok := left.(*StructValue)
+	if !ok {
+		return NilValue{}, NewRuntimeError(node, "not a struct")
+	}
+
+	val, ok := obj.Fields[field]
+	if !ok {
+		return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unknown field %s", field))
+	}
+
+	return val, nil
 }
 
 func evalInfix(node *parser.InfixExpression, left Value, op string, right Value) (Value, error) {
