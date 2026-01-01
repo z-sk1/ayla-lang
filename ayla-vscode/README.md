@@ -13,11 +13,6 @@ ayla lang is a small interpreted language written in go, designed to make you fo
 - **Me: z-sk1, Co-Owner**
 - **and Mregg55, Co-Owner (link: https://github.com/mregg55)**
 
-## vs code extension
-https://marketplace.visualstudio.com/items?itemName=z-sk1.ayla
-
-this will add syntax highlighting
-
 # the features
 
 ## declaration and assignment
@@ -202,7 +197,7 @@ explode(add(5, 7))
 output: 12
 
 you cant have a designated return type like this, yet
-```ayla
+```go
 func test() int {
     return something
 }
@@ -238,6 +233,49 @@ arr[1] = "world"
 explode(arr)
 ```
 > output: [hello, world]
+
+## structs
+there are two types of structs in ayla lang, typed structs, and anonymous structs
+
+### typed structs 
+firstly, typed structs require you to define a type of struct like this
+
+```ayla
+struct Person {
+    Name
+    Age
+}
+```
+
+and then use it to store data in variables like this
+
+```ayla 
+egg p = Person {
+    Name: "Ziad",
+    Age: 13
+}
+```
+
+then use the `.` symbol to access the fields inside the struct
+```ayla
+explode("${p.Name} is ${p.Age} years old")
+```
+> output: Ziad is 13 years old
+
+### anonymous structs
+then, anonymous structs dont require you to define a type
+
+you can just initialise them with {}, in a similar way to arrays
+
+```ayla
+egg Operation = {
+    Left: 5,
+    Right: 4
+}
+
+explode("${Operation.Left} + ${Operation.Right} = ${Operation.Left + Operation.Right})
+```
+> output: 5 + 4 = 9
 
 ## built in functions!
 - `explode(...)` – prints values to stdout

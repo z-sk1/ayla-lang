@@ -237,6 +237,49 @@ explode(arr)
 ```
 > output: [hello, world]
 
+## structs
+there are two types of structs in ayla lang, typed structs, and anonymous structs
+
+### typed structs 
+firstly, typed structs require you to define a type of struct like this
+
+```ayla
+struct Person {
+    Name
+    Age
+}
+```
+
+and then use it to store data in variables like this
+
+```ayla 
+egg p = Person {
+    Name: "Ziad",
+    Age: 13
+}
+```
+
+then use the `.` symbol to access the fields inside the struct
+```ayla
+explode("${p.Name} is ${p.Age} years old")
+```
+> output: Ziad is 13 years old
+
+### anonymous structs
+then, anonymous structs dont require you to define a type
+
+you can just initialise them with {}, in a similar way to arrays
+
+```ayla
+egg Operation = {
+    Left: 5,
+    Right: 4
+}
+
+explode("${Operation.Left} + ${Operation.Right} = ${Operation.Left + Operation.Right})
+```
+> output: 5 + 4 = 9
+
 ## built in functions!
 - `explode(...)` – prints values to stdout
 - `tsaln(x)` – scans console input and stores it in variable
