@@ -318,6 +318,21 @@ p.Age = "13"
 ```
 > output: runtime error at 11:13: field 'Age' type string should be int
 
+if you use an unknown field not declared in the type struct you will also encounted a `Runtime error`
+```ayla
+struct Person {
+    Name string
+    Age int
+}
+
+egg p = Person {
+    Name: "Ziad",
+    Age: 13,
+    Extra: "extra field"
+}
+```
+> output: runtime error at 6:16: unknown field 'Extra' in struct Person
+
 ### anonymous structs
 then, anonymous structs dont require you to define a type
 

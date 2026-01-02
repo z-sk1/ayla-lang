@@ -618,7 +618,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		expectedType := structVal.TypeName.Fields[stmt.Field.Value]
 
 		if val.Type() != expectedType {
-			return NilValue{}, NewRuntimeError(stmt, fmt.Sprintf("field '%s' type %v should be %v", stmt.Field.Value, val.Type(), expectedType))
+			return NilValue{}, NewRuntimeError(stmt, fmt.Sprintf("field '%s' expects %v but got %v", stmt.Field.Value, expectedType, val.Type()))
 		}
 
 		structVal.Fields[stmt.Field.Value] = val
@@ -843,13 +843,18 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 		fields := make(map[string]Value)
 
 		for name, e := range expr.Fields {
+			expectedType, ok := structType.Fields[name]
+			if !ok {
+				return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("unknown field '%s' in struct %s", name, structType.Name))
+			}
+
 			v, err := i.EvalExpression(e)
 			if err != nil {
 				return NilValue{}, err
 			}
 
 			if v.Type() != structType.Fields[name] {
-				return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("field '%s' type %v should be %v", name, v.Type(), structType.Fields[name]))
+				return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("field '%s' expects %v but got %v", name, expectedType, v.Type()))
 			}
 
 			fields[name] = v

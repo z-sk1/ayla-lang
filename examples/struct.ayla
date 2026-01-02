@@ -1,18 +1,12 @@
 struct Person {
-    Name
-    Age
+    Name string
+    Age int
 }
 
 egg p = Person {
     Name: "Ziad",
-    Age: 13
+    Age: 13,
+    Extra: "2",
 }
 
 explode("${p.Name} is ${p.Age} years old")
-
-egg Operation = {
-    Left: 4,
-    Right: 5
-}
-
-explode("${Operation.Left} + ${Operation.Right} = ${Operation.Left + Operation.Right}")

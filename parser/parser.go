@@ -406,6 +406,11 @@ func (p *Parser) parseStructLiteral(left Expression) Expression {
 
 		if p.peekTok.Type == token.COMMA {
 			p.nextToken() // ,
+			if p.peekTok.Type == token.RBRACE {
+				p.nextToken() // }
+				break
+			}
+
 			p.nextToken() // next field name
 			continue
 		}
@@ -459,7 +464,7 @@ func (p *Parser) parseAnonymousStructLiteral() Expression {
 		lit.Fields[fieldName] = p.parseExpression(LOWEST)
 
 		if p.peekTok.Type == token.COMMA {
-			p.nextToken() // , or }
+			p.nextToken() // ,
 			if p.peekTok.Type == token.RBRACE {
 				p.nextToken() // }
 				break
