@@ -110,10 +110,15 @@ type WhileStatement struct {
 	Body      []Statement
 }
 
+type StructField struct {
+	Name *Identifier
+	Type *Identifier
+}
+
 type StructStatement struct {
 	NodeBase
 	Name   *Identifier
-	Fields []*Identifier
+	Fields []*StructField
 }
 
 type BreakStatement struct {

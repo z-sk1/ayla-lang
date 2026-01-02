@@ -2,6 +2,8 @@ package interpreter
 
 import (
 	"fmt"
+
+	"github.com/z-sk1/ayla-lang/parser"
 )
 
 type ValueType string
@@ -35,6 +37,14 @@ type SignalReturn struct {
 
 type ConstValue struct {
 	Value Value
+}
+
+func (c ConstValue) Type() ValueType {
+	return c.Value.Type()
+}
+
+func (c ConstValue) String() string {
+	return c.Value.String()
 }
 
 type IntValue struct {
@@ -147,4 +157,92 @@ func (n NilValue) Type() ValueType {
 
 func (n NilValue) String() string {
 	return "nil"
+}
+
+func (i Interpreter) resolveType(expr parser.Expression) (ValueType, error) {
+	switch e := expr.(type) {
+	case *parser.IntLiteral:
+		return INT, nil
+
+	case *parser.FloatLiteral:
+		return FLOAT, nil
+
+	case *parser.StringLiteral, *parser.InterpolatedString:
+		return STRING, nil
+
+	case *parser.BoolLiteral:
+		return BOOL, nil
+
+	case *parser.NilLiteral:
+		return NIL, nil
+
+	case *parser.Identifier:
+		val, ok := i.env.Get(e.Value)
+		if !ok {
+			return "", NewRuntimeError(e, fmt.Sprintf("unknown identifier: %s", e.Value))
+		}
+
+		return val.Type(), nil
+
+	case *parser.StructLiteral:
+		_, ok := i.typeEnv[e.TypeName.Value]
+		if !ok {
+			return "", NewRuntimeError(e, fmt.Sprintf("unknown struct type: %s", e.TypeName.Value))
+		}
+		return STRUCT, nil
+
+	case *parser.MemberExpression:
+		leftType, err := i.resolveType(e.Left)
+		if err != nil {
+			return "", err
+		}
+
+		if leftType != STRUCT {
+			return "", NewRuntimeError(e, fmt.Sprintf("cannot access field type on %s", leftType))
+		}
+
+		leftVal, _ := i.EvalExpression(e.Left)
+		sv := leftVal.(*StructValue)
+
+		fieldType, ok := sv.TypeName.Fields[e.Field.Value]
+		if !ok {
+			return "", NewRuntimeError(e, fmt.Sprintf("unknown field: %s", e.Field.Value))
+		}
+
+		return fieldType, nil
+
+	case *parser.InfixExpression:
+		return i.resolveType(e.Left)
+	
+	case *parser.FuncCall:
+		return NIL, nil
+
+	default:
+		return "", NewRuntimeError(e, fmt.Sprintf("cannot resolve type for %T", expr))
+	}
+}
+
+func (i Interpreter) resolveTypeFromName(node *parser.StructStatement, name string) (ValueType, error) {
+	switch name {
+	case "int":
+		return INT, nil
+	case "float":
+		return FLOAT, nil
+	case "string":
+		return STRING, nil
+	case "bool":
+		return BOOL, nil
+	case "array":
+		return ARRAY, nil
+	}
+
+	// user-defined struct type 
+	val, ok := i.env.Get(name)
+	if ok {
+		if _, ok := val.(StructType); ok {
+			return STRUCT_TYPE, nil
+		}
+	}
+
+	return "", NewRuntimeError(node, fmt.Sprintf("unknown type: %s", name))
 }

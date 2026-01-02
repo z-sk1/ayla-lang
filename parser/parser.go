@@ -51,6 +51,19 @@ func atof(a string) float64 {
 	return val
 }
 
+func (p *Parser) isTypeToken(t token.TokenType) bool {
+	switch t {
+	case token.IDENT,
+		token.INT_TYPE,
+		token.STRING_TYPE,
+		token.BOOL_TYPE,
+		token.FLOAT_TYPE:
+		return true
+	default:
+		return false
+	}
+}
+
 func New(l *lexer.Lexer) *Parser {
 	p := &Parser{l: l}
 	p.nextToken()
@@ -306,28 +319,47 @@ func (p *Parser) parseStructStatement() *StructStatement {
 	}
 
 	if p.peekTok.Type != token.LBRACE {
-		p.addError("expected '{' after idenfified")
+		p.addError("expected '{' after idenfifier")
 		return nil
 	}
 	p.nextToken()
 
-	stmt.Fields = []*Identifier{}
+	stmt.Fields = []*StructField{}
 
 	// move to first field or }
 	p.nextToken()
 
 	for p.curTok.Type != token.RBRACE {
 		if p.curTok.Type != token.IDENT {
-			p.addError("expected field inside struct")
+			p.addError("expected field name inside struct")
 			return nil
 		}
 
-		field := &Identifier{
+		fieldName := &Identifier{
 			NodeBase: NodeBase{Token: p.curTok},
 			Value:    p.curTok.Literal,
 		}
-		stmt.Fields = append(stmt.Fields, field)
 
+		// type identifier
+		p.nextToken()
+
+		if !p.isTypeToken(p.curTok.Type) {
+			p.addError(fmt.Sprintf("expected type name after field name '%s'", fieldName.Value))
+			return nil
+		}
+
+		fieldType := &Identifier{
+			NodeBase: NodeBase{Token: p.curTok},
+			Value:    p.curTok.Literal,
+		}
+
+		stmt.Fields = append(stmt.Fields, &StructField{Name: fieldName, Type: fieldType})
+
+		p.nextToken()
+	}
+
+	// optional semicolon
+	if p.peekTok.Type == token.SEMICOLON {
 		p.nextToken()
 	}
 
@@ -387,6 +419,11 @@ func (p *Parser) parseStructLiteral(left Expression) Expression {
 		return nil
 	}
 
+	// optional semicolon
+	if p.peekTok.Type == token.SEMICOLON {
+		p.nextToken()
+	}
+
 	return lit
 }
 
@@ -441,6 +478,11 @@ func (p *Parser) parseAnonymousStructLiteral() Expression {
 		return nil
 	}
 
+	// optional semicolon
+	if p.peekTok.Type == token.SEMICOLON {
+		p.nextToken()
+	}
+
 	return lit
 }
 
@@ -473,6 +515,11 @@ func (p *Parser) parseMemberAssignment() *MemberAssignmentStatement {
 	p.nextToken() // value
 
 	val := p.parseExpression(LOWEST)
+
+	// optional semicolon
+	if p.peekTok.Type == token.SEMICOLON {
+		p.nextToken()
+	}
 
 	return &MemberAssignmentStatement{
 		NodeBase: NodeBase{Token: p.curTok},
@@ -633,6 +680,11 @@ func (p *Parser) parseFuncCall() Expression {
 		if p.curTok.Type == token.COMMA {
 			p.nextToken()
 		}
+	}
+
+	// optional semicolon
+	if p.peekTok.Type == token.SEMICOLON {
+		p.nextToken()
 	}
 
 	return call

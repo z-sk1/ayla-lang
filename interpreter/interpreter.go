@@ -26,27 +26,27 @@ type RuntimeError struct {
 	Column  int
 }
 
-type Binding interface{}
-
 type Environment struct {
-	store    map[string]Binding
+	store    map[string]Value
 	funcs    map[string]*Func
 	builtins map[string]*BuiltinFunc
 }
 
 type Interpreter struct {
-	env *Environment
+	env     *Environment
+	typeEnv map[string]*StructType
 }
 
 func New() *Interpreter {
 	env := NewEnvironment()
+	typeEnv := make(map[string]*StructType)
 	registerBuiltins(env)
-	return &Interpreter{env: env}
+	return &Interpreter{env: env, typeEnv: typeEnv}
 }
 
 func NewEnvironment() *Environment {
 	return &Environment{
-		store:    make(map[string]Binding),
+		store:    make(map[string]Value),
 		funcs:    make(map[string]*Func),
 		builtins: make(map[string]*BuiltinFunc),
 	}
@@ -61,12 +61,12 @@ func NewRuntimeError(node parser.Node, msg string) RuntimeError {
 	return RuntimeError{Message: msg, Line: line, Column: col}
 }
 
-func (e *Environment) Get(name string) (Binding, bool) {
+func (e *Environment) Get(name string) (Value, bool) {
 	val, ok := e.store[name]
 	return val, ok
 }
 
-func (e *Environment) Set(name string, val Binding) Binding {
+func (e *Environment) Set(name string, val Value) Value {
 	e.store[name] = val
 	return val
 }
@@ -615,6 +615,12 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			return SignalNone{}, NewRuntimeError(s, fmt.Sprintf("unknown struct field: %s", stmt.Field.Value))
 		}
 
+		expectedType := structVal.TypeName.Fields[stmt.Field.Value]
+
+		if val.Type() != expectedType {
+			return NilValue{}, NewRuntimeError(stmt, fmt.Sprintf("field '%s' type %v should be %v", stmt.Field.Value, val.Type(), expectedType))
+		}
+
 		structVal.Fields[stmt.Field.Value] = val
 		return SignalNone{}, nil
 
@@ -641,15 +647,17 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		fields := make(map[string]ValueType)
 
 		for _, field := range stmt.Fields {
-			fields[field.Value] = ValueType(field.Token.Type)
+			vt, err := i.resolveTypeFromName(stmt, field.Type.Value)
+			if err != nil {
+				return SignalNone{}, err
+			}
+			fields[field.Name.Value] = vt
 		}
 
-		structType := &StructType{
+		i.typeEnv[stmt.Name.Value] = &StructType{
 			Name:   stmt.Name.Value,
 			Fields: fields,
 		}
-
-		i.env.Set(stmt.Name.Value, structType)
 
 		return SignalNone{}, nil
 
@@ -769,16 +777,16 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 		return evalMemberExpression(expr, leftVal, expr.Field.Value)
 
 	case *parser.Identifier:
-		binding, ok := i.env.Get(expr.Value)
+		v, ok := i.env.Get(expr.Value)
 		if !ok {
 			return NilValue{}, NewRuntimeError(e, fmt.Sprintf("undefined variable: %s", expr.Value))
 		}
 
-		if c, isConst := binding.(ConstValue); isConst {
+		if c, isConst := v.(ConstValue); isConst {
 			return c.Value, nil
 		}
 
-		return binding.(Value), nil
+		return v, nil
 
 	case *parser.ArrayLiteral:
 		elements := []Value{}
@@ -822,12 +830,12 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 		return arr.Elements[idx], nil
 
 	case *parser.StructLiteral:
-		val, ok := i.env.Get(expr.TypeName.Value)
+		val, ok := i.typeEnv[expr.TypeName.Value]
 		if !ok {
 			return NilValue{}, NewRuntimeError(expr, "unknown struct type "+expr.TypeName.Value)
 		}
 
-		structType, ok := val.(*StructType)
+		structType := val
 		if !ok {
 			return NilValue{}, NewRuntimeError(expr, expr.TypeName.Value+" is not a struct type")
 		}
@@ -839,6 +847,11 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 			if err != nil {
 				return NilValue{}, err
 			}
+
+			if v.Type() != structType.Fields[name] {
+				return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("field '%s' type %v should be %v", name, v.Type(), structType.Fields[name]))
+			}
+
 			fields[name] = v
 		}
 
@@ -849,18 +862,30 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 
 	case *parser.AnonymousStructLiteral:
 		fields := make(map[string]Value)
+		fieldTypes := make(map[string]ValueType)
 
 		for name, e := range expr.Fields {
 			v, err := i.EvalExpression(e)
 			if err != nil {
 				return NilValue{}, err
 			}
+
+			if expected, ok := fieldTypes[name]; ok {
+				if v.Type() != expected {
+					return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("field '%s' type %v should be %v", name, v.Type(), fieldTypes[name]))
+				}
+			}
+
 			fields[name] = v
+			fieldTypes[name] = v.Type()
 		}
 
 		return &StructValue{
-			TypeName: nil,
-			Fields:   fields,
+			TypeName: &StructType{
+				Name:   "<anon>",
+				Fields: fieldTypes,
+			},
+			Fields: fields,
 		}, nil
 
 	case *parser.FuncCall:
@@ -1021,6 +1046,12 @@ func evalMemberExpression(node parser.Expression, left Value, field string) (Val
 	val, ok := obj.Fields[field]
 	if !ok {
 		return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unknown field %s", field))
+	}
+
+	expectedType := obj.TypeName.Fields[field]
+
+	if val.Type() != expectedType {
+		return NilValue{}, NewRuntimeError(node, fmt.Sprintf("field '%s' type %v should be %v", field, val.Type(), expectedType))
 	}
 
 	return val, nil
