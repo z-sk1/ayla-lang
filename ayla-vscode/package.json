@@ -3,7 +3,7 @@
   "displayName": "ayla",
   "description": "ayla lang support with syntax highlighting and ayla icon",
   "publisher": "z-sk1",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "icon": "icon.png",
   "repository": {
     "url": "https://github.com/z-sk1/ayla-lang"

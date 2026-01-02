@@ -51,6 +51,26 @@ egg x = 5
 ```
 also valid
 
+## comments
+you can use both single line and multiline comments
+
+`//` is for single line comments:
+
+```ayla
+egg x = 5 // this is a comment
+
+// and this is also a comment
+```
+
+`/*` open and `*/` close for multiline comments:
+```ayla
+egg x = 5
+
+/* this is
+a really 
+big comment */
+```
+
 ## booleans
 booleans can be either yes or no
 
@@ -197,7 +217,7 @@ explode(add(5, 7))
 output: 12
 
 you cant have a designated return type like this, yet
-```go
+```ayla
 func test() int {
     return something
 }
@@ -242,8 +262,8 @@ firstly, typed structs require you to define a type of struct like this
 
 ```ayla
 struct Person {
-    Name
-    Age
+    Name string
+    Age int
 }
 ```
 
@@ -258,9 +278,42 @@ egg p = Person {
 
 then use the `.` symbol to access the fields inside the struct
 ```ayla
-explode("${p.Name} is ${p.Age} years old")
+egg name = p.Name
+egg age = p.Age
+
+explode("${name} is ${age} years old")
 ```
 > output: Ziad is 13 years old
+
+however, if you use the wrong type then you come across a `Runtime error`
+```ayla
+struct Operation {
+    Left int
+    Right int
+}
+
+egg o = Operation {
+    Left: "5",
+    Right: 3
+}
+```
+> output: runtime error at 6:19: field 'Left' type string should be int
+
+same thing for member expressions and assignment
+```ayla
+struct Person {
+    Name string
+    Age int
+}
+
+egg p = Person {
+    Name: "Ziad",
+    Age: 13
+}
+
+p.Age = "13"
+```
+> output: runtime error at 11:13: field 'Age' type string should be int
 
 ### anonymous structs
 then, anonymous structs dont require you to define a type
@@ -276,6 +329,33 @@ egg Operation = {
 explode("${Operation.Left} + ${Operation.Right} = ${Operation.Left + Operation.Right})
 ```
 > output: 5 + 4 = 9
+
+you can also use member expressions and assignment using the `.` symbol
+```ayla
+egg oper = {
+    Left: 4,
+    Right: 5,
+}
+
+oper.Right = 10
+
+explode(oper.Right + oper.Left)
+```
+> output: 14
+
+you will also come across `Runtime errors` using anonymous structs in the same way as typed structs
+
+this happens if you use a different type compared to the one you declared in the field
+
+```ayla
+egg oper = {
+    Left: 5, // int
+    Right: 10
+}
+
+oper.Left = "hi" // string
+```
+> output: runtime error at 6:17: field 'Left' type string should be int
 
 ## built in functions!
 - `explode(...)` – prints values to stdout
@@ -360,6 +440,7 @@ if test.(ayl/ayla) does not exist then ayla CLI will throw an error:
 ```bash
 file not found: test.ayla (.ayla or .ayl) 
 ```
+
 
 ### miscellaneous
 version:

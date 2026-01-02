@@ -54,6 +54,26 @@ egg x = 5
 ```
 also valid
 
+## comments
+you can use both single line and multiline comments
+
+`//` is for single line comments:
+
+```ayla
+egg x = 5 // this is a comment
+
+// and this is also a comment
+```
+
+`/*` open and `*/` close for multiline comments:
+```ayla
+egg x = 5
+
+/* this is
+a really 
+big comment */
+```
+
 ## booleans
 booleans can be either yes or no
 
@@ -332,11 +352,11 @@ this happens if you use a different type compared to the one you declared in the
 
 ```ayla
 egg oper = {
-    Left: 5, <- int
+    Left: 5, // int
     Right: 10
 }
 
-oper.Left = "hi" <- string: error int redeclared as string
+oper.Left = "hi" // string
 ```
 > output: runtime error at 6:17: field 'Left' type string should be int
 

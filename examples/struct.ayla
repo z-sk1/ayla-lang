@@ -1,6 +1,18 @@
-egg oper = {
-    Left: 5,
-    Right: 10
+struct Person {
+    Name
+    Age
 }
 
-oper.Left = "hi"
+egg p = Person {
+    Name: "Ziad",
+    Age: 13
+}
+
+explode("${p.Name} is ${p.Age} years old")
+
+egg Operation = {
+    Left: 4,
+    Right: 5
+}
+
+explode("${Operation.Left} + ${Operation.Right} = ${Operation.Left + Operation.Right}")
