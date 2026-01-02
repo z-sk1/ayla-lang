@@ -113,6 +113,31 @@ func (l *Lexer) skipWhitespace() {
 	}
 }
 
+func (l *Lexer) skipSingleLineComment() {
+	for l.ch != '\n' && l.ch != 0 {
+		l.readChar()
+	}
+}
+
+func (l *Lexer) skipMultiLineComment() {
+	l.readChar() // consume *
+	l.readChar() // move past it 
+
+	for {
+		if l.ch == 0 {
+			break
+		}
+
+		if l.ch == '*' && l.peekChar() == '/' {
+			l.readChar()
+			l.readChar()
+			break
+		}
+
+		l.readChar()
+	}
+}
+
 func (l *Lexer) NextToken() token.Token {
 	l.skipWhitespace()
 
@@ -134,6 +159,14 @@ func (l *Lexer) NextToken() token.Token {
 	case ';':
 		tok = token.Token{Type: token.SEMICOLON, Literal: ";", Line: l.line, Column: l.column}
 	case '/':
+		if l.peekChar() == '/' {
+			l.skipSingleLineComment()
+			return l.NextToken()
+		} else if l.peekChar() == '*' {
+			l.skipMultiLineComment()
+			return l.NextToken()
+		}
+
 		tok = token.Token{Type: token.SLASH, Literal: "/", Line: l.line, Column: l.column}
 	case '"':
 		tok = token.Token{Type: token.STRING, Literal: l.readString(), Line: l.line, Column: l.column}

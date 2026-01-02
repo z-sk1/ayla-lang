@@ -1,6 +1,7 @@
 {
   "scopeName": "source.ayla",
   "patterns": [
+    { "include": "#comments" },
     { "include": "#keywords" },
     { "include": "#control" },
     { "include": "#struct-declaration" },
@@ -13,6 +14,21 @@
     { "include": "#constants" }
   ],
   "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.ayla",
+          "match": "//.*$"
+        },
+
+        {
+          "name": "comment.block.ayla",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
+    },
+
     "keywords": {
       "patterns": [
         {
