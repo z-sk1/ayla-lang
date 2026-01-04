@@ -55,6 +55,9 @@ const (
 	PRINT    = "PRINT"
 	IF       = "IF"
 	ELSE     = "ELSE"
+	SWITCH   = "SWITCH"
+	CASE     = "CASE"
+	DEFAULT  = "DEFAULT"
 	FUNC     = "FUNC"
 	RETURN   = "RETURN"
 	CONTINUE = "CONTINUE"
@@ -78,6 +81,10 @@ var keywords = map[string]TokenType{
 
 	"ayla": IF,
 	"elen": ELSE,
+
+	"switch":  SWITCH,
+	"case":    CASE,
+	"default": DEFAULT,
 
 	"blueprint": FUNC,
 	"back":      RETURN,

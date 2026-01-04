@@ -6,7 +6,6 @@ struct Person {
 egg p = Person {
     Name: "Ziad",
     Age: 13,
-    Extra: "2",
 }
 
 explode("${p.Name} is ${p.Age} years old")

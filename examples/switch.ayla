@@ -1,0 +1,15 @@
+egg x = 2
+
+switch x {
+    case 2 {
+        explode("x is 2")
+    }
+
+    case 3 {
+        explode("x is 3")
+    }
+
+    default {
+        explode("x is neither 2 or 3")
+    }
+}

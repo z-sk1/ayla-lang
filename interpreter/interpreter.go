@@ -684,6 +684,51 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		}
 		return SignalNone{}, nil
 
+	case *parser.SwitchStatement:
+		switchVal, err := i.EvalExpression(stmt.Value)
+		if err != nil {
+			return SignalNone{}, err
+		}
+
+		for _, c := range stmt.Cases {
+			caseVal, err := i.EvalExpression(c.Expr)
+			if err != nil {
+				return SignalNone{}, err
+			}
+
+			if !valuesEqual(switchVal, caseVal) {
+				continue
+			}
+
+			for _, s := range c.Body {
+				sig, err := i.EvalStatement(s)
+				if err != nil {
+					return SignalNone{}, err
+				}
+
+				if _, ok := sig.(SignalNone); !ok {
+					return sig, nil
+				}
+			}
+
+			return SignalNone{}, nil
+		}
+
+		if stmt.Default != nil {
+			for _, s := range stmt.Default.Body {
+				sig, err := i.EvalStatement(s)
+				if err != nil {
+					return SignalNone{}, err
+				}
+
+				if _, ok := sig.(SignalNone); !ok {
+					return sig, nil
+				}
+			}
+		}
+
+		return SignalNone{}, nil
+
 	case *parser.ForStatement:
 		i.EvalStatement(stmt.Init)
 		for {

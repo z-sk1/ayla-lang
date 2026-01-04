@@ -111,6 +111,8 @@ func (p *Parser) parseStatement() Statement {
 		return p.parseConstStatement()
 	case token.STRUCT:
 		return p.parseStructStatement()
+	case token.SWITCH:
+		return p.parseSwitchStatement()
 	case token.FUNC:
 		return p.parseFuncStatement()
 	case token.IF:
@@ -622,6 +624,108 @@ func (p *Parser) parseIfStatement() *IfStatement {
 	return stmt
 }
 
+func (p *Parser) parseSwitchStatement() *SwitchStatement {
+	stmt := &SwitchStatement{
+		NodeBase: NodeBase{Token: p.curTok},
+	}
+
+	// switch <expr>
+	p.nextToken()
+	stmt.Value = p.parseExpression(LOWEST)
+
+	if p.peekTok.Type != token.LBRACE {
+		p.addError("expected '{' after switch expression")
+		return nil
+	}
+
+	p.nextToken()
+	p.nextToken() // first stmt
+
+	stmt.Cases = []*CaseClause{}
+
+	for p.curTok.Type != token.RBRACE && p.curTok.Type != token.EOF {
+		switch p.curTok.Type {
+
+		case token.CASE:
+			clause := p.parseCaseClause()
+			if clause == nil {
+				return nil
+			}
+			stmt.Cases = append(stmt.Cases, clause)
+			p.nextToken()
+
+		case token.DEFAULT:
+			if stmt.Default != nil {
+				p.addError("multiple default clauses in switch")
+				return nil
+			}
+			stmt.Default = p.parseDefaultClause()
+			p.nextToken()
+
+		default:
+			p.addError("expected 'case' or 'default' in switch statement")
+			return nil
+		}
+	}
+
+	return stmt
+}
+
+func (p *Parser) parseCaseClause() *CaseClause {
+	clause := &CaseClause{
+		NodeBase: NodeBase{Token: p.curTok},
+	}
+
+	// case <expr>
+	p.nextToken()
+	clause.Expr = p.parseExpression(LOWEST)
+
+	if p.peekTok.Type != token.LBRACE {
+		p.addError("expected '{' after case expression")
+		return nil
+	}
+	p.nextToken() // {
+	p.nextToken() // first stmt
+
+	clause.Body = []Statement{}
+
+	for p.curTok.Type != token.RBRACE {
+		stmt := p.parseStatement()
+		if stmt != nil {
+			clause.Body = append(clause.Body, stmt)
+		}
+		p.nextToken()
+	}
+
+	return clause
+}
+
+func (p *Parser) parseDefaultClause() *DefaultClause {
+	clause := &DefaultClause{
+		NodeBase: NodeBase{Token: p.curTok},
+	}
+
+	// default {
+	if p.peekTok.Type != token.LBRACE {
+		p.addError("expected '{' after default")
+		return nil
+	}
+	p.nextToken() // {
+	p.nextToken() // first stmt
+
+	clause.Body = []Statement{}
+
+	for p.curTok.Type != token.RBRACE {
+		stmt := p.parseStatement()
+		if stmt != nil {
+			clause.Body = append(clause.Body, stmt)
+		}
+		p.nextToken()
+	}
+
+	return clause
+}
+
 func (p *Parser) parseFuncStatement() *FuncStatement {
 	stmt := &FuncStatement{}
 	stmt.NodeBase = NodeBase{Token: p.curTok}
@@ -1042,7 +1146,9 @@ func (p *Parser) parsePrimary() Expression {
 
 		if p.peekTok.Type == token.LBRACE {
 			p.nextToken() // move to {
-			return p.parseStructLiteral(ident)
+			if p.peekTok.Type != token.CASE {
+				return p.parseStructLiteral(ident)
+			}
 		}
 
 		return ident

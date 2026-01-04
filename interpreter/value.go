@@ -246,3 +246,24 @@ func (i Interpreter) resolveTypeFromName(node *parser.StructStatement, name stri
 
 	return "", NewRuntimeError(node, fmt.Sprintf("unknown type: %s", name))
 }
+
+func valuesEqual(a, b Value) bool {
+	if a.Type() != b.Type() {
+		return false
+	}
+
+	switch av := a.(type) {
+	case IntValue:
+		return av.V == b.(IntValue).V
+	case FloatValue:
+		return av.V == b.(FloatValue).V
+	case StringValue:
+		return av.V == b.(StringValue).V
+	case BoolValue:
+		return av.V == b.(BoolValue).V
+	case NilValue:
+		return true
+	default:
+		return false
+	}
+}

@@ -121,6 +121,24 @@ type StructStatement struct {
 	Fields []*StructField
 }
 
+type SwitchStatement struct {
+	NodeBase
+	Value Expression
+	Cases []*CaseClause
+	Default *DefaultClause
+}
+
+type CaseClause struct {
+	NodeBase
+	Expr Expression
+	Body []Statement
+}
+
+type DefaultClause struct {
+	NodeBase
+	Body []Statement 
+}
+
 type BreakStatement struct {
 	NodeBase
 }
