@@ -456,6 +456,7 @@ oper.Left = "hi" // string
 - `insert(arr, index, val)` – insert value
 - `remove(arr, index)` – remove element at index
 - `clear(arr)` – remove all elements
+- `wait(ms)` – wait for a duration in milliseconds
 - `randi()` or `randi(max)` or `randi(min, max)`
 - `randf()` or `randf(max)` or `randf(min, max)`
 
