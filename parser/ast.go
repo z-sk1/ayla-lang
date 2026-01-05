@@ -61,12 +61,14 @@ var precedences = map[token.TokenType]int{
 type VarStatement struct {
 	NodeBase
 	Name  string
+	Type  *Identifier // if no type defaults to nil, and then automatically chooses type
 	Value Expression
 }
 
 type ConstStatement struct {
 	NodeBase
 	Name  string
+	Type  *Identifier // if no type defaults to nil, and then automatically chooses type
 	Value Expression
 }
 
@@ -123,8 +125,8 @@ type StructStatement struct {
 
 type SwitchStatement struct {
 	NodeBase
-	Value Expression
-	Cases []*CaseClause
+	Value   Expression
+	Cases   []*CaseClause
 	Default *DefaultClause
 }
 
@@ -136,7 +138,7 @@ type CaseClause struct {
 
 type DefaultClause struct {
 	NodeBase
-	Body []Statement 
+	Body []Statement
 }
 
 type BreakStatement struct {

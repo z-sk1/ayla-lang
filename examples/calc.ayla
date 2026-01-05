@@ -1,38 +1,38 @@
 blueprint add(x, y) {
-    back x + y
+    back x + y;
 }
 
 blueprint multiply(x, y) {
-    back x * y
+    back x * y;
 }
 
 blueprint subtract(x, y) {
-    back x - y
+    back x - y;
 }
 
 blueprint divide(x, y) {
-    back x / y
+    back x / y;
 }
 
-egg firstNum
-egg oper
-egg secondNum
+egg firstNum;
+egg oper;
+egg secondNum;
 
-explodeln("Firstnum")
-tsaln(firstNum)
+explodeln("Firstnum");
+tsaln(firstNum);
 
-explodeln("Operator")
-tsaln(oper)
+explodeln("Operator");
+tsaln(oper);
  
-explodeln("Secondnum")
-tsaln(secondNum)
+explodeln("Secondnum");
+tsaln(secondNum);
 
 ayla oper == "+" {
-    explodeln(firstNum + oper + secondNum + "=" + string(add(float(firstNum), float(secondNum))))
+    explodeln(firstNum + oper + secondNum + "=" + string(add(float(firstNum), float(secondNum))));
 } elen ayla oper == "-" {
-    explodeln(firstNum + oper + secondNum + "=" + string(subtract(float(firstNum), float(secondNum))))
+    explodeln(firstNum + oper + secondNum + "=" + string(subtract(float(firstNum), float(secondNum))));
 } elen ayla oper == "*" {
-    explodeln(firstNum + oper + secondNum + "=" + string(multiply(float(firstNum), float(secondNum))))
+    explodeln(firstNum + oper + secondNum + "=" + string(multiply(float(firstNum), float(secondNum))));
 } elen ayla oper == "/" {
-    explodeln(firstNum + oper + secondNum + "=" + string(divide(float(firstNum), float(secondNum))))
+    explodeln(firstNum + oper + secondNum + "=" + string(divide(float(firstNum), float(secondNum))));
 }

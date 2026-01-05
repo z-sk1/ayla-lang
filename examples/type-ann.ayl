@@ -1,0 +1,6 @@
+egg x bool = ""
+
+explodeln(x)
+
+rock y string = "hi"
+explodeln(y)

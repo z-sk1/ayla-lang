@@ -541,6 +541,19 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			}
 		}
 
+		if stmt.Type != nil {
+			if string(val.Type()) != stmt.Type.Value {
+				if val.Type() == INT && stmt.Type.Value == "float" {
+					intVal := val.(IntValue)
+					val = FloatValue{V: float64(intVal.V)}
+				} else if val.Type() != BOOL && stmt.Type.Value == "bool" {
+					val = BoolValue{V: isTruthy(val)}
+				} else {
+					return SignalNone{}, NewRuntimeError(s, fmt.Sprintf("type mismatch: '%s' assigned to a '%s'", string(val.Type()), stmt.Type.Value))
+				}
+			}
+		}
+
 		// variable must not exist
 		if _, ok := i.env.Get(stmt.Name); ok {
 			return SignalNone{}, NewRuntimeError(s, fmt.Sprintf("cant redeclare var: %s", stmt.Name))
@@ -559,6 +572,19 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			val, err = i.EvalExpression(stmt.Value)
 			if err != nil {
 				return SignalNone{}, err
+			}
+		}
+
+		if stmt.Type != nil {
+			if string(val.Type()) != stmt.Type.Value {
+				if val.Type() == INT && stmt.Type.Value == "float" {
+					intVal := val.(IntValue)
+					val = FloatValue{V: float64(intVal.V)}
+				} else if val.Type() != BOOL && stmt.Type.Value == "bool" {
+					val = BoolValue{V: isTruthy(val)}
+				} else {
+					return SignalNone{}, NewRuntimeError(s, fmt.Sprintf("type mismatch: '%s' assigned to a '%s'", string(val.Type()), stmt.Type.Value))
+				}
 			}
 		}
 

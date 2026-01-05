@@ -1,6 +1,6 @@
 egg text = "Ayla lang is so much better than datafall"
 
-four egg i = 0; i < len(text); i = i + 1 {
+four egg i int = 0; i < len(text); i = i + 1 {
     explode(text[i])
     wait(100)
 }

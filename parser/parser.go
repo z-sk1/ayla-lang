@@ -129,6 +129,7 @@ func (p *Parser) parseStatement() Statement {
 		return p.parseReturnStatement()
 	case token.IDENT:
 		// arr[idx] = ???
+		// "string"[idx]
 		if p.peekTok.Type == token.LBRACKET {
 			return p.parseIndexAssignment()
 		}
@@ -162,8 +163,27 @@ func (p *Parser) parseVarStatement() *VarStatement {
 	}
 	stmt.Name = p.curTok.Literal
 
-	// Expect '='
 	p.nextToken()
+
+	// check for type ident
+	stmt.Type = nil
+
+	switch p.curTok.Type {
+	case token.INT_TYPE,
+		token.FLOAT_TYPE,
+		token.STRING_TYPE,
+		token.BOOL_TYPE:
+
+		varType := &Identifier{
+			NodeBase: NodeBase{Token: p.curTok},
+			Value:    p.curTok.Literal,
+		}
+
+		stmt.Type = varType
+		p.nextToken()
+	}
+
+	// Expect '='
 	if p.curTok.Type != token.ASSIGN {
 		stmt.Value = nil
 		return stmt
@@ -172,12 +192,11 @@ func (p *Parser) parseVarStatement() *VarStatement {
 	// Expression after '='
 	p.nextToken()
 
-	if p.curTok.Literal == "" {
+	stmt.Value = p.parseExpression(LOWEST)
+	if stmt.Value == nil {
 		p.addError("expected expression after '='")
 		return nil
 	}
-
-	stmt.Value = p.parseExpression(LOWEST)
 
 	// Optional semicolon
 	if p.peekTok.Type == token.SEMICOLON {
@@ -192,11 +211,99 @@ func (p *Parser) parseVarStatementNoSemicolon() *VarStatement {
 	stmt.NodeBase = NodeBase{Token: p.curTok}
 
 	p.nextToken() // name
+	if p.curTok.Type != token.IDENT {
+		p.addError("expected identifier after 'egg'")
+		return nil
+	}
 	stmt.Name = p.curTok.Literal
 
-	p.nextToken() // '='
 	p.nextToken()
+
+	// check for type ident
+	stmt.Type = nil
+
+	switch p.curTok.Type {
+	case token.INT_TYPE,
+		token.FLOAT_TYPE,
+		token.STRING_TYPE,
+		token.BOOL_TYPE:
+
+		varType := &Identifier{
+			NodeBase: NodeBase{Token: p.curTok},
+			Value:    p.curTok.Literal,
+		}
+
+		stmt.Type = varType
+		p.nextToken()
+	}
+
+	if p.curTok.Type != token.ASSIGN {
+		stmt.Value = nil 
+		return stmt
+	}
+
+	p.nextToken()
+
 	stmt.Value = p.parseExpression(LOWEST)
+	if stmt.Value == nil {
+		p.addError("expected expression after '='")
+		return nil
+	}
+
+	return stmt
+}
+
+func (p *Parser) parseConstStatement() *ConstStatement {
+	stmt := &ConstStatement{}
+	stmt.NodeBase = NodeBase{Token: p.curTok}
+
+	// move to ident
+	p.nextToken()
+	if p.curTok.Type != token.IDENT {
+		p.addError("expected identifier after 'rock'")
+		return nil
+	}
+	stmt.Name = p.curTok.Literal
+
+	p.nextToken()
+
+	// check for type ident
+	stmt.Type = nil
+
+	switch p.curTok.Type {
+	case token.INT_TYPE,
+		token.FLOAT_TYPE,
+		token.STRING_TYPE,
+		token.BOOL_TYPE:
+
+		varType := &Identifier{
+			NodeBase: NodeBase{Token: p.curTok},
+			Value:    p.curTok.Literal,
+		}
+
+		stmt.Type = varType
+		p.nextToken()
+	}
+
+	// expect '='
+	if p.curTok.Type != token.ASSIGN {
+		p.addError("expected '=' after identifier")
+		return nil
+	}
+
+	// expression after '='
+	p.nextToken()
+	
+	stmt.Value = p.parseExpression(LOWEST)
+	if stmt.Value == nil {
+		p.addError("expected expression after '='")
+		return nil
+	}
+
+	// optional semicolon
+	if p.peekTok.Type == token.SEMICOLON {
+		p.nextToken()
+	}
 
 	return stmt
 }
@@ -265,37 +372,6 @@ func (p *Parser) parseIndexAssignment() *IndexAssignmentStatement {
 	stmt.Left = left
 	stmt.Index = idx
 	stmt.Value = val
-
-	// optional semicolon
-	if p.peekTok.Type == token.SEMICOLON {
-		p.nextToken()
-	}
-
-	return stmt
-}
-
-func (p *Parser) parseConstStatement() *ConstStatement {
-	stmt := &ConstStatement{}
-	stmt.NodeBase = NodeBase{Token: p.curTok}
-
-	// move to ident
-	p.nextToken()
-	if p.curTok.Type != token.IDENT {
-		p.addError("expected identifier after 'rock'")
-		return nil
-	}
-	stmt.Name = p.curTok.Literal
-
-	// expect '='
-	p.nextToken()
-	if p.curTok.Type != token.ASSIGN {
-		p.addError("expected '=' after identifier")
-		return nil
-	}
-
-	// expression after '='
-	p.nextToken()
-	stmt.Value = p.parseExpression(LOWEST)
 
 	// optional semicolon
 	if p.peekTok.Type == token.SEMICOLON {

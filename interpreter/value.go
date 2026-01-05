@@ -2,6 +2,7 @@ package interpreter
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/z-sk1/ayla-lang/parser"
 )
@@ -68,7 +69,7 @@ func (f FloatValue) Type() ValueType {
 }
 
 func (f FloatValue) String() string {
-	return fmt.Sprintf("%f", f.V)
+	return strconv.FormatFloat(f.V, 'f', -1, 64)
 }
 
 type StringValue struct {
@@ -213,7 +214,7 @@ func (i Interpreter) resolveType(expr parser.Expression) (ValueType, error) {
 
 	case *parser.InfixExpression:
 		return i.resolveType(e.Left)
-	
+
 	case *parser.FuncCall:
 		return NIL, nil
 
@@ -236,7 +237,7 @@ func (i Interpreter) resolveTypeFromName(node *parser.StructStatement, name stri
 		return ARRAY, nil
 	}
 
-	// user-defined struct type 
+	// user-defined struct type
 	val, ok := i.env.Get(name)
 	if ok {
 		if _, ok := val.(StructType); ok {
