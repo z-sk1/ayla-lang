@@ -1,4 +1,4 @@
 egg arr = [1, 2, 3, 4]
 
 clear(arr)
-explode(arr)
+explodeln(arr)

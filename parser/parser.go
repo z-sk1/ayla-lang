@@ -633,13 +633,16 @@ func (p *Parser) parseSwitchStatement() *SwitchStatement {
 	p.nextToken()
 	stmt.Value = p.parseExpression(LOWEST)
 
-	if p.peekTok.Type != token.LBRACE {
+	if p.curTok.Type != token.LBRACE {
+		p.nextToken()
+	}
+
+	if p.curTok.Type != token.LBRACE {
 		p.addError("expected '{' after switch expression")
 		return nil
 	}
 
 	p.nextToken()
-	p.nextToken() // first stmt
 
 	stmt.Cases = []*CaseClause{}
 
@@ -872,7 +875,7 @@ func (p *Parser) parseForStatement() *ForStatement {
 		p.addError("expected ';' after four statement init")
 		return nil
 	}
-	p.nextToken() // consume ';'
+	p.nextToken()
 
 	// condition
 	p.nextToken()
@@ -883,11 +886,10 @@ func (p *Parser) parseForStatement() *ForStatement {
 	}
 
 	// expect ';'
-	if p.peekTok.Type != token.SEMICOLON {
+	if p.curTok.Type != token.SEMICOLON {
 		p.addError("expected ';' after condition")
 		return nil
 	}
-	p.nextToken() // consume ';'
 
 	// post
 	p.nextToken()
@@ -902,8 +904,8 @@ func (p *Parser) parseForStatement() *ForStatement {
 		p.addError("expected '{' after post expression")
 		return nil
 	}
-	p.nextToken() // move to '{'
 
+	p.nextToken() // move to '{'
 	stmt.Body = p.parseBlockStatement()
 	return stmt
 }

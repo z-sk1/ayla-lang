@@ -34,11 +34,6 @@
         {
           "name": "keyword.declaration.ayla",
           "match": "\\b(egg|rock|blueprint|struct)\\b"
-        },
-
-        {
-          "name": "keyword.declaration.ayla",
-          "match": "\\b(tsaln|bool|string|int|float|type|len|push|pop|insert|remove|clear|randi|randf|explode)\\b"
         }
       ]
     },

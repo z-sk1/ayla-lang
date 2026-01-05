@@ -5,6 +5,7 @@ import (
 	"math/rand"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/z-sk1/ayla-lang/parser"
 )
@@ -226,6 +227,19 @@ func registerBuiltins(env *Environment) {
 		Fn: func(node *parser.FuncCall, args []Value) (Value, error) {
 			for _, v := range args {
 				if v.Type() != NIL {
+					fmt.Print(v.String())
+				}
+			}
+			return NilValue{}, nil
+		},
+	}
+
+	env.builtins["explodeln"] = &BuiltinFunc{
+		Name:  "explodeln",
+		Arity: -1,
+		Fn: func(node *parser.FuncCall, args []Value) (Value, error) {
+			for _, v := range args {
+				if v.Type() != NIL {
 					fmt.Println(v.String())
 				}
 			}
@@ -390,6 +404,25 @@ func registerBuiltins(env *Environment) {
 				env.Set(ident.Value, arr)
 			}
 
+			return NilValue{}, nil
+		},
+	}
+
+	env.builtins["wait"] = &BuiltinFunc{
+		Name:  "wait",
+		Arity: 1,
+		Fn: func(node *parser.FuncCall, args []Value) (Value, error) {
+			intVal, ok := args[0].(IntValue)
+			if !ok {
+				return NilValue{}, NewRuntimeError(node, fmt.Sprintf("wait arg: %v, must be int (milliseconds)", intVal.V))
+			}
+
+			ms := intVal.V
+			if ms < 0 {
+				return NilValue{}, NewRuntimeError(node, fmt.Sprintf("wait duration: %d, cannot be negative", ms))
+			}
+
+			time.Sleep(time.Duration(ms) * time.Millisecond)
 			return NilValue{}, nil
 		},
 	}
@@ -856,23 +889,12 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 			return NilValue{}, err
 		}
 
-		arr, ok := left.(ArrayValue)
-		if !ok {
-			return NilValue{}, NewRuntimeError(e, fmt.Sprintf("indexing non-array: %s", left.String()))
+		val, err := evalIndexExpression(expr, left, index)
+		if err != nil {
+			return NilValue{}, err
 		}
 
-		idxVal, ok := index.(IntValue)
-		if !ok {
-			return NilValue{}, NewRuntimeError(e, fmt.Sprintf("array index: %v, must be int", idxVal.V))
-		}
-
-		idx := idxVal.V
-
-		if idx < 0 || idx >= len(arr.Elements) {
-			return NilValue{}, NewRuntimeError(e, fmt.Sprintf("array index: %d, out of bounds", idx))
-		}
-
-		return arr.Elements[idx], nil
+		return val, nil
 
 	case *parser.StructLiteral:
 		val, ok := i.typeEnv[expr.TypeName.Value]
@@ -1084,6 +1106,41 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 
 	default:
 		return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("unhandled expression type: %T", e))
+	}
+}
+
+func evalIndexExpression(node parser.Expression, left, idx Value) (Value, error) {
+	switch left := left.(type) {
+	case ArrayValue:
+		idxVal, ok := idx.(IntValue)
+		if !ok {
+			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("array index: %v, must be int", idxVal.V))
+		}
+
+		idx := idxVal.V
+
+		if idx < 0 || idx >= len(left.Elements) {
+			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("array index: %d, out of bounds", idx))
+		}
+
+		return left.Elements[idx], nil
+	case StringValue:
+		idxVal, ok := idx.(IntValue)
+		if !ok {
+			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("string index: %v, must be int", idxVal.V))
+		}
+
+		idx := idxVal.V
+
+		if idx < 0 || idx >= len(left.V) {
+			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("string index: %d, out of bounds", idx))
+		}
+
+		r := []rune(left.V)
+		return &StringValue{V: string(r[idx])}, nil
+
+	default:
+		return NilValue{}, NewRuntimeError(node, fmt.Sprintf("indexing is not allowed with type: %T", left.Type()))
 	}
 }
 

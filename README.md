@@ -433,6 +433,7 @@ oper.Left = "hi" // string
 
 ## built in functions!
 - `explode(...)` – prints values to stdout
+- `explodeln(...)` — prints values to stdout and adds '\n' at the end
 - `tsaln(x)` – scans console input and stores it in variable
 - `bool(x)` – converts a value to boolean
 - `string(x)` – converts a value to string

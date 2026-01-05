@@ -1,9 +1,9 @@
 four egg i = 0; i < 5; i = i + 1 {
-    explode(i)
+    explodeln(i)
 }
 
 egg x = 0
 why x < 5 {
     x = x + 1
-    explode(x)
+    explodeln(x)
 }

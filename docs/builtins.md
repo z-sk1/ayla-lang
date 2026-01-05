@@ -2,9 +2,23 @@
 prints values to the console, other, pettier, langs call it "print"
 
 ```ayla
-explode("Hi ayla")
+explode("Hi")
+explode("ayla")
 ```
 > output: Hi ayla
+
+## **explodeln**:
+same as explode but with a '\n' instead 
+
+```ayla
+explodeln("Hi")
+explodeln("ayla")
+```
+> output: 
+```
+Hi
+ayla
+```
 
 ## **tsaln**:
 **tsaln** corresponds to fmt.Scanln() in Go. the parameter is a reference to the variable the value will be stored in.
@@ -161,6 +175,20 @@ clear(arr)
 explode(arr)
 ```
 > output: []
+
+## **wait**:
+takes in a duration of milliseconds then pauses the program for that duration
+
+```ayla
+explodeln("Finishing task...")
+wait(2000) // 2 seconds
+explodeln("done!")
+```
+> output:
+```
+Finishing task...
+done!
+```
 
 ## **randi**:
 returns a random integer

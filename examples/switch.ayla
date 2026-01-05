@@ -1,13 +1,14 @@
 egg x = 2
 
-decide x {
-    when 2 {
+decide yes {
+    when x == 2 {
         explode("x is 2")
     }
 
     when 3 {
         explode("x is 3")
     }
+
 
     otherwise {
         explode("x is neither 2 or 3")

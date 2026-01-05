@@ -18,21 +18,21 @@ egg firstNum
 egg oper
 egg secondNum
 
-explode("Firstnum")
+explodeln("Firstnum")
 tsaln(firstNum)
 
-explode("Operator")
+explodeln("Operator")
 tsaln(oper)
  
-explode("Secondnum")
+explodeln("Secondnum")
 tsaln(secondNum)
 
 ayla oper == "+" {
-    explode(firstNum + oper + secondNum + "=" + string(add(float(firstNum), float(secondNum))))
+    explodeln(firstNum + oper + secondNum + "=" + string(add(float(firstNum), float(secondNum))))
 } elen ayla oper == "-" {
-    explode(firstNum + oper + secondNum + "=" + string(subtract(float(firstNum), float(secondNum))))
+    explodeln(firstNum + oper + secondNum + "=" + string(subtract(float(firstNum), float(secondNum))))
 } elen ayla oper == "*" {
-    explode(firstNum + oper + secondNum + "=" + string(multiply(float(firstNum), float(secondNum))))
+    explodeln(firstNum + oper + secondNum + "=" + string(multiply(float(firstNum), float(secondNum))))
 } elen ayla oper == "/" {
-    explode(firstNum + oper + secondNum + "=" + string(divide(float(firstNum), float(secondNum))))
+    explodeln(firstNum + oper + secondNum + "=" + string(divide(float(firstNum), float(secondNum))))
 }
