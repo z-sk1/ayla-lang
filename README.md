@@ -204,6 +204,62 @@ why i < 7 {
 ```
 > output: 1 2 3 5 6 7
 
+## switch-case 
+switch has been renamed to **decide**
+and case to **when**
+and default to **otherwise**
+
+```ayla
+egg x = 2
+
+decide x {
+    when 2 {
+        explode("x is 2")
+    }
+
+    when 3 {
+        explode("x is 3")
+    }
+
+    otherwise {
+        explode("x is neither 2 or 3")
+    }
+}
+```
+> output: x is 2
+
+you can also use conditionals in the switch expression, like this
+
+```ayla
+egg x = 5
+
+decide x < 10 {
+    when yes {
+        explode("x is less than 10")
+    }
+
+    otherwise {
+        explode("x is more than 10")
+    }
+}
+```
+
+
+you can also implement conditionals into case expressions by making the switch expression a boolean value
+```ayla
+egg x = 5
+
+decide yes {
+    when x < 10 {
+        explode("x is less than 10")
+    }
+
+    otherwise {
+        explode("x is more than 10")
+    }
+}
+```
+
 ## functions
 
 nuh uh now theyre called blueprints

@@ -82,9 +82,9 @@ var keywords = map[string]TokenType{
 	"ayla": IF,
 	"elen": ELSE,
 
-	"switch":  SWITCH,
-	"case":    CASE,
-	"default": DEFAULT,
+	"decide":    SWITCH,
+	"when":      CASE,
+	"otherwise": DEFAULT,
 
 	"blueprint": FUNC,
 	"back":      RETURN,

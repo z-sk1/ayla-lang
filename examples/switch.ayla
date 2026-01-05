@@ -1,15 +1,15 @@
 egg x = 2
 
-switch x {
-    case 2 {
+decide x {
+    when 2 {
         explode("x is 2")
     }
 
-    case 3 {
+    when 3 {
         explode("x is 3")
     }
 
-    default {
+    otherwise {
         explode("x is neither 2 or 3")
     }
 }
