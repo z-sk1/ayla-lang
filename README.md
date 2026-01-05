@@ -117,6 +117,16 @@ explode("Random number: ${rand}")
 ```
 > output: 0 - 10
 
+## string indexing
+you can index into strings almost like arrays
+
+```ayla 
+egg text = "Hello"
+
+explodeln(text[0])
+```
+> output: H
+
 ## if/else if/else
 
 in ayla-lang, if has been renamed to **ayla**, and else renamed to **elen**. therefore else if has been aptly renamed to **elen ayla**.
