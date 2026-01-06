@@ -13,6 +13,9 @@ ayla lang is a small interpreted language written in go, designed to make you fo
 - **Me: z-sk1, Co-Owner**
 - **and Mregg55, Co-Owner (link: https://github.com/mregg55)**
 
+# Installation and Usage
+See [INSTRUCTIONS.md](./INSTRUCTIONS.md) for full step-by-step instructions for macOS and Windows.
+
 # the features
 
 ## declaration and assignment

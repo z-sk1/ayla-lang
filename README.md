@@ -16,6 +16,11 @@ https://marketplace.visualstudio.com/items?itemName=z-sk1.ayla
 
 this will add syntax highlighting
 
+# Installation and Usage
+See [INSTRUCTIONS.md](./INSTRUCTIONS.md) for full step-by-step instructions for macOS and Windows.
+
+---
+
 # the features
 
 ## declaration and assignment
@@ -545,58 +550,3 @@ parse errors will default to (got nothing) if there is nothing after the token
 egg x =
 ```
 > output: parse error at 1:8: expected expression after '=' (got nothing)
-
-## cli tooling and running scripts
-
-### windows instructions
-to use the cli, please go to the releases tab and download the zip file.
-
-extract the zip, and put the exe file in a easy to access place, like C:\ayla
-
-put the file path in your PATH found in your System Environment Variables
-
-there isnt a REPL currently, so make sure to put `ayla` infront of every cmd
-
-### running
-
-to run a script do:
-
-```bash
-ayla run [--debug] [--timed] <file>
-```
-> --debug will give debug info like ast, and tokens
-
-> --timed will time how long your program takes
-
-```bash
-ayla run test.ayl
-```
-and also for the other extension
-```bash
-ayla run test.ayla
-```
-
-you can also do it without putting a file extension
-```bash
-ayla run test
-```
-this will first try appending .ayla, then if not found it will try appending .ayl
-
-if test.(ayl/ayla) does not exist then ayla CLI will throw an error:
-```bash
-file not found: test.ayla (.ayla or .ayl) 
-```
-
-
-### miscellaneous
-version:
-
-```bash
-ayla --version
-```
-
-help:
-
-```bash
-ayla --help
-```
