@@ -86,8 +86,8 @@ var keywords = map[string]TokenType{
 	"when":      CASE,
 	"otherwise": DEFAULT,
 
-	"blueprint": FUNC,
-	"back":      RETURN,
+	"fun":  FUNC,
+	"back": RETURN,
 
 	"int":    INT_TYPE,
 	"float":  FLOAT_TYPE,

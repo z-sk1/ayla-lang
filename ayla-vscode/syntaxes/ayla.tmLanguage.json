@@ -33,7 +33,7 @@
       "patterns": [
         {
           "name": "keyword.declaration.ayla",
-          "match": "\\b(egg|rock|blueprint|struct)\\b"
+          "match": "\\b(egg|rock|fun|struct|int|float|string|bool)\\b"
         }
       ]
     },

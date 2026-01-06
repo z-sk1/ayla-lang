@@ -19,7 +19,7 @@ this will add syntax highlighting
 # the features
 
 ## declaration and assignment
-to declare a normal mutable, reassignable variable use **egg** 
+to declare a normal mutable, reassignable variable use `egg`
 ```ayla
 egg x = "wowie"
 ```
@@ -30,7 +30,7 @@ egg x
 ```
 they default to `nil`
 
-to declare a constant, use **rock**
+to declare a constant, use `rock`
 
 ```ayla
 rock x = "i will never change"
@@ -42,7 +42,7 @@ rock x
 ```
 > output: Runtime error at 1:5: const x must be initialised
 
-you can also use type annotation for both **egg** and **rock**
+you can also use type annotation for both `egg` and `rock`
 
 the available types are:
 - `int` 
@@ -149,7 +149,7 @@ explodeln(x)
 > output: yes
 
 ## string concatenation
-you can concatenate strings using the **+** operator.
+you can concatenate strings using the `+` operator.
 
 ```ayla
 egg a = "hello "
@@ -166,9 +166,9 @@ explode(string(4) + string(2))
 > output: 42
 
 ## string interpolation
-you can also interpolate strings using **${}**
+you can also interpolate strings using `${}`
 
-> unlike JavaScript, you just use the normal quotation marks, " ", not ` `
+> unlike JavaScript, you just use the normal quotation marks, "", not ``
 
 ```ayla
 egg rand = randi(10)
@@ -189,7 +189,7 @@ explodeln(text[0])
 
 ## if/else if/else
 
-in ayla-lang, if has been renamed to **ayla**, and else renamed to **elen**. therefore else if has been aptly renamed to **elen ayla**.
+in ayla-lang, if has been renamed to `ayla`, and else renamed to `elen`. therefore else if has been aptly renamed to `elen ayla`.
 
 
 ```ayla
@@ -206,7 +206,7 @@ ayla x <= 9 {
 ## loops
 
 ### four loop
-the for loop has been renamed to **four** loop, for convenience
+the for loop has been renamed to `four` loop, for convenience
 
 oh yea also no brackets
 
@@ -220,7 +220,7 @@ four egg i = 0; i < 5; i = i + 1 {
 > output: 1 2 3 4 5
 
 ### why loop
-the while loop has been renamed to **why** loop, for convenience
+the while loop has been renamed to `why` loop, for convenience
 
 no brackets here either
 
@@ -240,9 +240,9 @@ why i < 7 {
 ### kitkat and next
 *Take a break, take a kitkat*
 
-because we are so nice, we renamed break to **kitkat** so it sticks in your memory
+because we are so nice, we renamed break to `kitkat` so it sticks in your memory
 
-oh yea we also renamed continue to **next**
+oh yea we also renamed continue to `next`
 
 ```ayla
 egg i = 0
@@ -275,9 +275,9 @@ why i < 7 {
 > output: 1 2 3 5 6 7
 
 ## switch-case 
-switch has been renamed to **decide**
-and case to **when**
-and default to **otherwise**
+switch has been renamed to `decide`
+and case to `when`
+and default to `otherwise`
 
 ```ayla
 egg x = 2
@@ -332,12 +332,12 @@ decide yes {
 
 ## functions
 
-nuh uh now theyre called blueprints
+to declare a function use `fun`
 
-return has been renamed to back, haha
+return has been renamed to `back`, haha
 
 ```ayla
-blueprint add(x, y) {
+fun add(x, y) {
     back x + y
 }
 
@@ -347,7 +347,7 @@ output: 12
 
 you cant have a designated return type like this, yet
 ```ayla
-func test() int {
+fun test() int {
     return something
 }
 ```
@@ -355,7 +355,7 @@ func test() int {
 so uh have fun with that :-)
 
 ## arrays
-to initialise an array use square brackets: **[]**
+to initialise an array use square brackets: `[]`
 
 ```ayla
 egg arr = [0, 1, 2, 3]
@@ -555,7 +555,7 @@ extract the zip, and put the exe file in a easy to access place, like C:\ayla
 
 put the file path in your PATH found in your System Environment Variables
 
-there isnt a REPL currently, so make sure to put **ayla** infront of every cmd
+there isnt a REPL currently, so make sure to put `ayla` infront of every cmd
 
 ### running
 

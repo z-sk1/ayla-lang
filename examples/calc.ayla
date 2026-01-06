@@ -1,16 +1,16 @@
-blueprint add(x, y) {
+fun add(x, y) {
     back x + y;
 }
 
-blueprint multiply(x, y) {
+fun multiply(x, y) {
     back x * y;
 }
 
-blueprint subtract(x, y) {
+fun subtract(x, y) {
     back x - y;
 }
 
-blueprint divide(x, y) {
+fun divide(x, y) {
     back x / y;
 }
 

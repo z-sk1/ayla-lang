@@ -1,7 +1,6 @@
-// egg x bool = ""
+egg x bool = ""
 
-// explodeln(x)
+explodeln(x)
 
-// rock y string = "hi"
-// explodeln(y)
-explode(string(4) + 2)
+rock y string = "hi"
+explodeln(y)
