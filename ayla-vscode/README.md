@@ -342,10 +342,10 @@ explode(add(5, 7))
 ```
 output: 12
 
-you cant have a designated return type like this, yet
+you **cant** have a designated return type like this, yet
 ```ayla
-fun test() int {
-    return something
+fun add(x, y) int {
+    back x + y
 }
 ```
 
