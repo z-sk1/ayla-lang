@@ -1,0 +1,5 @@
+fun sum(x, y) {
+    back x + y
+}
+
+explodeln(sum(4, 9))
