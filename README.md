@@ -42,6 +42,27 @@ rock x
 ```
 > output: Runtime error at 1:5: const x must be initialised
 
+you can also use type annotation for both **egg** and **rock**
+
+the available types are:
+- `int` 
+- `float`
+- `string`
+- `bool`
+
+```ayla 
+egg x int = 3
+
+explodeln(x)
+```
+> output: 3
+
+and you will also come across `Runtime errors` if you address the wrong type
+```ayla
+rock x string = 5
+```
+> output: runtime error at 1:5: type mismatch: 'int' assigned to a 'string'
+
 ## semicolon
 semicolons are optional! put them if you want, or leave them out if you're more comfortable with that
 ```ayla
@@ -75,8 +96,7 @@ big comment */
 ```
 
 ## booleans
-booleans can be either yes or no
-
+for booleans, it is recommended to use the constants `yes` and `no`
 ```ayla
 egg foo = yes
 
@@ -87,6 +107,46 @@ ayla foo {
 }
 ```
 > output: foo is yes
+
+but, you can also assign them any `string`, `int`, or `float` value
+
+these are the values that assign the boolean to `no`:
+- `""`
+- `0`
+- `0.0`
+- `nil`
+- `no`
+
+all the other values will give the boolean a `yes` value
+
+```ayla
+egg x bool = 42
+
+explodeln(x)
+```
+> output: yes
+
+```ayla
+egg x bool = 0
+
+explodeln(x)
+```
+> output: no
+
+```ayla
+egg x bool = ""
+
+explodeln(x)
+```
+> output: no
+
+*also with negatives*
+```ayla
+egg x bool = -2.2
+
+explodeln(x)
+```
+> output: yes
 
 ## string concatenation
 you can concatenate strings using the **+** operator.
@@ -101,7 +161,7 @@ explode(a + b)
 
 you can also concatenate strings with other types by casting.
 ```ayla 
-explode(string(4) + 2)
+explode(string(4) + string(2))
 ```
 > output: 42
 
