@@ -11,7 +11,7 @@ import (
 )
 
 type Func struct {
-	Params []string
+	Params []*parser.ParametersClause
 	Body   []parser.Statement
 }
 
@@ -1036,7 +1036,12 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 				return NilValue{}, err
 			}
 
-			newEnv.Set(param, val)
+			// enforce type if parameter has one 
+			if param.Type != nil {
+				
+			}
+
+			newEnv.Set(param.Value, val)
 		}
 
 		// execute body

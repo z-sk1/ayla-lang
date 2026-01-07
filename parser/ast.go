@@ -85,10 +85,16 @@ type IfStatement struct {
 	Alternative []Statement // optional else block
 }
 
+type ParametersClause struct {
+	NodeBase
+	Type *Identifier
+	Value string
+}
+
 type FuncStatement struct {
 	NodeBase
 	Name   string
-	Params []string
+	Params []*ParametersClause
 	Body   []Statement
 }
 

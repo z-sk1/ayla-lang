@@ -825,11 +825,35 @@ func (p *Parser) parseFuncStatement() *FuncStatement {
 	}
 
 	// parse params
-	stmt.Params = []string{}
+	stmt.Params = []*ParametersClause{}
 	p.nextToken()
 	for p.curTok.Type != token.RPAREN {
 		if p.curTok.Type == token.IDENT {
-			stmt.Params = append(stmt.Params, p.curTok.Literal)
+			paramType := &Identifier{
+				NodeBase: NodeBase{Token: p.peekTok},
+				Value: "",
+			}
+
+			if p.peekTok.Type == token.IDENT {
+				switch p.peekTok.Type {
+					case token.INT_TYPE,
+					token.FLOAT_TYPE,
+					token.STRING_TYPE,
+					token.BOOL_TYPE:
+
+					paramType = &Identifier{
+						NodeBase: NodeBase{Token: p.peekTok},
+						Value: p.peekTok.Literal,
+					}
+				}
+			}
+
+			param := &ParametersClause{
+				NodeBase: NodeBase{Token: p.curTok},
+				Type: paramType,
+			}
+
+			stmt.Params = append(stmt.Params, param)
 		}
 
 		p.nextToken()
