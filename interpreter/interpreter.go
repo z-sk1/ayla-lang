@@ -1038,7 +1038,9 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 
 			// enforce type if parameter has one 
 			if param.Type != nil {
-				
+				if param.Type.Value != string(val.Type()) {
+					return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("type mismatched: "))
+				}
 			}
 
 			newEnv.Set(param.Value, val)
