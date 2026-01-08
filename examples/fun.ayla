@@ -1,5 +1,11 @@
-fun sum(x, y) {
-    back x + y
+fun sum(x int, y int) (int, int) {
+    back x + y, 5
 }
 
-explodeln(sum(4, 9))
+egg a
+egg b
+
+a, b = sum(4, 3)
+
+explode(a)
+explode(b)

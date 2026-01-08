@@ -11,8 +11,9 @@ import (
 )
 
 type Func struct {
-	Params []*parser.ParametersClause
-	Body   []parser.Statement
+	Params      []*parser.ParametersClause
+	Body        []parser.Statement
+	ReturnTypes []*parser.Identifier
 }
 
 type BuiltinFunc struct {
@@ -605,15 +606,43 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 
 		existingVal, ok := i.env.Get(stmt.Name)
 		if !ok {
-			return SignalNone{}, NewRuntimeError(s, fmt.Sprintf("assignment to undefined variable: %v", stmt.Name))
+			return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("assignment to undefined variable: %s", stmt.Name))
 		}
 
 		if _, isConst := existingVal.(ConstValue); isConst {
-			return SignalNone{}, NewRuntimeError(s, fmt.Sprintf("cannot reassign to const: %s", stmt.Name))
+			return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("cannot reassign to const: %s", stmt.Name))
 		}
 
 		i.env.Set(stmt.Name, val)
 		return SignalNone{}, nil
+
+	case *parser.MultiAssignmentStatement:
+		val, err := i.EvalExpression(stmt.Value)
+		if err != nil {
+			return SignalNone{}, err
+		}
+
+		for idx, name := range stmt.Names {
+			existingVal, ok := i.env.Get(name)
+			if !ok {
+				return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("assignment to undefined variable: %s", name))
+			}
+
+			if _, isConst := existingVal.(ConstValue); isConst {
+				return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("cannot reassign to const: %s", name))
+			}
+
+			tuple, ok := val.(TupleValue)
+			if !ok {
+				return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("multi assign expects tuple value, got %s", string(val.Type())))
+			}
+
+			if len(tuple.Values) != len(stmt.Names) {
+				return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("multi assign expected %d values, got %d", len(stmt.Names), len(tuple.Values)))
+			}
+
+			i.env.Set(name, tuple.Values[idx])
+		}
 
 	case *parser.IndexAssignmentStatement:
 		leftVal, err := i.EvalExpression(stmt.Left)
@@ -684,16 +713,21 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		return SignalNone{}, nil
 
 	case *parser.FuncStatement:
-		i.env.SetFunc(stmt.Name, &Func{Params: stmt.Params, Body: stmt.Body})
+		i.env.SetFunc(stmt.Name, &Func{Params: stmt.Params, Body: stmt.Body, ReturnTypes: stmt.ReturnTypes})
 		return SignalNone{}, nil
 
 	case *parser.ReturnStatement:
-		val, err := i.EvalExpression(stmt.Value)
-		if err != nil {
-			return SignalNone{}, err
+		values := []Value{}
+
+		for _, expr := range stmt.Values {
+			v, err := i.EvalExpression(expr)
+			if err != nil {
+				return SignalNone{}, err
+			}
+			values = append(values, v)
 		}
 
-		return SignalReturn{Value: val}, nil
+		return SignalReturn{Values: values}, nil
 
 	case *parser.ExpressionStatement:
 		_, err := i.EvalExpression(stmt.Expression)
@@ -970,7 +1004,7 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 
 			if expected, ok := fieldTypes[name]; ok {
 				if v.Type() != expected {
-					return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("field '%s' type %v should be %v", name, v.Type(), fieldTypes[name]))
+					return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("field '%s' expected %v, got %v", name, fieldTypes[name], v.Type()))
 				}
 			}
 
@@ -1013,7 +1047,7 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 		}
 
 		if len(fn.Params) != len(expr.Args) {
-			return NilValue{}, NewRuntimeError(e, "wrong numbers of args")
+			return NilValue{}, NewRuntimeError(e, fmt.Sprintf("expected %d args, got %d", len(fn.Params), len(expr.Args)))
 		}
 
 		// create new env for func call
@@ -1036,10 +1070,15 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 				return NilValue{}, err
 			}
 
-			// enforce type if parameter has one 
+			// enforce type if parameter has one
 			if param.Type != nil {
-				if param.Type.Value != string(val.Type()) {
-					return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("type mismatched: "))
+				actual := string(val.Type())
+				expected := param.Type.Value
+
+				if expected == "float" && val.Type() == INT {
+					val = FloatValue{V: float64(val.(IntValue).V)}
+				} else if actual != expected {
+					return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("paramteter '%s' expected %v, got %v", param.Value, expected, actual))
 				}
 			}
 
@@ -1058,7 +1097,27 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 		i.env = oldEnv
 
 		if ret, ok := sig.(SignalReturn); ok {
-			return ret.Value, nil
+			if len(fn.ReturnTypes) != len(ret.Values) {
+				return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("expected %d return values, got %d", len(fn.ReturnTypes), len(ret.Values)))
+			}
+
+			for i, expectedType := range fn.ReturnTypes {
+				actual := ret.Values[i]
+
+				if expectedType != nil && string(actual.Type()) != expectedType.Value {
+					return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("return %d, expected %s, got %s", i+1, expectedType.Value, string(actual.Type())))
+				}
+			}
+
+			if len(ret.Values) == 1 {
+				return ret.Values[0], nil
+			}
+
+			return TupleValue{Values: ret.Values}, nil
+		}
+
+		if len(fn.ReturnTypes) > 0 {
+			return NilValue{}, NewRuntimeError(expr, "missing return statement")
 		}
 
 		return NilValue{}, nil

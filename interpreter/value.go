@@ -3,6 +3,7 @@ package interpreter
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/z-sk1/ayla-lang/parser"
 )
@@ -18,6 +19,7 @@ const (
 	FUNCTION    ValueType = "function"
 	STRUCT_TYPE ValueType = "struct_type"
 	STRUCT      ValueType = "struct"
+	TUPLE       ValueType = "tuple"
 	NIL         ValueType = "nil"
 )
 
@@ -33,7 +35,7 @@ type SignalBreak struct{}
 type SignalContinue struct{}
 
 type SignalReturn struct {
-	Value Value
+	Values []Value
 }
 
 type ConstValue struct {
@@ -46,6 +48,22 @@ func (c ConstValue) Type() ValueType {
 
 func (c ConstValue) String() string {
 	return c.Value.String()
+}
+
+type TupleValue struct {
+	Values []Value
+}
+
+func (t TupleValue) Type() ValueType {
+	return TUPLE
+}
+
+func (t TupleValue) String() string {
+	parts := []string{}
+	for _, v := range t.Values {
+		parts = append(parts, v.String())
+	}
+	return fmt.Sprintf("(%s)", strings.Join(parts, ", "))
 }
 
 type IntValue struct {

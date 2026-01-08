@@ -51,6 +51,30 @@ func atof(a string) float64 {
 	return val
 }
 
+func (p *Parser) parseIdentList() []string {
+	names := []string{}
+
+	if p.curTok.Type != token.IDENT {
+		return names
+	}
+
+	names = append(names, p.curTok.Literal)
+
+	for p.peekTok.Type == token.COMMA {
+		p.nextToken() // ,
+		p.nextToken() // next ident
+
+		if p.curTok.Type != token.IDENT {
+			p.addError("expected identifier after ','")
+			return nil
+		}
+
+		names = append(names, p.curTok.Literal)
+	}
+
+	return names
+}
+
 func (p *Parser) isTypeToken(t token.TokenType) bool {
 	switch t {
 	case token.IDENT,
@@ -128,7 +152,12 @@ func (p *Parser) parseStatement() Statement {
 	case token.RETURN:
 		return p.parseReturnStatement()
 	case token.IDENT:
-		// arr[idx] = ???
+		// multi assignment: a, b = ...
+		if p.peekTok.Type == token.COMMA {
+			return p.parseMultiAssignStatement()
+		}
+
+		// arr[idx] = ...
 		// "string"[idx]
 		if p.peekTok.Type == token.LBRACKET {
 			return p.parseIndexAssignment()
@@ -238,7 +267,7 @@ func (p *Parser) parseVarStatementNoSemicolon() *VarStatement {
 	}
 
 	if p.curTok.Type != token.ASSIGN {
-		stmt.Value = nil 
+		stmt.Value = nil
 		return stmt
 	}
 
@@ -293,7 +322,7 @@ func (p *Parser) parseConstStatement() *ConstStatement {
 
 	// expression after '='
 	p.nextToken()
-	
+
 	stmt.Value = p.parseExpression(LOWEST)
 	if stmt.Value == nil {
 		p.addError("expected expression after '='")
@@ -301,6 +330,76 @@ func (p *Parser) parseConstStatement() *ConstStatement {
 	}
 
 	// optional semicolon
+	if p.peekTok.Type == token.SEMICOLON {
+		p.nextToken()
+	}
+
+	return stmt
+}
+
+func (p *Parser) parseAssignStatement() *AssignmentStatement {
+	stmt := &AssignmentStatement{}
+	stmt.NodeBase = NodeBase{Token: p.curTok}
+
+	// current token is IDENT
+	stmt.Name = p.curTok.Literal
+
+	// move to =
+	p.nextToken()
+	if p.curTok.Type != token.ASSIGN {
+		return nil
+	}
+
+	// expression after =
+	p.nextToken()
+	stmt.Value = p.parseExpression(LOWEST)
+
+	// optional semicolon
+	if p.peekTok.Type == token.SEMICOLON {
+		p.nextToken()
+	}
+
+	return stmt
+}
+
+func (p *Parser) parseAssignmentNoSemicolon() *AssignmentStatement {
+	stmt := &AssignmentStatement{}
+	stmt.NodeBase = NodeBase{Token: p.curTok}
+	stmt.Name = p.curTok.Literal
+
+	// consume '='
+	p.nextToken()
+	p.nextToken()
+
+	stmt.Value = p.parseExpression(LOWEST)
+	return stmt
+}
+
+func (p *Parser) parseMultiAssignStatement() *MultiAssignmentStatement {
+	stmt := &MultiAssignmentStatement{
+		NodeBase: NodeBase{Token: p.curTok},
+	}
+
+	stmt.Names = p.parseIdentList()
+	if stmt.Names == nil {
+		return nil
+	}
+
+	// expect '='
+	if p.peekTok.Type != token.ASSIGN {
+		p.addError("expected '=' after identifiers")
+		return nil
+	}
+
+	p.nextToken() // move to '='
+	p.nextToken() // move to expr
+
+	stmt.Value = p.parseExpression(LOWEST)
+	if stmt.Value == nil {
+		return nil
+	}
+
+	// optional semicolon 
 	if p.peekTok.Type == token.SEMICOLON {
 		p.nextToken()
 	}
@@ -612,44 +711,6 @@ func (p *Parser) parseMemberAssignment() *MemberAssignmentStatement {
 	}
 }
 
-func (p *Parser) parseAssignStatement() *AssignmentStatement {
-	stmt := &AssignmentStatement{}
-	stmt.NodeBase = NodeBase{Token: p.curTok}
-
-	// current token is IDENT
-	stmt.Name = p.curTok.Literal
-
-	// move to =
-	p.nextToken()
-	if p.curTok.Type != token.ASSIGN {
-		return nil
-	}
-
-	// expression after =
-	p.nextToken()
-	stmt.Value = p.parseExpression(LOWEST)
-
-	// optional semicolon
-	if p.peekTok.Type == token.SEMICOLON {
-		p.nextToken()
-	}
-
-	return stmt
-}
-
-func (p *Parser) parseAssignmentNoSemicolon() *AssignmentStatement {
-	stmt := &AssignmentStatement{}
-	stmt.NodeBase = NodeBase{Token: p.curTok}
-	stmt.Name = p.curTok.Literal
-
-	// consume '='
-	p.nextToken()
-	p.nextToken()
-
-	stmt.Value = p.parseExpression(LOWEST)
-	return stmt
-}
-
 func (p *Parser) parseIfStatement() *IfStatement {
 	stmt := &IfStatement{}
 	stmt.NodeBase = NodeBase{Token: p.curTok}
@@ -806,55 +867,55 @@ func (p *Parser) parseDefaultClause() *DefaultClause {
 }
 
 func (p *Parser) parseFuncStatement() *FuncStatement {
-	stmt := &FuncStatement{}
-	stmt.NodeBase = NodeBase{Token: p.curTok}
+	stmt := &FuncStatement{
+		NodeBase: NodeBase{Token: p.curTok},
+	}
 
-	// move to func name
+	// fun <name>
 	p.nextToken()
 	if p.curTok.Type != token.IDENT {
-		p.addError("expected identifier after 'blueprint'")
+		p.addError("expected identifier after 'fun'")
 		return nil
 	}
 	stmt.Name = p.curTok.Literal
 
-	// expect '('
+	// (
 	p.nextToken()
 	if p.curTok.Type != token.LPAREN {
-		p.addError("expected '(' after identifier")
+		p.addError("expected '(' after function name")
 		return nil
 	}
 
-	// parse params
 	stmt.Params = []*ParametersClause{}
 	p.nextToken()
+
 	for p.curTok.Type != token.RPAREN {
-		if p.curTok.Type == token.IDENT {
-			paramType := &Identifier{
-				NodeBase: NodeBase{Token: p.peekTok},
-				Value: "",
-			}
-
-			if p.peekTok.Type == token.IDENT {
-				switch p.peekTok.Type {
-					case token.INT_TYPE,
-					token.FLOAT_TYPE,
-					token.STRING_TYPE,
-					token.BOOL_TYPE:
-
-					paramType = &Identifier{
-						NodeBase: NodeBase{Token: p.peekTok},
-						Value: p.peekTok.Literal,
-					}
-				}
-			}
-
-			param := &ParametersClause{
-				NodeBase: NodeBase{Token: p.curTok},
-				Type: paramType,
-			}
-
-			stmt.Params = append(stmt.Params, param)
+		if p.curTok.Type != token.IDENT {
+			p.addError("expected parameter name")
+			return nil
 		}
+
+		paramName := p.curTok.Literal
+		var paramType *Identifier = nil
+
+		// optional type
+		if p.peekTok.Type == token.INT_TYPE ||
+			p.peekTok.Type == token.FLOAT_TYPE ||
+			p.peekTok.Type == token.STRING_TYPE ||
+			p.peekTok.Type == token.BOOL_TYPE {
+
+			p.nextToken()
+			paramType = &Identifier{
+				NodeBase: NodeBase{Token: p.curTok},
+				Value:    p.curTok.Literal,
+			}
+		}
+
+		stmt.Params = append(stmt.Params, &ParametersClause{
+			NodeBase: NodeBase{Token: p.curTok},
+			Value:    paramName,
+			Type:     paramType,
+		})
 
 		p.nextToken()
 		if p.curTok.Type == token.COMMA {
@@ -862,14 +923,45 @@ func (p *Parser) parseFuncStatement() *FuncStatement {
 		}
 	}
 
-	// expect '{'
-	if p.peekTok.Type != token.LBRACE {
-		p.addError("expected '{' after ')'")
+	// consume ')'
+	p.nextToken()
+
+	stmt.ReturnTypes = []*Identifier{}
+
+	if p.curTok.Type == token.LPAREN {
+		p.nextToken()
+
+		for p.curTok.Type != token.RPAREN {
+			if p.curTok.Type != token.INT_TYPE &&
+				p.curTok.Type != token.FLOAT_TYPE &&
+				p.curTok.Type != token.STRING_TYPE &&
+				p.curTok.Type != token.BOOL_TYPE {
+
+				p.addError("expected return type")
+				return nil
+			}
+
+			stmt.ReturnTypes = append(stmt.ReturnTypes, &Identifier{
+				NodeBase: NodeBase{Token: p.curTok},
+				Value:    p.curTok.Literal,
+			})
+
+			p.nextToken()
+			if p.curTok.Type == token.COMMA {
+				p.nextToken()
+			}
+		}
+
+		// consume ')'
+		p.nextToken()
+	}
+
+	if p.curTok.Type != token.LBRACE {
+		p.addError("expected '{' before function body")
 		return nil
 	}
-	p.nextToken() // move to '{'
-	stmt.Body = p.parseBlockStatement()
 
+	stmt.Body = p.parseBlockStatement()
 	return stmt
 }
 
@@ -906,15 +998,28 @@ func (p *Parser) parseReturnStatement() *ReturnStatement {
 	stmt := &ReturnStatement{}
 	stmt.NodeBase = NodeBase{Token: p.curTok}
 
-	// move past return
+	// move past 'return'
 	p.nextToken()
 
-	// if next tok is not semicolon, eof, or }, parse expr
-	if p.curTok.Type != token.SEMICOLON && p.curTok.Type != token.EOF && p.curTok.Type != token.RBRACE {
-		stmt.Value = p.parseExpression(LOWEST)
-	} else {
-		stmt.Value = nil // no value provided, so empty return
+	stmt.Values = []Expression{}
+
+	// empty return: return;
+	if p.curTok.Type == token.SEMICOLON ||
+		p.curTok.Type == token.RBRACE ||
+		p.curTok.Type == token.EOF {
+		return stmt
 	}
+
+	// first expression
+	stmt.Values = append(stmt.Values, p.parseExpression(LOWEST))
+
+	// additional expressions: , expr
+	for p.peekTok.Type == token.COMMA {
+		p.nextToken() // move to comma
+		p.nextToken() // move to next expr
+		stmt.Values = append(stmt.Values, p.parseExpression(LOWEST))
+	}
+
 	// optional semicolon
 	if p.peekTok.Type == token.SEMICOLON {
 		p.nextToken()

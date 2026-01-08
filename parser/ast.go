@@ -78,6 +78,12 @@ type AssignmentStatement struct {
 	Value Expression
 }
 
+type MultiAssignmentStatement struct {
+	NodeBase
+	Names []string
+	Value Expression
+}
+
 type IfStatement struct {
 	NodeBase
 	Condition   Expression
@@ -87,15 +93,16 @@ type IfStatement struct {
 
 type ParametersClause struct {
 	NodeBase
-	Type *Identifier
+	Type  *Identifier
 	Value string
 }
 
 type FuncStatement struct {
 	NodeBase
-	Name   string
-	Params []*ParametersClause
-	Body   []Statement
+	Name        string
+	Params      []*ParametersClause
+	Body        []Statement
+	ReturnTypes []*Identifier
 }
 
 type FuncCall struct {
@@ -157,7 +164,7 @@ type ContinueStatement struct {
 
 type ReturnStatement struct {
 	NodeBase
-	Value Expression
+	Values []Expression
 }
 
 type ArrayLiteral struct {
