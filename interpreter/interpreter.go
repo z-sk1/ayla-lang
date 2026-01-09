@@ -533,7 +533,23 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		var val Value
 
 		if stmt.Value == nil {
-			val = NilValue{}
+
+			if stmt.Type == nil {
+				val = NilValue{}
+			} else {
+				switch stmt.Type.Value {
+				case "int":
+					val = IntValue{V: 0}
+				case "float":
+					val = FloatValue{V: 0}
+				case "string":
+					val = StringValue{V: ""}
+				case "bool":
+					val = BoolValue{V: false}
+				default:
+					return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("unknown type: %s", stmt.Type.Value))
+				}
+			}
 		} else {
 			var err error
 			val, err = i.EvalExpression(stmt.Value)
@@ -542,7 +558,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			}
 		}
 
-		if stmt.Type != nil {
+		if stmt.Type != nil && stmt.Value != nil {
 			if string(val.Type()) != stmt.Type.Value {
 				if val.Type() == INT && stmt.Type.Value == "float" {
 					intVal := val.(IntValue)
@@ -550,14 +566,14 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 				} else if val.Type() != BOOL && stmt.Type.Value == "bool" {
 					val = BoolValue{V: isTruthy(val)}
 				} else {
-					return SignalNone{}, NewRuntimeError(s, fmt.Sprintf("type mismatch: '%s' assigned to a '%s'", string(val.Type()), stmt.Type.Value))
+					return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("type mismatch: '%s' assigned to a '%s'", string(val.Type()), stmt.Type.Value))
 				}
 			}
 		}
 
 		// variable must not exist
 		if _, ok := i.env.Get(stmt.Name); ok {
-			return SignalNone{}, NewRuntimeError(s, fmt.Sprintf("cant redeclare var: %s", stmt.Name))
+			return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("cant redeclare var: %s", stmt.Name))
 		}
 
 		i.env.Set(stmt.Name, val)
@@ -567,7 +583,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		var val Value
 
 		if stmt.Value == nil {
-			return SignalNone{}, NewRuntimeError(s, fmt.Sprintf("const, %s, must be initialised", stmt.Name))
+			return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("const, %s, must be initialised", stmt.Name))
 		} else {
 			var err error
 			val, err = i.EvalExpression(stmt.Value)
@@ -576,7 +592,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			}
 		}
 
-		if stmt.Type != nil {
+		if stmt.Type != nil && stmt.Value != nil {
 			if string(val.Type()) != stmt.Type.Value {
 				if val.Type() == INT && stmt.Type.Value == "float" {
 					intVal := val.(IntValue)
@@ -584,7 +600,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 				} else if val.Type() != BOOL && stmt.Type.Value == "bool" {
 					val = BoolValue{V: isTruthy(val)}
 				} else {
-					return SignalNone{}, NewRuntimeError(s, fmt.Sprintf("type mismatch: '%s' assigned to a '%s'", string(val.Type()), stmt.Type.Value))
+					return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("type mismatch: '%s' assigned to a '%s'", string(val.Type()), stmt.Type.Value))
 				}
 			}
 		}
@@ -611,6 +627,13 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 
 		if _, isConst := existingVal.(ConstValue); isConst {
 			return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("cannot reassign to const: %s", stmt.Name))
+		}
+
+		expected := existingVal.Type()
+		actual := val.Type()
+
+		if expected != actual {
+			return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("type mismatch: '%s' assigned to a '%s'", string(actual), string(expected)))
 		}
 
 		i.env.Set(stmt.Name, val)

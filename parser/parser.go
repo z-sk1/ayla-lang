@@ -182,9 +182,9 @@ func (p *Parser) parseStatement() Statement {
 
 func (p *Parser) parseVarStatement() *VarStatement {
 	stmt := &VarStatement{}
-	stmt.NodeBase = NodeBase{Token: p.curTok}
+	stmt.NodeBase = NodeBase{Token: p.curTok} // 'egg'
 
-	// Expect next token to be identifier
+	// move to identifier
 	p.nextToken()
 	if p.curTok.Type != token.IDENT {
 		p.addError("expected identifier after 'egg'")
@@ -192,42 +192,37 @@ func (p *Parser) parseVarStatement() *VarStatement {
 	}
 	stmt.Name = p.curTok.Literal
 
-	p.nextToken()
+	// look ahead, but DO NOT consume next statement
+	if p.peekTok.Type == token.ASSIGN ||
+		p.peekTok.Type == token.INT_TYPE ||
+		p.peekTok.Type == token.FLOAT_TYPE ||
+		p.peekTok.Type == token.STRING_TYPE ||
+		p.peekTok.Type == token.BOOL_TYPE {
+	} else {
+		// simple `egg a`
+		stmt.Value = nil
+		return stmt
+	}
 
-	// check for type ident
-	stmt.Type = nil
-
-	switch p.curTok.Type {
-	case token.INT_TYPE,
-		token.FLOAT_TYPE,
-		token.STRING_TYPE,
-		token.BOOL_TYPE:
-
-		varType := &Identifier{
+	// optional type
+	if p.isTypeToken(p.curTok.Type) {
+		stmt.Type = &Identifier{
 			NodeBase: NodeBase{Token: p.curTok},
 			Value:    p.curTok.Literal,
 		}
-
-		stmt.Type = varType
 		p.nextToken()
 	}
 
-	// Expect '='
+	// assignment
 	if p.curTok.Type != token.ASSIGN {
 		stmt.Value = nil
 		return stmt
 	}
 
-	// Expression after '='
+	// parse value
 	p.nextToken()
-
 	stmt.Value = p.parseExpression(LOWEST)
-	if stmt.Value == nil {
-		p.addError("expected expression after '='")
-		return nil
-	}
 
-	// Optional semicolon
 	if p.peekTok.Type == token.SEMICOLON {
 		p.nextToken()
 	}
@@ -237,47 +232,48 @@ func (p *Parser) parseVarStatement() *VarStatement {
 
 func (p *Parser) parseVarStatementNoSemicolon() *VarStatement {
 	stmt := &VarStatement{}
-	stmt.NodeBase = NodeBase{Token: p.curTok}
+	stmt.NodeBase = NodeBase{Token: p.curTok} // 'egg'
 
-	p.nextToken() // name
+	// move to identifier
+	p.nextToken()
 	if p.curTok.Type != token.IDENT {
 		p.addError("expected identifier after 'egg'")
 		return nil
 	}
 	stmt.Name = p.curTok.Literal
 
-	p.nextToken()
+	// look ahead, but DO NOT consume next statement
+	if p.peekTok.Type == token.ASSIGN ||
+		p.peekTok.Type == token.INT_TYPE ||
+		p.peekTok.Type == token.FLOAT_TYPE ||
+		p.peekTok.Type == token.STRING_TYPE ||
+		p.peekTok.Type == token.BOOL_TYPE {
 
-	// check for type ident
-	stmt.Type = nil
+		p.nextToken()
+	} else {
+		// simple `egg a`
+		stmt.Value = nil
+		return stmt
+	}
 
-	switch p.curTok.Type {
-	case token.INT_TYPE,
-		token.FLOAT_TYPE,
-		token.STRING_TYPE,
-		token.BOOL_TYPE:
-
-		varType := &Identifier{
+	// optional type
+	if p.isTypeToken(p.curTok.Type) {
+		stmt.Type = &Identifier{
 			NodeBase: NodeBase{Token: p.curTok},
 			Value:    p.curTok.Literal,
 		}
-
-		stmt.Type = varType
 		p.nextToken()
 	}
 
+	// assignment
 	if p.curTok.Type != token.ASSIGN {
 		stmt.Value = nil
 		return stmt
 	}
 
+	// parse value
 	p.nextToken()
-
 	stmt.Value = p.parseExpression(LOWEST)
-	if stmt.Value == nil {
-		p.addError("expected expression after '='")
-		return nil
-	}
 
 	return stmt
 }
@@ -399,7 +395,7 @@ func (p *Parser) parseMultiAssignStatement() *MultiAssignmentStatement {
 		return nil
 	}
 
-	// optional semicolon 
+	// optional semicolon
 	if p.peekTok.Type == token.SEMICOLON {
 		p.nextToken()
 	}

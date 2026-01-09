@@ -2,10 +2,6 @@ fun sum(x int, y int) (int, int) {
     back x + y, 5
 }
 
-egg a
-egg b
+egg a int = 0
 
-a, b = sum(4, 3)
-
-explode(a)
-explode(b)
+explodeln(a)
