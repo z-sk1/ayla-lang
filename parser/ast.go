@@ -65,6 +65,13 @@ type VarStatement struct {
 	Value Expression
 }
 
+type MultiVarStatement struct {
+	NodeBase
+	Names []string
+	Type *Identifier
+	Value Expression 
+}
+
 type ConstStatement struct {
 	NodeBase
 	Name  string
@@ -212,6 +219,11 @@ type BoolLiteral struct {
 
 type NilLiteral struct {
 	NodeBase
+}
+
+type TupleLiteral struct {
+	NodeBase
+	Values []Expression
 }
 
 type StructLiteral struct {

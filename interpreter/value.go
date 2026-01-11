@@ -241,7 +241,7 @@ func (i Interpreter) resolveType(expr parser.Expression) (ValueType, error) {
 	}
 }
 
-func (i Interpreter) resolveTypeFromName(node *parser.StructStatement, name string) (ValueType, error) {
+func (i Interpreter) resolveTypeFromName(node parser.Statement, name string) (ValueType, error) {
 	switch name {
 	case "int":
 		return INT, nil
@@ -284,5 +284,38 @@ func valuesEqual(a, b Value) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+func defaultValueFromType(node parser.Statement, typ ValueType) (Value, error) {
+	switch typ {
+	case INT:
+		return IntValue{V: 0}, nil
+	case FLOAT:
+		return FloatValue{V: 0}, nil
+	case STRING:
+		return StringValue{V: ""}, nil
+	case BOOL:
+		return BoolValue{V: false}, nil
+	default:
+		return NilValue{}, NewRuntimeError(
+			node,
+			fmt.Sprintf("unknown type: %s", string(typ)),
+		)
+	}
+}
+
+func defaultValueFromString(node parser.Statement, name string) (Value, error) {
+	switch name {
+	case "int":
+		return IntValue{V: 0}, nil
+	case "float":
+		return FloatValue{V: 0}, nil
+	case "string":
+		return StringValue{V: ""}, nil
+	case "bool":
+		return BoolValue{V: false}, nil
+	default:
+		return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unknown type: %s", name))
 	}
 }

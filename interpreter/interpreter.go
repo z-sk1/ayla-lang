@@ -227,9 +227,9 @@ func registerBuiltins(env *Environment) {
 		Arity: -1,
 		Fn: func(node *parser.FuncCall, args []Value) (Value, error) {
 			for _, v := range args {
-				if v.Type() != NIL {
-					fmt.Print(v.String())
-				}
+				// if v.Type() != NIL {
+				fmt.Print(v.String())
+				// }
 			}
 			return NilValue{}, nil
 		},
@@ -531,27 +531,18 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 	switch stmt := s.(type) {
 	case *parser.VarStatement:
 		var val Value
+		var err error
 
 		if stmt.Value == nil {
-
 			if stmt.Type == nil {
 				val = NilValue{}
 			} else {
-				switch stmt.Type.Value {
-				case "int":
-					val = IntValue{V: 0}
-				case "float":
-					val = FloatValue{V: 0}
-				case "string":
-					val = StringValue{V: ""}
-				case "bool":
-					val = BoolValue{V: false}
-				default:
-					return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("unknown type: %s", stmt.Type.Value))
+				val, err = defaultValueFromString(stmt, stmt.Type.Value)
+				if err != nil {
+					return NilValue{}, err
 				}
 			}
 		} else {
-			var err error
 			val, err = i.EvalExpression(stmt.Value)
 			if err != nil {
 				return SignalNone{}, err
@@ -577,6 +568,65 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		}
 
 		i.env.Set(stmt.Name, val)
+		return SignalNone{}, nil
+
+	case *parser.MultiVarStatement:
+		var values []Value
+
+		if stmt.Value != nil {
+			val, err := i.EvalExpression(stmt.Value)
+			if err != nil {
+				return SignalNone{}, err
+			}
+
+			tuple, ok := val.(TupleValue)
+			if !ok {
+				return SignalNone{}, NewRuntimeError(stmt, "multi var assignment expects tuple value")
+			}
+
+			if len(tuple.Values) != len(stmt.Names) {
+				return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("expected %d values, got %d", len(stmt.Names), len(tuple.Values)))
+			}
+
+			values = tuple.Values
+		}
+
+		for idx, name := range stmt.Names {
+			if _, ok := i.env.Get(name); ok {
+				return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("cannot redeclare var: %s", name))
+			}
+
+			var v Value = NilValue{}
+
+			if stmt.Value != nil {
+				v = values[idx]
+			} else {
+				if stmt.Type != nil {
+					var err error
+					v, err = defaultValueFromString(stmt, stmt.Type.Value)
+					if err != nil {
+						return SignalNone{}, err
+					}
+				}
+			}
+
+			// optional type enforcement
+			if stmt.Type != nil && stmt.Value != nil {
+				if string(v.Type()) != stmt.Type.Value {
+					if v.Type() == INT && stmt.Type.Value == "float" {
+						intVal := v.(IntValue)
+						v = FloatValue{V: float64(intVal.V)}
+					} else if v.Type() != BOOL && stmt.Type.Value == "bool" {
+						v = BoolValue{V: isTruthy(v)}
+					} else {
+						return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("type mismatch: '%s' assigned to a '%s'", string(v.Type()), stmt.Type.Value))
+					}
+				}
+			}
+
+			i.env.Set(name, v)
+		}
+
 		return SignalNone{}, nil
 
 	case *parser.ConstStatement:
@@ -664,8 +714,17 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 				return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("multi assign expected %d values, got %d", len(stmt.Names), len(tuple.Values)))
 			}
 
+			expected := existingVal.Type()
+			actual := tuple.Values[idx].Type()
+
+			if expected != actual {
+				return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("type mismatch: '%s' assigned to '%s'", string(actual), string(expected)))
+			}
+
 			i.env.Set(name, tuple.Values[idx])
 		}
+
+		return SignalNone{}, nil
 
 	case *parser.IndexAssignmentStatement:
 		leftVal, err := i.EvalExpression(stmt.Left)
@@ -929,6 +988,19 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 	case *parser.NilLiteral:
 		return NilValue{}, nil
 
+	case *parser.TupleLiteral:
+		values := make([]Value, 0, len(expr.Values))
+
+		for _, e := range expr.Values {
+			v, err := i.EvalExpression(e)
+			if err != nil {
+				return NilValue{}, err
+			}
+			values = append(values, v)
+		}
+
+		return TupleValue{Values: values}, nil
+
 	case *parser.MemberExpression:
 		leftVal, err := i.EvalExpression(expr.Left)
 		if err != nil {
@@ -960,6 +1032,118 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 			elements = append(elements, val)
 		}
 		return ArrayValue{Elements: elements}, nil
+
+	case *parser.FuncCall:
+		// built in?
+		if b, ok := i.env.builtins[expr.Name]; ok {
+			args := []Value{}
+
+			for _, a := range expr.Args {
+				v, err := i.EvalExpression(a)
+				if err != nil {
+					return NilValue{}, err
+				}
+
+				if t, ok := v.(TupleValue); ok {
+					args = append(args, t.Values...) // flatten
+				} else {
+					args = append(args, v)
+				}
+			}
+
+			if b.Arity >= 0 && len(args) != b.Arity {
+				return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("expected %d args, got %d", b.Arity, len(args)))
+			}
+
+			return b.Fn(expr, args)
+		}
+
+		// user-defined
+		fn, ok := i.env.GetFunc(expr.Name)
+		if !ok {
+			return NilValue{}, NewRuntimeError(e, fmt.Sprintf("unknown function: %s", expr.Name))
+		}
+
+		if len(fn.Params) != len(expr.Args) {
+			return NilValue{}, NewRuntimeError(e, fmt.Sprintf("expected %d args, got %d", len(fn.Params), len(expr.Args)))
+		}
+
+		// create new env for func call
+		newEnv := NewEnvironment()
+
+		// copy stores
+		for k, v := range i.env.store {
+			newEnv.store[k] = v
+		}
+
+		// copy funcs
+		for k, v := range i.env.funcs {
+			newEnv.funcs[k] = v
+		}
+
+		// copy builtins
+		for k, v := range i.env.builtins {
+			newEnv.builtins[k] = v
+		}
+
+		// set params
+		for idx, param := range fn.Params {
+			val, err := i.EvalExpression(expr.Args[idx])
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			// enforce type if parameter has one
+			if param.Type != nil {
+				actual := string(val.Type())
+				expected := param.Type.Value
+
+				if expected == "float" && val.Type() == INT {
+					val = FloatValue{V: float64(val.(IntValue).V)}
+				} else if actual != expected {
+					return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("paramteter '%s' expected %v, got %v", param.Value, expected, actual))
+				}
+			}
+
+			newEnv.Set(param.Value, val)
+		}
+
+		// execute body
+		oldEnv := i.env
+		i.env = newEnv
+
+		sig, err := i.EvalStatements(fn.Body)
+		if err != nil {
+			return NilValue{}, err
+		}
+
+		i.env = oldEnv
+
+		if ret, ok := sig.(SignalReturn); ok {
+			if len(fn.ReturnTypes) != len(ret.Values) {
+				return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("expected %d return values, got %d", len(fn.ReturnTypes), len(ret.Values)))
+			}
+
+			for i, expectedType := range fn.ReturnTypes {
+				actual := ret.Values[i]
+
+				if expectedType != nil && string(actual.Type()) != expectedType.Value {
+					return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("return %d, expected %s, got %s", i+1, expectedType.Value, string(actual.Type())))
+				}
+			}
+
+			if len(ret.Values) == 1 {
+				return ret.Values[0], nil
+			}
+
+			return TupleValue{Values: ret.Values}, nil
+		}
+
+		if len(fn.ReturnTypes) > 0 {
+			return NilValue{}, NewRuntimeError(expr, "missing return statement")
+		}
+
+		return NilValue{}, nil
 
 	case *parser.IndexExpression:
 		left, err := i.EvalExpression(expr.Left)
@@ -1042,108 +1226,6 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 			},
 			Fields: fields,
 		}, nil
-
-	case *parser.FuncCall:
-		// built in?
-		if b, ok := i.env.builtins[expr.Name]; ok {
-			args := []Value{}
-
-			for _, a := range expr.Args {
-				v, err := i.EvalExpression(a)
-				if err != nil {
-					return NilValue{}, err
-				}
-				args = append(args, v)
-			}
-
-			if b.Arity >= 0 && len(args) != b.Arity {
-				return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("expected %d args, got %d", b.Arity, len(args)))
-			}
-
-			return b.Fn(expr, args)
-		}
-
-		// user-defined
-		fn, ok := i.env.GetFunc(expr.Name)
-		if !ok {
-			return NilValue{}, NewRuntimeError(e, fmt.Sprintf("unknown function: %s", expr.Name))
-		}
-
-		if len(fn.Params) != len(expr.Args) {
-			return NilValue{}, NewRuntimeError(e, fmt.Sprintf("expected %d args, got %d", len(fn.Params), len(expr.Args)))
-		}
-
-		// create new env for func call
-		newEnv := NewEnvironment()
-
-		// copy stores
-		for k, v := range i.env.store {
-			newEnv.store[k] = v
-		}
-
-		// copy funcs
-		for k, v := range i.env.funcs {
-			newEnv.funcs[k] = v
-		}
-
-		// set params
-		for idx, param := range fn.Params {
-			val, err := i.EvalExpression(expr.Args[idx])
-			if err != nil {
-				return NilValue{}, err
-			}
-
-			// enforce type if parameter has one
-			if param.Type != nil {
-				actual := string(val.Type())
-				expected := param.Type.Value
-
-				if expected == "float" && val.Type() == INT {
-					val = FloatValue{V: float64(val.(IntValue).V)}
-				} else if actual != expected {
-					return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("paramteter '%s' expected %v, got %v", param.Value, expected, actual))
-				}
-			}
-
-			newEnv.Set(param.Value, val)
-		}
-
-		// execute body
-		oldEnv := i.env
-		i.env = newEnv
-
-		sig, err := i.EvalStatements(fn.Body)
-		if err != nil {
-			return NilValue{}, err
-		}
-
-		i.env = oldEnv
-
-		if ret, ok := sig.(SignalReturn); ok {
-			if len(fn.ReturnTypes) != len(ret.Values) {
-				return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("expected %d return values, got %d", len(fn.ReturnTypes), len(ret.Values)))
-			}
-
-			for i, expectedType := range fn.ReturnTypes {
-				actual := ret.Values[i]
-
-				if expectedType != nil && string(actual.Type()) != expectedType.Value {
-					return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("return %d, expected %s, got %s", i+1, expectedType.Value, string(actual.Type())))
-				}
-			}
-
-			if len(ret.Values) == 1 {
-				return ret.Values[0], nil
-			}
-
-			return TupleValue{Values: ret.Values}, nil
-		}
-
-		if len(fn.ReturnTypes) > 0 {
-			return NilValue{}, NewRuntimeError(expr, "missing return statement")
-		}
-
-		return NilValue{}, nil
 
 	case *parser.InfixExpression:
 		if expr.Operator == "&&" {

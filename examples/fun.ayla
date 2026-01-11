@@ -1,7 +1,7 @@
-fun sum(x int, y int) (int, int) {
-    back x + y, 5
+fun operation(x int, y int) (int, int) {
+    back x + y, x - y
 }
 
-egg a int = 0
+egg a, b = operation(5, 10)
 
-explodeln(a)
+explodeln(a, b)
