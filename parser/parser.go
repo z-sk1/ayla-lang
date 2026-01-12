@@ -144,6 +144,13 @@ func (p *Parser) parseStatement() Statement {
 
 		return p.parseVarStatement()
 	case token.CONST:
+		if p.peekTok.Type == token.IDENT {
+			// look ahead for comma
+			if p.peekTok2.Type == token.COMMA {
+				return p.parseMultiConstStatement()
+			}
+		}
+
 		return p.parseConstStatement()
 	case token.STRUCT:
 		return p.parseStructStatement()
@@ -342,6 +349,46 @@ func (p *Parser) parseConstStatement() *ConstStatement {
 		p.nextToken()
 		p.nextToken()
 		stmt.Value = p.parseExpression(LOWEST)
+	}
+
+	// optional semicolon
+	if p.peekTok.Type == token.SEMICOLON {
+		p.nextToken()
+	}
+
+	return stmt
+}
+
+func (p *Parser) parseMultiConstStatement() *MultiConstStatement {
+	stmt := &MultiConstStatement{
+		NodeBase: NodeBase{Token: p.curTok},
+	}
+
+	p.nextToken() // ident
+	stmt.Names = p.parseIdentList()
+	if stmt.Names == nil {
+		return nil
+	}
+
+	// optional type
+	if p.isTypeToken(p.peekTok.Type) {
+		p.nextToken()
+		stmt.Type = &Identifier{
+			NodeBase: NodeBase{Token: p.curTok},
+			Value:    p.curTok.Literal,
+		}
+	}
+
+	// optional assignment
+	if p.peekTok.Type == token.ASSIGN {
+		p.nextToken() // move to '='
+		p.nextToken() // move to expr start
+
+		stmt.Value = p.parseExpression(LOWEST)
+
+		if p.peekTok.Type == token.COMMA {
+			stmt.Value = p.parseTupleLiteral(stmt.Value)
+		}
 	}
 
 	// optional semicolon
@@ -1030,6 +1077,7 @@ func (p *Parser) parseExpressionList(end token.TokenType) []Expression {
 		return nil
 	}
 
+	p.nextToken()
 	return list
 }
 

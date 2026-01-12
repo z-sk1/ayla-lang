@@ -664,6 +664,70 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		i.env.Set(stmt.Name, ConstValue{Value: val})
 		return SignalNone{}, nil
 
+	case *parser.MultiConstStatement:
+		var values []Value
+
+		if stmt.Value == nil {
+			var names string
+
+			for _, name := range stmt.Names {
+				if name == stmt.Names[len(stmt.Names)-1] {
+					names = names + name
+				} else {
+					names = names + (name + ", ")
+				}
+			}
+
+			return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("constants, %s, must be initialised", names))
+		} else {
+			var err error
+			val, err := i.EvalExpression(stmt.Value)
+			if err != nil {
+				return SignalNone{}, err
+			}
+
+			tuple, ok := val.(TupleValue)
+			if !ok {
+				return SignalNone{}, NewRuntimeError(stmt, "multi const statement expects tuple value")
+			}
+
+			if len(tuple.Values) != len(stmt.Names) {
+				return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("expected %d values, got %d", len(tuple.Values), len(stmt.Names)))
+			}
+
+			values = tuple.Values
+		}
+
+		for idx, name := range stmt.Names {
+			if _, ok := i.env.Get(name); ok {
+				return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("cannot redeclare const: %s", name))
+			}
+
+			var v Value = NilValue{}
+
+			if stmt.Value != nil {
+				v = values[idx]
+			}
+
+			// optional type enforcement
+			if stmt.Type != nil && stmt.Value != nil {
+				if string(v.Type()) != stmt.Type.Value {
+					if v.Type() == INT && stmt.Type.Value == "float" {
+						intVal := v.(IntValue)
+						v = FloatValue{V: float64(intVal.V)}
+					} else if v.Type() != BOOL && stmt.Type.Value == "bool" {
+						v = BoolValue{V: isTruthy(v)}
+					} else {
+						return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("type mismatch: '%s' assigned to a '%s'", string(v.Type()), stmt.Type.Value))
+					}
+				}
+			}
+
+			i.env.Set(name, v)
+		}
+
+		return SignalNone{}, nil
+
 	case *parser.AssignmentStatement:
 		val, err := i.EvalExpression(stmt.Value)
 		if err != nil {
@@ -1101,7 +1165,7 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 				if expected == "float" && val.Type() == INT {
 					val = FloatValue{V: float64(val.(IntValue).V)}
 				} else if actual != expected {
-					return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("paramteter '%s' expected %v, got %v", param.Value, expected, actual))
+					return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("parameter '%s' expected %v, got %v", param.Value, expected, actual))
 				}
 			}
 

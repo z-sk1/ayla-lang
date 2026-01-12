@@ -68,14 +68,21 @@ type VarStatement struct {
 type MultiVarStatement struct {
 	NodeBase
 	Names []string
-	Type *Identifier
-	Value Expression 
+	Type  *Identifier
+	Value Expression
 }
 
 type ConstStatement struct {
 	NodeBase
 	Name  string
 	Type  *Identifier // if no type defaults to nil, and then automatically chooses type
+	Value Expression
+}
+
+type MultiConstStatement struct {
+	NodeBase
+	Names []string
+	Type  *Identifier
 	Value Expression
 }
 

@@ -104,7 +104,7 @@ func run() {
 
 	interp := interpreter.New()
 	if sig, err := interp.EvalStatements(program); err != nil {
-		fmt.Printf("%s: %v\n", filename, err)
+		fmt.Printf("\n%s: %v\n", filename, err)
 	} else {
 		_ = sig
 	}

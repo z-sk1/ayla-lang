@@ -68,6 +68,75 @@ rock x string = 5
 ```
 > output: runtime error at 1:5: type mismatch: 'int' assigned to a 'string'
 
+## multi-declaration and multi-assignment
+you can also assign and declare multiple variables to a `tuple`
+
+```ayla
+rock a, b = 4, 2
+
+explodeln("${a} ${b}")
+```
+> output: 4 2
+
+you can also just declare them without an inital value like normal
+```ayla
+egg a, b
+```
+
+you can do type annotation, but not for every variable, the type at the end dictates all the other's types like so
+```ayla
+egg a, b, c int
+
+explodeln(type(a), type(b), type(c))
+
+explodeln(a)
+```
+> output:
+```
+int
+int
+int
+0
+```
+
+and also like single declaration, using multi constant declaration you must initialise it
+```ayla
+rock a, b
+```
+> output: runtime error at 1:5: constants, a, b, must be initialised
+
+same for statically typed multi constants
+```ayla
+rock a, b int
+```
+> output: runtime error at 1:5: constants, a, b, must be initialised
+
+same principles for assignment
+```ayla
+egg a, b
+
+a, b = 4, 2
+
+explodeln("${a} ${b}")
+```
+> output: 4 2
+
+you can also assign and declare variables to a function with multiple return values
+```ayla
+fun operation(x int, y int) (int, int) {
+    back x + y, x - y
+}
+
+egg a, b int = operation(5, 3)
+
+explodeln(a, b)
+```
+> output:
+```
+8
+2
+```
+
 ## semicolon
 semicolons are optional! put them if you want, or leave them out if you're more comfortable with that
 ```ayla
@@ -350,14 +419,42 @@ explode(add(5, 7))
 ```
 output: 12
 
-you **cant** have a designated return type like this, yet
+you **can** have a designated return type like this
 ```ayla
-fun add(x, y) int {
+fun add(x, y) (int) {
+    back x + y
+}
+
+explodeln(add(4, 2))
+```
+output: 6
+
+you will encounter a `Runtime error` if you use the wrong type
+```ayla
+fun add(x, y) (string) {
+    back x + y
+}
+
+explodeln(add(4, 1))
+```
+> output: runtime error at 5:14: return 1, expected string, got int
+
+you can also add types to parameters
+```ayla
+fun add(x int, y int) (int) {
     back x + y
 }
 ```
 
-so uh have fun with that :-)
+you will encounter a `Runtime error` as well if you use the wrong type for the parameter
+```ayla
+fun add(x int, y int) (int) {
+    back x + y
+}
+
+egg sum = add("4", 2)
+```
+> output: runtime error at 5:14: paramteter 'x' expected int, got string
 
 ## arrays
 to initialise an array use square brackets: `[]`
