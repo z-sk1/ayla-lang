@@ -4,5 +4,3 @@ four egg i int = 0; i < len(text); i = i + 1 {
     explode(text[i])
     wait(50)
 }
-
-rock a, b int

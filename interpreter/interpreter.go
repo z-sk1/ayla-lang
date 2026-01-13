@@ -32,6 +32,7 @@ type Environment struct {
 	store    map[string]Value
 	funcs    map[string]*Func
 	builtins map[string]*BuiltinFunc
+	parent   *Environment
 }
 
 type Interpreter struct {
@@ -40,17 +41,23 @@ type Interpreter struct {
 }
 
 func New() *Interpreter {
-	env := NewEnvironment()
+	env := &Environment{
+		store:    make(map[string]Value),
+		funcs:    make(map[string]*Func),
+		builtins: make(map[string]*BuiltinFunc),
+	}
+
 	typeEnv := make(map[string]*StructType)
 	registerBuiltins(env)
 	return &Interpreter{env: env, typeEnv: typeEnv}
 }
 
-func NewEnvironment() *Environment {
+func NewEnvironment(parent *Environment) *Environment {
 	return &Environment{
 		store:    make(map[string]Value),
 		funcs:    make(map[string]*Func),
-		builtins: make(map[string]*BuiltinFunc),
+		builtins: parent.builtins,
+		parent:   parent,
 	}
 }
 
@@ -64,22 +71,58 @@ func NewRuntimeError(node parser.Node, msg string) RuntimeError {
 }
 
 func (e *Environment) Get(name string) (Value, bool) {
-	val, ok := e.store[name]
-	return val, ok
+	if v, ok := e.store[name]; ok {
+		return v, true
+	}
+
+	if e.parent != nil {
+		return e.parent.Get(name)
+	}
+
+	return nil, false
 }
 
-func (e *Environment) Set(name string, val Value) Value {
+func (e *Environment) Define(name string, val Value) Value {
 	e.store[name] = val
 	return val
 }
 
-func (e *Environment) GetFunc(name string) (*Func, bool) {
-	f, ok := e.funcs[name]
-	return f, ok
+func (e *Environment) Set(name string, val Value) Value {
+	if _, ok := e.store[name]; ok {
+		e.store[name] = val
+		return val
+	}
+
+	if e.parent != nil {
+		return e.parent.Set(name, val)
+	}
+
+	return nil
 }
 
-func (e *Environment) SetFunc(name string, f *Func) {
-	e.funcs[name] = f
+func (e *Environment) GetFunc(name string) (*Func, bool) {
+	if v, ok := e.funcs[name]; ok {
+		return v, true
+	}
+
+	if e.parent != nil {
+		return e.parent.GetFunc(name)
+	}
+
+	return nil, false
+}
+
+func (e *Environment) SetFunc(name string, f *Func) *Func {
+	if _, ok := e.funcs[name]; ok {
+		e.funcs[name] = f
+		return f
+	}
+
+	if e.parent != nil {
+		return e.parent.SetFunc(name, f)
+	}
+
+	return nil
 }
 
 func toFloat(v Value) (float64, bool) {
@@ -523,6 +566,20 @@ func (i *Interpreter) EvalStatements(stmts []parser.Statement) (ControlSignal, e
 	return SignalNone{}, nil
 }
 
+func (i *Interpreter) EvalBlock(stmts []parser.Statement, newScope bool) (ControlSignal, error) {
+	blockEnv := NewEnvironment(i.env)
+	oldEnv := i.env
+
+	if newScope {
+		i.env = blockEnv
+	}
+
+	sig, err := i.EvalStatements(stmts)
+
+	i.env = oldEnv
+	return sig, err
+}
+
 func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 	if s == nil {
 		return NilValue{}, RuntimeError{Message: "EvalStatement got nil statement"}
@@ -563,11 +620,11 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		}
 
 		// variable must not exist
-		if _, ok := i.env.Get(stmt.Name); ok {
+		if _, ok := i.env.store[stmt.Name]; ok {
 			return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("cant redeclare var: %s", stmt.Name))
 		}
 
-		i.env.Set(stmt.Name, val)
+		i.env.Define(stmt.Name, val)
 		return SignalNone{}, nil
 
 	case *parser.MultiVarStatement:
@@ -592,7 +649,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		}
 
 		for idx, name := range stmt.Names {
-			if _, ok := i.env.Get(name); ok {
+			if _, ok := i.env.store[name]; ok {
 				return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("cannot redeclare var: %s", name))
 			}
 
@@ -624,7 +681,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 				}
 			}
 
-			i.env.Set(name, v)
+			i.env.Define(name, v)
 		}
 
 		return SignalNone{}, nil
@@ -656,12 +713,12 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		}
 
 		// check if variable already exist
-		if _, ok := i.env.Get(stmt.Name); ok {
+		if _, ok := i.env.store[stmt.Name]; ok {
 			return SignalNone{}, NewRuntimeError(s, fmt.Sprintf("cant redeclare const: %s", stmt.Name))
 		}
 
 		// store const val
-		i.env.Set(stmt.Name, ConstValue{Value: val})
+		i.env.Define(stmt.Name, ConstValue{Value: val})
 		return SignalNone{}, nil
 
 	case *parser.MultiConstStatement:
@@ -699,7 +756,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		}
 
 		for idx, name := range stmt.Names {
-			if _, ok := i.env.Get(name); ok {
+			if _, ok := i.env.store[name]; ok {
 				return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("cannot redeclare const: %s", name))
 			}
 
@@ -723,7 +780,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 				}
 			}
 
-			i.env.Set(name, v)
+			i.env.Define(name, v)
 		}
 
 		return SignalNone{}, nil
@@ -914,11 +971,11 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 
 		if isTruthy(cond) {
 			if stmt.Consequence != nil {
-				return i.EvalStatements(stmt.Consequence)
+				return i.EvalBlock(stmt.Consequence, true)
 			}
 		} else {
 			if stmt.Alternative != nil {
-				return i.EvalStatements(stmt.Alternative)
+				return i.EvalBlock(stmt.Alternative, true)
 			}
 		}
 		return SignalNone{}, nil
@@ -939,36 +996,35 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 				continue
 			}
 
-			for _, s := range c.Body {
-				sig, err := i.EvalStatement(s)
-				if err != nil {
-					return SignalNone{}, err
-				}
+			sig, err := i.EvalBlock(c.Body, true)
+			if err != nil {
+				return SignalNone{}, err
+			}
 
-				if _, ok := sig.(SignalNone); !ok {
-					return sig, nil
-				}
+			if _, ok := sig.(SignalNone); !ok {
+				return sig, nil
 			}
 
 			return SignalNone{}, nil
 		}
 
 		if stmt.Default != nil {
-			for _, s := range stmt.Default.Body {
-				sig, err := i.EvalStatement(s)
-				if err != nil {
-					return SignalNone{}, err
-				}
-
-				if _, ok := sig.(SignalNone); !ok {
-					return sig, nil
-				}
+			sig, err := i.EvalBlock(stmt.Default.Body, true)
+			if err != nil {
+				return SignalNone{}, err
+			}
+			if _, ok := sig.(SignalNone); !ok {
+				return sig, nil
 			}
 		}
 
 		return SignalNone{}, nil
 
 	case *parser.ForStatement:
+		loopEnv := NewEnvironment(i.env)
+		oldEnv := i.env
+		i.env = loopEnv
+
 		i.EvalStatement(stmt.Init)
 		for {
 			cond, err := i.EvalExpression(stmt.Condition)
@@ -980,7 +1036,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 				break
 			}
 
-			sig, err := i.EvalStatements(stmt.Body)
+			sig, err := i.EvalBlock(stmt.Body, false)
 			if err != nil {
 				return SignalNone{}, err
 			}
@@ -996,6 +1052,8 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			}
 			i.EvalStatement(stmt.Post)
 		}
+
+		i.env = oldEnv
 		return SignalNone{}, nil
 
 	case *parser.WhileStatement:
@@ -1009,7 +1067,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 				break
 			}
 
-			sig, err := i.EvalStatements(stmt.Body)
+			sig, err := i.EvalBlock(stmt.Body, true)
 			if err != nil {
 				return SignalNone{}, err
 			}
@@ -1133,22 +1191,7 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 		}
 
 		// create new env for func call
-		newEnv := NewEnvironment()
-
-		// copy stores
-		for k, v := range i.env.store {
-			newEnv.store[k] = v
-		}
-
-		// copy funcs
-		for k, v := range i.env.funcs {
-			newEnv.funcs[k] = v
-		}
-
-		// copy builtins
-		for k, v := range i.env.builtins {
-			newEnv.builtins[k] = v
-		}
+		newEnv := NewEnvironment(i.env)
 
 		// set params
 		for idx, param := range fn.Params {
@@ -1169,19 +1212,14 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 				}
 			}
 
-			newEnv.Set(param.Value, val)
+			newEnv.Define(param.Value, val)
 		}
 
 		// execute body
-		oldEnv := i.env
-		i.env = newEnv
-
-		sig, err := i.EvalStatements(fn.Body)
+		sig, err := i.EvalBlock(fn.Body, true)
 		if err != nil {
 			return NilValue{}, err
 		}
-
-		i.env = oldEnv
 
 		if ret, ok := sig.(SignalReturn); ok {
 			if len(fn.ReturnTypes) != len(ret.Values) {

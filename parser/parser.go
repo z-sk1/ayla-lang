@@ -1151,55 +1151,57 @@ func (p *Parser) parseContinueStatement() *ContinueStatement {
 }
 
 func (p *Parser) parseForStatement() *ForStatement {
-	stmt := &ForStatement{}
-	stmt.NodeBase = NodeBase{Token: p.curTok}
+    stmt := &ForStatement{
+        NodeBase: NodeBase{Token: p.curTok}, // 'four'
+    }
 
-	// init
-	p.nextToken() // move to VAR or IDENT
-	stmt.Init = p.parseForInit()
-	if stmt.Init == nil {
-		p.addError("expected init declaration after 'four'")
-		return nil
-	}
+    p.nextToken() // first token of init
+    stmt.Init = p.parseForInit()
+    if stmt.Init == nil {
+        p.addError("expected for init")
+        return nil
+    }
 
-	// expect ';'
-	if p.peekTok.Type != token.SEMICOLON {
-		p.addError("expected ';' after four statement init")
-		return nil
-	}
-	p.nextToken()
+    if p.peekTok.Type != token.SEMICOLON {
+        p.addError("expected ';' after for init")
+        return nil
+    }
+    p.nextToken() // move to ';'
+    p.nextToken() // move past ';'
 
-	// condition
-	p.nextToken()
-	stmt.Condition = p.parseExpression(LOWEST)
-	if stmt.Condition == nil {
-		p.addError("expected condition after ';'")
-		return nil
-	}
+    stmt.Condition = p.parseExpression(LOWEST)
+    if stmt.Condition == nil {
+        p.addError("expected for condition")
+        return nil
+    }
 
-	// expect ';'
+    if p.peekTok.Type != token.SEMICOLON {
+		if p.curTok.Type != token.SEMICOLON {
+        	p.addError("expected ';' after for condition")
+        	return nil
+		}
+    }
+
 	if p.curTok.Type != token.SEMICOLON {
-		p.addError("expected ';' after condition")
-		return nil
+    	p.nextToken() // move to ';'
 	}
+    p.nextToken() // move past ';'
 
-	// post
-	p.nextToken()
-	stmt.Post = p.parseForPost()
-	if stmt.Post == nil {
-		p.addError("expected post expression after ';'")
-		return nil
-	}
+    stmt.Post = p.parseForPost()
+    if stmt.Post == nil {
+        p.addError("expected for post statement")
+        return nil
+    }
 
-	// expect '{'
-	if p.peekTok.Type != token.LBRACE {
-		p.addError("expected '{' after post expression")
-		return nil
-	}
+    if p.peekTok.Type != token.LBRACE {
+        p.addError("expected '{' after for post")
+        return nil
+    }
 
-	p.nextToken() // move to '{'
-	stmt.Body = p.parseBlockStatement()
-	return stmt
+    p.nextToken() // move to '{'
+    stmt.Body = p.parseBlockStatement()
+
+    return stmt
 }
 
 func (p *Parser) parseWhileStatement() *WhileStatement {
@@ -1287,7 +1289,7 @@ func (p *Parser) parseExpression(precedence int) Expression {
 			continue
 		}
 
-		if precedence >= p.peekPrecedence() {
+		if p.peekTok.Type == token.SEMICOLON || precedence >= p.peekPrecedence() {
 			break
 		}
 

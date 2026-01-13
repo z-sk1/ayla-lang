@@ -1,0 +1,16 @@
+egg x = 4
+
+ayla x == 4 {
+    egg y = 2
+    explodeln(y) // 2
+
+    x = 3
+    explodeln(x) // 3
+
+    egg x = 2
+    explodeln(x) // 2
+}
+
+explodeln(x) // 3
+
+explodeln(y) // error: undefined

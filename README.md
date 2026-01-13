@@ -149,6 +149,55 @@ egg x = 5
 ```
 also valid
 
+## block scope
+in ayla, every block has its own **Environment**.
+```ayla
+ayla yes {
+    egg x = 2 // define inside if statement
+}
+
+explode(x) // error
+```
+> output: runtime error at 5:10: undefined variable: x
+
+if the lower scope cant find the variable, it will look for it in the parent environment
+```ayla
+egg x = 4
+
+ayla yes {
+    x = 2
+}
+
+explode(x)
+```
+> output: 2
+
+
+but you can also define a variable with the same name in the child environment, and it wont affect the one above
+```ayla
+egg x = 5
+
+ayla yes {
+    explodeln(x) // 5
+
+    x = 3
+
+    explodeln(x) // 3
+
+    egg x = 7
+
+    explodeln(x) // 7
+}
+
+explodeln(x) // 3, because was assigned 3 in child
+```
+> output:
+```
+5
+3
+7
+```
+
 ## comments
 you can use both single line and multiline comments
 

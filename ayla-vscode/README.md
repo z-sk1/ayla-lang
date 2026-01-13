@@ -11,11 +11,6 @@ ayla lang is a small interpreted language written in go, designed to make you fo
 - **Me: z-sk1, Co-Owner**
 - **and Mregg55, Co-Owner (link: https://github.com/mregg55)**
 
-## vs code extension
-https://marketplace.visualstudio.com/items?itemName=z-sk1.ayla
-
-this will add syntax highlighting
-
 # Installation and Usage
 See [INSTRUCTIONS.md](./INSTRUCTIONS.md) for full step-by-step instructions for macOS and Windows.
 
@@ -148,6 +143,55 @@ this is totally fine
 egg x = 5
 ```
 also valid
+
+## block scope
+in ayla, every block has its own **Environment**.
+```ayla
+ayla yes {
+    egg x = 2 // define inside if statement
+}
+
+explode(x) // error
+```
+> output: runtime error at 5:10: undefined variable: x
+
+if the lower scope cant find the variable, it will look for it in the parent environment
+```ayla
+egg x = 4
+
+ayla yes {
+    x = 2
+}
+
+explode(x)
+```
+> output: 2
+
+
+but you can also define a variable with the same name in the child environment, and it wont affect the one above
+```ayla
+egg x = 5
+
+ayla yes {
+    explodeln(x) // 5
+
+    x = 3
+
+    explodeln(x) // 3
+
+    egg x = 7
+
+    explodeln(x) // 7
+}
+
+explodeln(x) // 3, because was assigned 3 in child
+```
+> output:
+```
+5
+3
+7
+```
 
 ## comments
 you can use both single line and multiline comments
