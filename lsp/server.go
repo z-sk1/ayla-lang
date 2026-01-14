@@ -94,3 +94,9 @@ func readMessage(r *bufio.Reader) (*Request, error) {
 	json.Unmarshal(body, &req)
 	return &req, nil
 }
+
+func writeMessage(w *bufio.Writer, data []byte) {
+	fmt.Fprintf(w, "Content-Length: %d\r\n\r\n", len(data))
+	w.Write(data)
+	w.Flush()
+}
