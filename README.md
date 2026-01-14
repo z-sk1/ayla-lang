@@ -3,7 +3,7 @@
 
 ayla lang is a small interpreted language written in go, designed to make you forget everything
 
-*Because fuck you.* - Linus Torvalds
+*Because f-ck you.* - Linus Torvalds
 
 # about
 

@@ -582,7 +582,7 @@ func (i *Interpreter) EvalBlock(stmts []parser.Statement, newScope bool) (Contro
 
 func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 	if s == nil {
-		return NilValue{}, RuntimeError{Message: "EvalStatement got nil statement"}
+		return SignalNone{}, nil
 	}
 
 	switch stmt := s.(type) {
