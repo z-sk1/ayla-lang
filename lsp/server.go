@@ -1,4 +1,4 @@
-package lsp
+package main
 
 import (
 	"bufio"
@@ -22,8 +22,14 @@ type Request struct {
 type Response struct {
 	Jsonrpc string      `json:"jsonrpc"`
 	ID      *int        `json:"id"`
-	Result  interface{} `json:"result,omitempty"`
+	Result  any `json:"result,omitempty"`
 	Error   interface{} `json:"error,omitempty"`
+}
+
+func main() {
+	server := NewServer()
+
+	server.Run()
 }
 
 func NewServer() *Server {
