@@ -8,6 +8,39 @@ import (
 	"github.com/z-sk1/ayla-lang/parser"
 )
 
+type TypeKind int
+
+const (
+	TypeInt TypeKind = iota
+	TypeFloat
+	TypeString
+	TypeBool
+	TypeNil
+	TypeStruct
+	TypeNamed
+)
+
+type TypeInfo struct {
+	Name       string
+	Kind       TypeKind
+	Underlying *TypeInfo
+	Alias      bool
+	Fields     map[string]*TypeInfo // for structs
+}
+
+type NamedValue struct {
+	TypeName *TypeInfo
+	Value    Value
+}
+
+func (n NamedValue) Type() ValueType {
+	return valueTypeOf(n.TypeName)
+}
+
+func (n NamedValue) String() string {
+	return n.Value.String()
+}
+
 type ValueType string
 
 const (
@@ -15,7 +48,7 @@ const (
 	FLOAT       ValueType = "float"
 	STRING      ValueType = "string"
 	BOOL        ValueType = "bool"
-	ARRAY       ValueType = "array"
+	ARR         ValueType = "arr"
 	FUNCTION    ValueType = "function"
 	STRUCT_TYPE ValueType = "struct_type"
 	STRUCT      ValueType = "struct"
@@ -123,7 +156,7 @@ type ArrayValue struct {
 }
 
 func (a ArrayValue) Type() ValueType {
-	return ARRAY
+	return ARR
 }
 
 func (a ArrayValue) String() string {
@@ -152,7 +185,7 @@ func (st StructType) String() string {
 }
 
 type StructValue struct {
-	TypeName *StructType
+	TypeName *TypeInfo
 	Fields   map[string]Value
 }
 
@@ -165,7 +198,7 @@ func (s *StructValue) String() string {
 		return "struct"
 	}
 
-	return "struct " + s.TypeName.String()
+	return "struct " + s.TypeName.Name
 }
 
 type NilValue struct{}
@@ -178,66 +211,91 @@ func (n NilValue) String() string {
 	return "nil"
 }
 
-func (i Interpreter) resolveType(expr parser.Expression) (ValueType, error) {
+func (i *Interpreter) resolveType(expr parser.Expression) (*TypeInfo, error) {
 	switch e := expr.(type) {
+
 	case *parser.IntLiteral:
-		return INT, nil
+		return i.typeEnv["int"], nil
 
 	case *parser.FloatLiteral:
-		return FLOAT, nil
+		return i.typeEnv["float"], nil
 
 	case *parser.StringLiteral, *parser.InterpolatedString:
-		return STRING, nil
+		return i.typeEnv["string"], nil
 
 	case *parser.BoolLiteral:
-		return BOOL, nil
+		return i.typeEnv["bool"], nil
 
 	case *parser.NilLiteral:
-		return NIL, nil
+		return i.typeEnv["nil"], nil
 
 	case *parser.Identifier:
-		val, ok := i.env.Get(e.Value)
+		v, ok := i.env.Get(e.Value)
 		if !ok {
-			return "", NewRuntimeError(e, fmt.Sprintf("unknown identifier: %s", e.Value))
+			return nil, NewRuntimeError(e, "unknown identifier "+e.Value)
 		}
-
-		return val.Type(), nil
+		return i.typeInfoFromValue(v), nil
 
 	case *parser.StructLiteral:
-		_, ok := i.typeEnv[e.TypeName.Value]
+		ti, ok := i.typeEnv[e.TypeName.Value]
 		if !ok {
-			return "", NewRuntimeError(e, fmt.Sprintf("unknown struct type: %s", e.TypeName.Value))
+			return nil, NewRuntimeError(e, "unknown struct "+e.TypeName.Value)
 		}
-		return STRUCT, nil
+		return ti, nil
 
 	case *parser.MemberExpression:
-		leftType, err := i.resolveType(e.Left)
+		leftTI, err := i.resolveType(e.Left)
 		if err != nil {
-			return "", err
+			return nil, err
 		}
 
-		if leftType != STRUCT {
-			return "", NewRuntimeError(e, fmt.Sprintf("cannot access field type on %s", leftType))
+		if leftTI.Kind != TypeStruct {
+			return nil, NewRuntimeError(e, "not a struct")
 		}
 
-		leftVal, _ := i.EvalExpression(e.Left)
-		sv := leftVal.(*StructValue)
-
-		fieldType, ok := sv.TypeName.Fields[e.Field.Value]
+		ft, ok := leftTI.Fields[e.Field.Value]
 		if !ok {
-			return "", NewRuntimeError(e, fmt.Sprintf("unknown field: %s", e.Field.Value))
+			return nil, NewRuntimeError(e, "unknown field "+e.Field.Value)
 		}
 
-		return fieldType, nil
-
-	case *parser.InfixExpression:
-		return i.resolveType(e.Left)
-
-	case *parser.FuncCall:
-		return NIL, nil
+		return ft, nil
 
 	default:
-		return "", NewRuntimeError(e, fmt.Sprintf("cannot resolve type for %T", expr))
+		return nil, NewRuntimeError(expr, "cannot resolve type")
+	}
+}
+
+func (i *Interpreter) resolveTypeNode(t parser.TypeNode) (*TypeInfo, error) {
+	switch tn := t.(type) {
+
+	case *parser.IdentType:
+		// int, string, Person, etc.
+		ti, ok := i.typeEnv[tn.Name]
+		if !ok {
+			return nil, fmt.Errorf("unknown type '%s'", tn.Name)
+		}
+		return ti, nil
+
+	case *parser.StructType:
+		// anonymous struct type
+		fields := make(map[string]*TypeInfo)
+
+		for _, f := range tn.Fields {
+			ft, err := i.resolveTypeNode(f.Type)
+			if err != nil {
+				return nil, err
+			}
+			fields[f.Name.Value] = ft
+		}
+
+		return &TypeInfo{
+			Name:   "<anon>",
+			Kind:   TypeStruct,
+			Fields: fields,
+		}, nil
+
+	default:
+		return nil, fmt.Errorf("unsupported type node %T", t)
 	}
 }
 
@@ -251,8 +309,11 @@ func (i Interpreter) resolveTypeFromName(node parser.Statement, name string) (Va
 		return STRING, nil
 	case "bool":
 		return BOOL, nil
-	case "array":
-		return ARRAY, nil
+	case "arr":
+		return ARR, nil
+	case "struct":
+		return STRUCT, nil
+
 	}
 
 	// user-defined struct type
@@ -297,6 +358,8 @@ func defaultValueFromType(node parser.Statement, typ ValueType) (Value, error) {
 		return StringValue{V: ""}, nil
 	case BOOL:
 		return BoolValue{V: false}, nil
+	case ARR:
+		return ArrayValue{Elements: make([]Value, 0)}, nil
 	default:
 		return NilValue{}, NewRuntimeError(
 			node,
@@ -315,7 +378,111 @@ func defaultValueFromString(node parser.Statement, name string) (Value, error) {
 		return StringValue{V: ""}, nil
 	case "bool":
 		return BoolValue{V: false}, nil
+	case "arr":
+		return ArrayValue{Elements: make([]Value, 0)}, nil
 	default:
 		return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unknown type: %s", name))
+	}
+}
+
+func valueTypeOf(ti *TypeInfo) ValueType {
+	for ti.Kind == TypeNamed {
+		ti = ti.Underlying
+	}
+
+	switch ti.Kind {
+	case TypeInt:
+		return INT
+	case TypeFloat:
+		return FLOAT
+	case TypeString:
+		return STRING
+	case TypeBool:
+		return BOOL
+	case TypeStruct:
+		return STRUCT
+	default:
+		return NIL
+	}
+}
+
+func typeKindOf(vt ValueType) TypeKind {
+	switch vt {
+	case INT:
+		return TypeInt
+	case FLOAT:
+		return TypeFloat
+	case STRING:
+		return TypeString
+	case BOOL:
+		return TypeBool
+	case STRUCT:
+		return TypeStruct
+	default:
+		return TypeNil
+	}
+}
+
+func (i *Interpreter) typeInfoFromValue(v Value) *TypeInfo {
+	switch v := v.(type) {
+	case IntValue:
+		return i.typeEnv["int"]
+	case FloatValue:
+		return i.typeEnv["float"]
+	case StringValue:
+		return i.typeEnv["string"]
+	case BoolValue:
+		return i.typeEnv["bool"]
+	case *StructValue:
+		return v.TypeName
+	case NamedValue:
+		return v.TypeName
+
+	default:
+		return i.typeEnv["nil"]
+	}
+}
+
+func (i *Interpreter) typeInfoFromIdent(name string) (*TypeInfo, bool) {
+	// builtins
+	switch name {
+	case "int":
+		return i.typeEnv["int"], true
+	case "float":
+		return i.typeEnv["float"], true
+	case "string":
+		return i.typeEnv["string"], true
+	case "bool":
+		return i.typeEnv["bool"], true
+	}
+
+	// user-defined
+	ti, ok := i.typeEnv[name]
+	if ok {
+		return ti, true
+	}
+
+	return nil, false
+}
+
+func defaultValueFromTypeInfo(node parser.Statement, ti *TypeInfo) (Value, error) {
+	ti = unwrapAlias(ti)
+
+	switch ti.Kind {
+	case TypeInt:
+		return IntValue{V: 0}, nil
+	case TypeFloat:
+		return FloatValue{V: 0}, nil
+	case TypeString:
+		return StringValue{V: ""}, nil
+	case TypeBool:
+		return BoolValue{V: false}, nil
+	case TypeStruct:
+		return &StructValue{
+			TypeName: ti,
+			Fields:   map[string]Value{},
+		}, nil
+	default:
+		return NilValue{}, NewRuntimeError(node, "cannot create default value for "+ti.Name)
 	}
 }

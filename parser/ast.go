@@ -8,6 +8,11 @@ type Node interface {
 	Pos() (int, int)
 }
 
+type TypeNode interface {
+	Node
+	typeNode()
+}
+
 type Statement interface {
 	Node
 }
@@ -67,9 +72,10 @@ type VarStatement struct {
 
 type MultiVarStatement struct {
 	NodeBase
-	Names []string
-	Type  *Identifier
-	Value Expression
+	Names      []string
+	NameTokens []token.Token
+	Type       *Identifier
+	Value      Expression
 }
 
 type ConstStatement struct {
@@ -81,9 +87,10 @@ type ConstStatement struct {
 
 type MultiConstStatement struct {
 	NodeBase
-	Names []string
-	Type  *Identifier
-	Value Expression
+	Names      []string
+	NameTokens []token.Token
+	Type       *Identifier
+	Value      Expression
 }
 
 type AssignmentStatement struct {
@@ -97,6 +104,27 @@ type MultiAssignmentStatement struct {
 	Names []string
 	Value Expression
 }
+
+type TypeStatement struct {
+	NodeBase
+	Name  string
+	Type  TypeNode
+	Alias bool
+}
+
+type StructType struct {
+	NodeBase
+	Fields []*StructField
+}
+
+func (*StructType) typeNode() {}
+
+type IdentType struct {
+	NodeBase
+	Name string
+}
+
+func (*IdentType) typeNode() {}
 
 type IfStatement struct {
 	NodeBase
@@ -141,13 +169,7 @@ type WhileStatement struct {
 
 type StructField struct {
 	Name *Identifier
-	Type *Identifier
-}
-
-type StructStatement struct {
-	NodeBase
-	Name   *Identifier
-	Fields []*StructField
+	Type TypeNode
 }
 
 type SwitchStatement struct {

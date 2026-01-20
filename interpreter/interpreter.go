@@ -37,7 +37,7 @@ type Environment struct {
 
 type Interpreter struct {
 	env     *Environment
-	typeEnv map[string]*StructType
+	typeEnv map[string]*TypeInfo
 }
 
 func New() *Interpreter {
@@ -47,8 +47,9 @@ func New() *Interpreter {
 		builtins: make(map[string]*BuiltinFunc),
 	}
 
-	typeEnv := make(map[string]*StructType)
+	typeEnv := make(map[string]*TypeInfo)
 	registerBuiltins(env)
+	initBuiltinTypes(typeEnv)
 	return &Interpreter{env: env, typeEnv: typeEnv}
 }
 
@@ -136,12 +137,100 @@ func toFloat(v Value) (float64, bool) {
 	}
 }
 
+func assignable(expected *TypeInfo, v Value) bool {
+	// Named value → must match exactly
+	if nv, ok := v.(NamedValue); ok {
+		return nv.TypeName == expected
+	}
+
+	if sv, ok := v.(*StructValue); ok {
+		return sv.TypeName == expected
+	}
+
+	if valueTypeOf(expected) == FLOAT && v.Type() == INT {
+		return true
+	}
+
+	// Plain value → must match underlying kind
+	return valueTypeOf(expected) == v.Type()
+}
+
+func typesAssignable(from, to *TypeInfo) bool {
+	if from == to {
+		return true
+	}
+
+	// aliases are transparent
+	if from.Alias {
+		return typesAssignable(from.Underlying, to)
+	}
+	if to.Alias {
+		return typesAssignable(from, to.Underlying)
+	}
+
+	// named types must match exactly
+	if from.Kind == TypeNamed || to.Kind == TypeNamed {
+		return from == to
+	}
+
+	if from.Kind == TypeInt && to.Kind == TypeFloat {
+		return true
+	}
+
+	return false
+}
+
+func unwrapNamed(v Value) Value {
+	for {
+		if nv, ok := v.(NamedValue); ok {
+			v = nv.Value
+		} else {
+			return v
+		}
+	}
+}
+
+func unwrapAlias(t *TypeInfo) *TypeInfo {
+	for t != nil && t.Alias {
+		t = t.Underlying
+	}
+	return t
+}
+
+func initBuiltinTypes(typeEnv map[string]*TypeInfo) {
+	typeEnv["int"] = &TypeInfo{
+		Name: "int",
+		Kind: TypeInt,
+	}
+
+	typeEnv["float"] = &TypeInfo{
+		Name: "float",
+		Kind: TypeFloat,
+	}
+
+	typeEnv["string"] = &TypeInfo{
+		Name: "string",
+		Kind: TypeString,
+	}
+
+	typeEnv["bool"] = &TypeInfo{
+		Name: "bool",
+		Kind: TypeBool,
+	}
+
+	typeEnv["nil"] = &TypeInfo{
+		Name: "nil",
+		Kind: TypeNil,
+	}
+}
+
 func registerBuiltins(env *Environment) {
-	env.builtins["int"] = &BuiltinFunc{
-		Name:  "int",
+	env.builtins["toInt"] = &BuiltinFunc{
+		Name:  "toInt",
 		Arity: 1,
 		Fn: func(node *parser.FuncCall, args []Value) (Value, error) {
 			v := args[0]
+			v = unwrapNamed(v)
 
 			switch v.Type() {
 			case INT:
@@ -165,11 +254,12 @@ func registerBuiltins(env *Environment) {
 		},
 	}
 
-	env.builtins["float"] = &BuiltinFunc{
-		Name:  "float",
+	env.builtins["toFloat"] = &BuiltinFunc{
+		Name:  "toFloat",
 		Arity: 1,
 		Fn: func(node *parser.FuncCall, args []Value) (Value, error) {
 			v := args[0]
+			v = unwrapNamed(v)
 
 			switch v.Type() {
 			case FLOAT:
@@ -193,20 +283,21 @@ func registerBuiltins(env *Environment) {
 		},
 	}
 
-	env.builtins["string"] = &BuiltinFunc{
-		Name:  "string",
+	env.builtins["toString"] = &BuiltinFunc{
+		Name:  "toString",
 		Arity: 1,
 		Fn: func(node *parser.FuncCall, args []Value) (Value, error) {
 			v := args[0]
+			v = unwrapNamed(v)
 
 			switch v.Type() {
 			case STRING:
 				return StringValue{V: v.(StringValue).V}, nil
 			case BOOL:
 				if v.(BoolValue).V {
-					return StringValue{V: "true"}, nil
+					return StringValue{V: "yes"}, nil
 				}
-				return StringValue{V: "false"}, nil
+				return StringValue{V: "no"}, nil
 			case INT:
 				n := strconv.Itoa(v.(IntValue).V)
 				return StringValue{V: n}, nil
@@ -214,16 +305,17 @@ func registerBuiltins(env *Environment) {
 				n := strconv.FormatFloat(v.(FloatValue).V, 'f', -1, 64)
 				return StringValue{V: n}, nil
 			default:
-				return NilValue{}, NewRuntimeError(node, "unsupported string() conversion")
+				return NilValue{}, NewRuntimeError(node, "unsupported toString() conversion")
 			}
 		},
 	}
 
-	env.builtins["bool"] = &BuiltinFunc{
-		Name:  "bool",
+	env.builtins["toBool"] = &BuiltinFunc{
+		Name:  "toBool",
 		Arity: 1,
 		Fn: func(node *parser.FuncCall, args []Value) (Value, error) {
 			v := args[0]
+			v = unwrapNamed(v)
 
 			switch v.Type() {
 			case BOOL:
@@ -233,9 +325,16 @@ func registerBuiltins(env *Environment) {
 			case FLOAT:
 				return BoolValue{V: v.(FloatValue).V != 0}, nil
 			case STRING:
-				return BoolValue{V: v.(StringValue).V != ""}, nil
+				s := strings.ToLower(v.(StringValue).V)
+				if s == "true" || s == "yes" || s == "1" {
+					return BoolValue{V: true}, nil
+				}
+				if s == "false" || s == "no" || s == "0" || s == "" {
+					return BoolValue{V: false}, nil
+				}
+				return NilValue{}, NewRuntimeError(node, "unsupported toBool() conversion")
 			default:
-				return NilValue{}, NewRuntimeError(node, "unsupported bool() conversion")
+				return NilValue{}, NewRuntimeError(node, "unsupported toBool() conversion")
 			}
 		},
 	}
@@ -248,7 +347,7 @@ func registerBuiltins(env *Environment) {
 			switch v.Type() {
 			case STRING:
 				return IntValue{V: len(v.(StringValue).V)}, nil
-			case ARRAY:
+			case ARR:
 				return IntValue{V: len(v.(ArrayValue).Elements)}, nil
 			default:
 				return NilValue{}, NewRuntimeError(node, fmt.Sprintf("len() not supported for type %s", v.Type()))
@@ -270,9 +369,9 @@ func registerBuiltins(env *Environment) {
 		Arity: -1,
 		Fn: func(node *parser.FuncCall, args []Value) (Value, error) {
 			for _, v := range args {
-				// if v.Type() != NIL {
-				fmt.Print(v.String())
-				// }
+				if v.Type() != NIL {
+					fmt.Print(v.String())
+				}
 			}
 			return NilValue{}, nil
 		},
@@ -551,6 +650,23 @@ func registerBuiltins(env *Environment) {
 	}
 }
 
+func unwrapStructType(t *TypeInfo) (*TypeInfo, error) {
+	cur := t
+
+	for {
+		if cur.Kind == TypeStruct {
+			return cur, nil
+		}
+
+		if cur.Kind == TypeNamed && cur.Underlying != nil {
+			cur = cur.Underlying
+			continue
+		}
+
+		return nil, fmt.Errorf("%s is not a struct type", t.Name)
+	}
+}
+
 func (i *Interpreter) EvalStatements(stmts []parser.Statement) (ControlSignal, error) {
 	for _, s := range stmts {
 		sig, err := i.EvalStatement(s)
@@ -594,9 +710,11 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			if stmt.Type == nil {
 				val = NilValue{}
 			} else {
-				val, err = defaultValueFromString(stmt, stmt.Type.Value)
+				expectedTI, _ := i.typeInfoFromIdent(stmt.Type.Value)
+
+				val, err = defaultValueFromTypeInfo(stmt, expectedTI)
 				if err != nil {
-					return NilValue{}, err
+					return SignalNone{}, err
 				}
 			}
 		} else {
@@ -606,16 +724,29 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			}
 		}
 
-		if stmt.Type != nil && stmt.Value != nil {
-			if string(val.Type()) != stmt.Type.Value {
-				if val.Type() == INT && stmt.Type.Value == "float" {
-					intVal := val.(IntValue)
-					val = FloatValue{V: float64(intVal.V)}
-				} else if val.Type() != BOOL && stmt.Type.Value == "bool" {
-					val = BoolValue{V: isTruthy(val)}
-				} else {
-					return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("type mismatch: '%s' assigned to a '%s'", string(val.Type()), stmt.Type.Value))
-				}
+		if stmt.Type != nil {
+			expectedTI, ok := i.typeInfoFromIdent(stmt.Type.Value)
+			if !ok {
+				return SignalNone{}, NewRuntimeError(
+					stmt,
+					"unknown type: "+stmt.Type.Value,
+				)
+			}
+
+			actualTI := i.typeInfoFromValue(val)
+
+			actualTI = unwrapAlias(actualTI)
+			expectedTI = unwrapAlias(expectedTI)
+
+			if !typesAssignable(actualTI, expectedTI) {
+				return SignalNone{}, NewRuntimeError(
+					stmt,
+					fmt.Sprintf(
+						"type mismatch: '%s' assigned to '%s'",
+						actualTI.Name,
+						expectedTI.Name,
+					),
+				)
 			}
 		}
 
@@ -658,26 +789,46 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			if stmt.Value != nil {
 				v = values[idx]
 			} else {
-				if stmt.Type != nil {
+				if stmt.Type == nil {
+					v = NilValue{}
+				} else {
 					var err error
-					v, err = defaultValueFromString(stmt, stmt.Type.Value)
-					if err != nil {
-						return SignalNone{}, err
+					if stmt.Type == nil {
+						v = NilValue{}
+					} else {
+						expectedTI, _ := i.typeInfoFromIdent(stmt.Type.Value)
+
+						v, err = defaultValueFromTypeInfo(stmt, expectedTI)
+						if err != nil {
+							return SignalNone{}, err
+						}
 					}
 				}
 			}
 
-			// optional type enforcement
-			if stmt.Type != nil && stmt.Value != nil {
-				if string(v.Type()) != stmt.Type.Value {
-					if v.Type() == INT && stmt.Type.Value == "float" {
-						intVal := v.(IntValue)
-						v = FloatValue{V: float64(intVal.V)}
-					} else if v.Type() != BOOL && stmt.Type.Value == "bool" {
-						v = BoolValue{V: isTruthy(v)}
-					} else {
-						return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("type mismatch: '%s' assigned to a '%s'", string(v.Type()), stmt.Type.Value))
-					}
+			if stmt.Type != nil {
+				expectedTI, ok := i.typeInfoFromIdent(stmt.Type.Value)
+				if !ok {
+					return SignalNone{}, NewRuntimeError(
+						stmt,
+						"unknown type: "+stmt.Type.Value,
+					)
+				}
+
+				actualTI := i.typeInfoFromValue(v)
+
+				expectedTI = unwrapAlias(expectedTI)
+				actualTI = unwrapAlias(actualTI)
+
+				if !typesAssignable(actualTI, expectedTI) {
+					return SignalNone{}, NewRuntimeError(
+						stmt,
+						fmt.Sprintf(
+							"type mismatch: '%s' assigned to '%s'",
+							actualTI.Name,
+							expectedTI.Name,
+						),
+					)
 				}
 			}
 
@@ -688,27 +839,40 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 
 	case *parser.ConstStatement:
 		var val Value
+		var err error
 
 		if stmt.Value == nil {
-			return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("const, %s, must be initialised", stmt.Name))
+			return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("const %s must be initalised with a value", stmt.Name))
 		} else {
-			var err error
 			val, err = i.EvalExpression(stmt.Value)
 			if err != nil {
 				return SignalNone{}, err
 			}
 		}
 
-		if stmt.Type != nil && stmt.Value != nil {
-			if string(val.Type()) != stmt.Type.Value {
-				if val.Type() == INT && stmt.Type.Value == "float" {
-					intVal := val.(IntValue)
-					val = FloatValue{V: float64(intVal.V)}
-				} else if val.Type() != BOOL && stmt.Type.Value == "bool" {
-					val = BoolValue{V: isTruthy(val)}
-				} else {
-					return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("type mismatch: '%s' assigned to a '%s'", string(val.Type()), stmt.Type.Value))
-				}
+		if stmt.Type != nil {
+			expectedTI, ok := i.typeInfoFromIdent(stmt.Type.Value)
+			if !ok {
+				return SignalNone{}, NewRuntimeError(
+					stmt,
+					"unknown type: "+stmt.Type.Value,
+				)
+			}
+
+			actualTI := i.typeInfoFromValue(val)
+
+			expectedTI = unwrapAlias(expectedTI)
+			actualTI = unwrapAlias(actualTI)
+
+			if !typesAssignable(actualTI, expectedTI) {
+				return SignalNone{}, NewRuntimeError(
+					stmt,
+					fmt.Sprintf(
+						"type mismatch: '%s' assigned to '%s'",
+						actualTI.Name,
+						expectedTI.Name,
+					),
+				)
 			}
 		}
 
@@ -766,17 +930,29 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 				v = values[idx]
 			}
 
-			// optional type enforcement
-			if stmt.Type != nil && stmt.Value != nil {
-				if string(v.Type()) != stmt.Type.Value {
-					if v.Type() == INT && stmt.Type.Value == "float" {
-						intVal := v.(IntValue)
-						v = FloatValue{V: float64(intVal.V)}
-					} else if v.Type() != BOOL && stmt.Type.Value == "bool" {
-						v = BoolValue{V: isTruthy(v)}
-					} else {
-						return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("type mismatch: '%s' assigned to a '%s'", string(v.Type()), stmt.Type.Value))
-					}
+			if stmt.Type != nil {
+				expectedTI, ok := i.typeInfoFromIdent(stmt.Type.Value)
+				if !ok {
+					return SignalNone{}, NewRuntimeError(
+						stmt,
+						"unknown type: "+stmt.Type.Value,
+					)
+				}
+
+				actualTI := i.typeInfoFromValue(v)
+
+				expectedTI = unwrapAlias(expectedTI)
+				actualTI = unwrapAlias(actualTI)
+
+				if !typesAssignable(actualTI, expectedTI) {
+					return SignalNone{}, NewRuntimeError(
+						stmt,
+						fmt.Sprintf(
+							"type mismatch: '%s' assigned to '%s'",
+							actualTI.Name,
+							expectedTI.Name,
+						),
+					)
 				}
 			}
 
@@ -784,6 +960,56 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		}
 
 		return SignalNone{}, nil
+
+	case *parser.TypeStatement:
+		switch t := stmt.Type.(type) {
+		case *parser.IdentType:
+			underlying, ok := i.typeEnv[t.Name]
+			if !ok {
+				return SignalNone{}, NewRuntimeError(t, fmt.Sprintf("unknown type: %s", t.Name))
+			}
+
+			if stmt.Alias {
+				i.typeEnv[stmt.Name] = &TypeInfo{
+					Name:       stmt.Name,
+					Kind:       underlying.Kind,
+					Underlying: underlying,
+					Alias:      true,
+				}
+			} else {
+				i.typeEnv[stmt.Name] = &TypeInfo{
+					Name:       stmt.Name,
+					Kind:       TypeNamed,
+					Underlying: underlying,
+				}
+			}
+
+			return SignalNone{}, nil
+
+		case *parser.StructType:
+			fields := make(map[string]*TypeInfo)
+
+			for _, f := range t.Fields {
+				fieldTI, err := i.resolveTypeNode(f.Type)
+				if err != nil {
+					return SignalNone{}, NewRuntimeError(t, err.Error())
+				}
+				fields[f.Name.Value] = fieldTI
+			}
+
+			ti := &TypeInfo{
+				Name:   stmt.Name,
+				Kind:   TypeStruct,
+				Fields: fields,
+			}
+
+			if stmt.Alias {
+				ti.Alias = true
+			}
+
+			i.typeEnv[stmt.Name] = ti
+			return SignalNone{}, nil
+		}
 
 	case *parser.AssignmentStatement:
 		val, err := i.EvalExpression(stmt.Value)
@@ -908,7 +1134,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 
 		expectedType := structVal.TypeName.Fields[stmt.Field.Value]
 
-		if val.Type() != expectedType {
+		if val.Type() != valueTypeOf(expectedType) {
 			return NilValue{}, NewRuntimeError(stmt, fmt.Sprintf("field '%s' expects %v but got %v", stmt.Field.Value, expectedType, val.Type()))
 		}
 
@@ -937,24 +1163,6 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		if err != nil {
 			return SignalNone{}, err
 		}
-		return SignalNone{}, nil
-
-	case *parser.StructStatement:
-		fields := make(map[string]ValueType)
-
-		for _, field := range stmt.Fields {
-			vt, err := i.resolveTypeFromName(stmt, field.Type.Value)
-			if err != nil {
-				return SignalNone{}, err
-			}
-			fields[field.Name.Value] = vt
-		}
-
-		i.typeEnv[stmt.Name.Value] = &StructType{
-			Name:   stmt.Name.Value,
-			Fields: fields,
-		}
-
 		return SignalNone{}, nil
 
 	case *parser.IfStatement:
@@ -1156,96 +1364,7 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 		return ArrayValue{Elements: elements}, nil
 
 	case *parser.FuncCall:
-		// built in?
-		if b, ok := i.env.builtins[expr.Name]; ok {
-			args := []Value{}
-
-			for _, a := range expr.Args {
-				v, err := i.EvalExpression(a)
-				if err != nil {
-					return NilValue{}, err
-				}
-
-				if t, ok := v.(TupleValue); ok {
-					args = append(args, t.Values...) // flatten
-				} else {
-					args = append(args, v)
-				}
-			}
-
-			if b.Arity >= 0 && len(args) != b.Arity {
-				return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("expected %d args, got %d", b.Arity, len(args)))
-			}
-
-			return b.Fn(expr, args)
-		}
-
-		// user-defined
-		fn, ok := i.env.GetFunc(expr.Name)
-		if !ok {
-			return NilValue{}, NewRuntimeError(e, fmt.Sprintf("unknown function: %s", expr.Name))
-		}
-
-		if len(fn.Params) != len(expr.Args) {
-			return NilValue{}, NewRuntimeError(e, fmt.Sprintf("expected %d args, got %d", len(fn.Params), len(expr.Args)))
-		}
-
-		// create new env for func call
-		newEnv := NewEnvironment(i.env)
-
-		// set params
-		for idx, param := range fn.Params {
-			val, err := i.EvalExpression(expr.Args[idx])
-			if err != nil {
-				return NilValue{}, err
-			}
-
-			// enforce type if parameter has one
-			if param.Type != nil {
-				actual := string(val.Type())
-				expected := param.Type.Value
-
-				if expected == "float" && val.Type() == INT {
-					val = FloatValue{V: float64(val.(IntValue).V)}
-				} else if actual != expected {
-					return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("parameter '%s' expected %v, got %v", param.Value, expected, actual))
-				}
-			}
-
-			newEnv.Define(param.Value, val)
-		}
-
-		// execute body
-		sig, err := i.EvalBlock(fn.Body, true)
-		if err != nil {
-			return NilValue{}, err
-		}
-
-		if ret, ok := sig.(SignalReturn); ok {
-			if len(fn.ReturnTypes) != len(ret.Values) {
-				return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("expected %d return values, got %d", len(fn.ReturnTypes), len(ret.Values)))
-			}
-
-			for i, expectedType := range fn.ReturnTypes {
-				actual := ret.Values[i]
-
-				if expectedType != nil && string(actual.Type()) != expectedType.Value {
-					return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("return %d, expected %s, got %s", i+1, expectedType.Value, string(actual.Type())))
-				}
-			}
-
-			if len(ret.Values) == 1 {
-				return ret.Values[0], nil
-			}
-
-			return TupleValue{Values: ret.Values}, nil
-		}
-
-		if len(fn.ReturnTypes) > 0 {
-			return NilValue{}, NewRuntimeError(expr, "missing return statement")
-		}
-
-		return NilValue{}, nil
+		return i.evalCall(expr)
 
 	case *parser.IndexExpression:
 		left, err := i.EvalExpression(expr.Left)
@@ -1268,20 +1387,37 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 	case *parser.StructLiteral:
 		val, ok := i.typeEnv[expr.TypeName.Value]
 		if !ok {
-			return NilValue{}, NewRuntimeError(expr, "unknown struct type "+expr.TypeName.Value)
+			return NilValue{}, NewRuntimeError(
+				expr,
+				"unknown struct type "+expr.TypeName.Value,
+			)
 		}
 
-		structType := val
-		if !ok {
-			return NilValue{}, NewRuntimeError(expr, expr.TypeName.Value+" is not a struct type")
+		structTI, err := unwrapStructType(val)
+		if err != nil {
+			return NilValue{}, NewRuntimeError(expr, err.Error())
+		}
+
+		if structTI.Kind != TypeStruct {
+			return NilValue{}, NewRuntimeError(
+				expr,
+				structTI.Name+" is not a struct type",
+			)
 		}
 
 		fields := make(map[string]Value)
 
 		for name, e := range expr.Fields {
-			expectedType, ok := structType.Fields[name]
+			expectedType, ok := structTI.Fields[name]
 			if !ok {
-				return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("unknown field '%s' in struct %s", name, structType.Name))
+				return NilValue{}, NewRuntimeError(
+					expr,
+					fmt.Sprintf(
+						"unknown field '%s' in struct %s",
+						name,
+						structTI.Name,
+					),
+				)
 			}
 
 			v, err := i.EvalExpression(e)
@@ -1289,21 +1425,32 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 				return NilValue{}, err
 			}
 
-			if v.Type() != structType.Fields[name] {
-				return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("field '%s' expects %v but got %v", name, expectedType, v.Type()))
+			actualTI := unwrapAlias(i.typeInfoFromValue(v))
+			expectedTI := unwrapAlias(expectedType)
+
+			if !(typesAssignable(actualTI, expectedTI)) {
+				return NilValue{}, NewRuntimeError(
+					expr,
+					fmt.Sprintf(
+						"field '%s' expects %v but got %v",
+						name,
+						expectedType.Name,
+						v.Type(),
+					),
+				)
 			}
 
 			fields[name] = v
 		}
 
 		return &StructValue{
-			TypeName: structType,
+			TypeName: structTI,
 			Fields:   fields,
 		}, nil
 
 	case *parser.AnonymousStructLiteral:
 		fields := make(map[string]Value)
-		fieldTypes := make(map[string]ValueType)
+		fieldTypes := make(map[string]*TypeInfo)
 
 		for name, e := range expr.Fields {
 			v, err := i.EvalExpression(e)
@@ -1312,17 +1459,28 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 			}
 
 			if expected, ok := fieldTypes[name]; ok {
-				if v.Type() != expected {
-					return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("field '%s' expected %v, got %v", name, fieldTypes[name], v.Type()))
+				actualTI := unwrapAlias(i.typeInfoFromValue(v))
+				expectedTI := unwrapAlias(expected)
+
+				if !(typesAssignable(actualTI, expectedTI)) {
+					return NilValue{}, NewRuntimeError(
+						expr,
+						fmt.Sprintf(
+							"field '%s' expects %v but got %v",
+							name,
+							expected.Name,
+							string(v.Type()),
+						),
+					)
 				}
 			}
 
 			fields[name] = v
-			fieldTypes[name] = v.Type()
+			fieldTypes[name] = i.typeInfoFromValue(v)
 		}
 
 		return &StructValue{
-			TypeName: &StructType{
+			TypeName: &TypeInfo{
 				Name:   "<anon>",
 				Fields: fieldTypes,
 			},
@@ -1408,6 +1566,184 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 	}
 }
 
+func (i *Interpreter) evalCall(e *parser.FuncCall) (Value, error) {
+	if ti, ok := i.typeEnv[e.Name]; ok {
+		if len(e.Args) != 1 {
+			return NilValue{}, NewRuntimeError(e, "type cast expects 1 arg")
+		}
+		return i.evalTypeCast(ti, e.Args[0], e)
+	}
+
+	return i.evalFuncCall(e)
+}
+
+func (i *Interpreter) evalTypeCast(target *TypeInfo, arg parser.Expression, node parser.Node) (Value, error) {
+	v, err := i.EvalExpression(arg)
+	if err != nil {
+		return NilValue{}, err
+	}
+
+	v = unwrapNamed(v)
+
+	switch target.Kind {
+	case TypeInt:
+		var val int
+
+		switch v := v.(type) {
+		case IntValue:
+			val = v.V
+		case FloatValue:
+			val = int(v.V)
+		default:
+			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("int type cast does not support %s, try the function toInt to parse non-numeric types", string(v.Type())))
+		}
+
+		return IntValue{V: val}, nil
+	case TypeFloat:
+		var val float64
+
+		switch v := v.(type) {
+		case IntValue:
+			val = float64(v.V)
+		case FloatValue:
+			val = v.V
+		default:
+			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("float type cast does not support %s, try the function toFloat to parse non-numeric types", string(v.Type())))
+		}
+
+		return FloatValue{V: val}, nil
+	case TypeString:
+		if s, ok := v.(StringValue); ok {
+			return s, nil
+		}
+
+		return NilValue{}, NewRuntimeError(node, fmt.Sprintf("string cast does not support %s, try the function toString to parse other types", string(v.Type())))
+	case TypeBool:
+		var val bool
+
+		switch v := v.(type) {
+		case BoolValue:
+			val = v.V
+		default:
+			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("bool type cast does not support %s, try the function toBool to parse other types", string(v.Type())))
+		}
+
+		return BoolValue{V: val}, nil
+	case TypeNamed:
+		base := target.Underlying
+
+		casted, err := i.evalTypeCast(base, arg, node)
+		if err != nil {
+			return NilValue{}, err
+		}
+
+		if sv, ok := casted.(*StructValue); ok {
+			sv.TypeName = target
+			return sv, nil
+		}
+
+		return NamedValue{
+			TypeName: target,
+			Value:    casted,
+		}, nil
+	default:
+		return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unknown type cast: %s", target.Name))
+	}
+}
+
+func (i *Interpreter) evalFuncCall(expr *parser.FuncCall) (Value, error) {
+	// built in?
+	if b, ok := i.env.builtins[expr.Name]; ok {
+		args := []Value{}
+
+		for _, a := range expr.Args {
+			v, err := i.EvalExpression(a)
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			if t, ok := v.(TupleValue); ok {
+				args = append(args, t.Values...) // flatten
+			} else {
+				args = append(args, v)
+			}
+		}
+
+		if b.Arity >= 0 && len(args) != b.Arity {
+			return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("expected %d args, got %d", b.Arity, len(args)))
+		}
+
+		return b.Fn(expr, args)
+	}
+
+	// user-defined
+	fn, ok := i.env.GetFunc(expr.Name)
+	if !ok {
+		return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("unknown function: %s", expr.Name))
+	}
+
+	if len(fn.Params) != len(expr.Args) {
+		return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("expected %d args, got %d", len(fn.Params), len(expr.Args)))
+	}
+
+	// create new env for func call
+	newEnv := NewEnvironment(i.env)
+
+	// set params
+	for idx, param := range fn.Params {
+		val, err := i.EvalExpression(expr.Args[idx])
+		if err != nil {
+			return NilValue{}, err
+		}
+
+		// enforce type if parameter has one
+		if param.Type != nil {
+			actual := string(val.Type())
+			expected := param.Type.Value
+
+			if expected == "float" && val.Type() == INT {
+				val = FloatValue{V: float64(val.(IntValue).V)}
+			} else if actual != expected {
+				return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("parameter '%s' expected %v, got %v", param.Value, expected, actual))
+			}
+		}
+
+		newEnv.Define(param.Value, val)
+	}
+
+	// execute body
+	sig, err := i.EvalBlock(fn.Body, true)
+	if err != nil {
+		return NilValue{}, err
+	}
+
+	if ret, ok := sig.(SignalReturn); ok {
+		if len(fn.ReturnTypes) != len(ret.Values) {
+			return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("expected %d return values, got %d", len(fn.ReturnTypes), len(ret.Values)))
+		}
+
+		for i, expectedType := range fn.ReturnTypes {
+			actual := ret.Values[i]
+
+			if expectedType != nil && string(actual.Type()) != expectedType.Value {
+				return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("return %d, expected %s, got %s", i+1, expectedType.Value, string(actual.Type())))
+			}
+		}
+
+		if len(ret.Values) == 1 {
+			return ret.Values[0], nil
+		}
+
+		return TupleValue{Values: ret.Values}, nil
+	}
+
+	if len(fn.ReturnTypes) > 0 {
+		return NilValue{}, NewRuntimeError(expr, "missing return statement")
+	}
+
+	return NilValue{}, nil
+}
+
 func evalIndexExpression(node parser.Expression, left, idx Value) (Value, error) {
 	switch left := left.(type) {
 	case ArrayValue:
@@ -1456,7 +1792,7 @@ func evalMemberExpression(node parser.Expression, left Value, field string) (Val
 
 	expectedType := obj.TypeName.Fields[field]
 
-	if val.Type() != expectedType {
+	if val.Type() != valueTypeOf(expectedType) {
 		return NilValue{}, NewRuntimeError(node, fmt.Sprintf("field '%s' type %v should be %v", field, val.Type(), expectedType))
 	}
 
@@ -1472,9 +1808,32 @@ func evalInfix(node *parser.InfixExpression, left Value, op string, right Value)
 		return evalNilInfix(node, op, left)
 	}
 
-	// type mismatch check
-	if left.Type() != right.Type() {
-		return NilValue{}, NewRuntimeError(node, fmt.Sprintf("type mismatch: %s %s %s", left.Type(), op, right.Type()))
+	// named values
+	lnv, lok := left.(NamedValue)
+	rnv, rok := right.(NamedValue)
+
+	if lok || rok {
+		if !lok || !rok || lnv.TypeName != rnv.TypeName {
+			return NilValue{}, NewRuntimeError(
+				node,
+				"cannot operate on mismatched named types (try casting)",
+			)
+		}
+
+		// Same named type → unwrap
+		ul := unwrapNamed(left)
+		ur := unwrapNamed(right)
+
+		res, err := evalInfix(node, ul, op, ur)
+		if err != nil {
+			return NilValue{}, err
+		}
+
+		// Re-wrap result
+		return NamedValue{
+			TypeName: lnv.TypeName,
+			Value:    res,
+		}, nil
 	}
 
 	if left.Type() == INT && right.Type() == FLOAT {
@@ -1483,6 +1842,11 @@ func evalInfix(node *parser.InfixExpression, left Value, op string, right Value)
 
 	if left.Type() == FLOAT && right.Type() == INT {
 		return evalFloatInfix(node, left.(FloatValue), op, FloatValue{V: float64(right.(IntValue).V)})
+	}
+
+	// type mismatch check
+	if left.Type() != right.Type() {
+		return NilValue{}, NewRuntimeError(node, fmt.Sprintf("type mismatch: %s %s %s", left.Type(), op, right.Type()))
 	}
 
 	switch left.Type() {

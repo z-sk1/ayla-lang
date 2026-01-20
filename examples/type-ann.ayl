@@ -1,6 +1,11 @@
-egg x bool = ""
+type Timespan float
 
-explodeln(x)
 
-rock y string = "hi"
-explodeln(y)
+egg timer Timespan = Timespan(20)
+
+why int(timer) > 0 {
+    timer = timer - Timespan(1)
+
+    explodeln(timer)
+    wait(1000)
+}

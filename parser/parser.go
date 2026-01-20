@@ -52,16 +52,18 @@ func atof(a string) float64 {
 	return val
 }
 
-func (p *Parser) parseIdentList() []string {
+func (p *Parser) parseIdentList() ([]string, []token.Token) {
 	names := []string{}
+	nameToks := []token.Token{}
 
 	// current token must be IDENT
 	if p.curTok.Type != token.IDENT {
 		p.addError("expected identifier")
-		return nil
+		return nil, nil
 	}
 
 	names = append(names, p.curTok.Literal)
+	nameToks = append(nameToks, p.curTok)
 
 	for p.peekTok.Type == token.COMMA {
 		p.nextToken() // move to ','
@@ -69,13 +71,14 @@ func (p *Parser) parseIdentList() []string {
 
 		if p.curTok.Type != token.IDENT {
 			p.addError("expected identifier after ','")
-			return nil
+			return nil, nil
 		}
 
 		names = append(names, p.curTok.Literal)
+		nameToks = append(nameToks, p.curTok)
 	}
 
-	return names
+	return names, nameToks
 }
 
 func (p *Parser) isTypeToken(t token.TokenType) bool {
@@ -84,7 +87,8 @@ func (p *Parser) isTypeToken(t token.TokenType) bool {
 		token.INT_TYPE,
 		token.STRING_TYPE,
 		token.BOOL_TYPE,
-		token.FLOAT_TYPE:
+		token.FLOAT_TYPE,
+		token.ARR_TYPE:
 		return true
 	default:
 		return false
@@ -152,8 +156,8 @@ func (p *Parser) parseStatement() Statement {
 		}
 
 		return p.parseConstStatement()
-	case token.STRUCT:
-		return p.parseStructStatement()
+	case token.TYPE:
+		return p.parseTypeStatement()
 	case token.SWITCH:
 		return p.parseSwitchStatement()
 	case token.FUNC:
@@ -213,7 +217,7 @@ func (p *Parser) parseVarStatement() *VarStatement {
 	stmt.Name = p.curTok.Literal
 
 	// optional type
-	if p.isTypeToken(p.peekTok.Type) {
+	if p.isTypeToken(p.peekTok.Type) || p.peekTok.Type == token.IDENT {
 		p.nextToken()
 		stmt.Type = &Identifier{
 			NodeBase: NodeBase{Token: p.curTok},
@@ -274,7 +278,7 @@ func (p *Parser) parseMultiVarStatement() *MultiVarStatement {
 	}
 
 	p.nextToken() // ident
-	stmt.Names = p.parseIdentList()
+	stmt.Names, stmt.NameTokens = p.parseIdentList()
 	if stmt.Names == nil {
 		return nil
 	}
@@ -365,7 +369,7 @@ func (p *Parser) parseMultiConstStatement() *MultiConstStatement {
 	}
 
 	p.nextToken() // ident
-	stmt.Names = p.parseIdentList()
+	stmt.Names, stmt.NameTokens = p.parseIdentList()
 	if stmt.Names == nil {
 		return nil
 	}
@@ -445,7 +449,7 @@ func (p *Parser) parseMultiAssignStatement() *MultiAssignmentStatement {
 		NodeBase: NodeBase{Token: p.curTok},
 	}
 
-	stmt.Names = p.parseIdentList()
+	stmt.Names, _ = p.parseIdentList()
 	if stmt.Names == nil {
 		return nil
 	}
@@ -474,6 +478,83 @@ func (p *Parser) parseMultiAssignStatement() *MultiAssignmentStatement {
 	}
 
 	return stmt
+}
+
+func (p *Parser) parseTypeStatement() *TypeStatement {
+	stmt := &TypeStatement{
+		NodeBase: NodeBase{Token: p.curTok},
+	}
+
+	p.nextToken()
+	if p.curTok.Type != token.IDENT {
+		p.addError("expected identifier after 'type'")
+		return nil
+	}
+	stmt.Name = p.curTok.Literal
+
+	p.nextToken()
+
+	if p.curTok.Type == token.ASSIGN {
+		stmt.Alias = true
+		p.nextToken()
+	}
+
+	stmt.Type = p.parseType()
+
+	return stmt
+}
+
+func (p *Parser) parseType() TypeNode {
+	switch p.curTok.Type {
+	case token.INT_TYPE,
+		token.STRING_TYPE,
+		token.FLOAT_TYPE,
+		token.BOOL_TYPE,
+		token.IDENT:
+		return &IdentType{
+			NodeBase: NodeBase{Token: p.curTok},
+			Name:     p.curTok.Literal,
+		}
+	case token.STRUCT:
+		if p.peekTok.Type != token.LBRACE {
+			p.addError("expected '{' after idenfifier")
+			return nil
+		}
+		p.nextToken()
+
+		fields := []*StructField{}
+
+		// move to first field or }
+		p.nextToken()
+
+		for p.curTok.Type != token.RBRACE {
+			if p.curTok.Type != token.IDENT {
+				p.addError("expected field name inside struct type")
+				return nil
+			}
+			fieldName := &Identifier{
+				NodeBase: NodeBase{Token: p.curTok},
+				Value:    p.curTok.Literal,
+			}
+			// type identifier
+			p.nextToken()
+			if !(p.isTypeToken(p.curTok.Type)) && p.curTok.Type != token.IDENT {
+				p.addError(fmt.Sprintf("expected type name after field name '%s'", fieldName.Value))
+				return nil
+			}
+			fieldType := p.parseType()
+			fields = append(fields, &StructField{Name: fieldName, Type: fieldType})
+			p.nextToken()
+		}
+
+		return &StructType{
+			NodeBase: NodeBase{Token: p.curTok},
+			Fields:   fields,
+		}
+	default:
+		p.addError("unknown type")
+		return nil
+	}
 }
 
 func (p *Parser) parseArrayLiteral() Expression {
@@ -540,69 +621,6 @@ func (p *Parser) parseIndexAssignment() *IndexAssignmentStatement {
 	stmt.Left = left
 	stmt.Index = idx
 	stmt.Value = val
-
-	// optional semicolon
-	if p.peekTok.Type == token.SEMICOLON {
-		p.nextToken()
-	}
-
-	return stmt
-}
-
-func (p *Parser) parseStructStatement() *StructStatement {
-	stmt := &StructStatement{}
-	stmt.NodeBase = NodeBase{Token: p.curTok}
-
-	if p.peekTok.Type != token.IDENT {
-		p.addError("expected identifier after 'struct'")
-		return nil
-	}
-
-	p.nextToken()
-	stmt.Name = &Identifier{
-		NodeBase: NodeBase{Token: p.curTok},
-		Value:    p.curTok.Literal,
-	}
-
-	if p.peekTok.Type != token.LBRACE {
-		p.addError("expected '{' after idenfifier")
-		return nil
-	}
-	p.nextToken()
-
-	stmt.Fields = []*StructField{}
-
-	// move to first field or }
-	p.nextToken()
-
-	for p.curTok.Type != token.RBRACE {
-		if p.curTok.Type != token.IDENT {
-			p.addError("expected field name inside struct")
-			return nil
-		}
-
-		fieldName := &Identifier{
-			NodeBase: NodeBase{Token: p.curTok},
-			Value:    p.curTok.Literal,
-		}
-
-		// type identifier
-		p.nextToken()
-
-		if !p.isTypeToken(p.curTok.Type) {
-			p.addError(fmt.Sprintf("expected type name after field name '%s'", fieldName.Value))
-			return nil
-		}
-
-		fieldType := &Identifier{
-			NodeBase: NodeBase{Token: p.curTok},
-			Value:    p.curTok.Literal,
-		}
-
-		stmt.Fields = append(stmt.Fields, &StructField{Name: fieldName, Type: fieldType})
-
-		p.nextToken()
-	}
 
 	// optional semicolon
 	if p.peekTok.Type == token.SEMICOLON {
@@ -1151,57 +1169,57 @@ func (p *Parser) parseContinueStatement() *ContinueStatement {
 }
 
 func (p *Parser) parseForStatement() *ForStatement {
-    stmt := &ForStatement{
-        NodeBase: NodeBase{Token: p.curTok}, // 'four'
-    }
+	stmt := &ForStatement{
+		NodeBase: NodeBase{Token: p.curTok}, // 'four'
+	}
 
-    p.nextToken() // first token of init
-    stmt.Init = p.parseForInit()
-    if stmt.Init == nil {
-        p.addError("expected for init")
-        return nil
-    }
+	p.nextToken() // first token of init
+	stmt.Init = p.parseForInit()
+	if stmt.Init == nil {
+		p.addError("expected for init")
+		return nil
+	}
 
-    if p.peekTok.Type != token.SEMICOLON {
-        p.addError("expected ';' after for init")
-        return nil
-    }
-    p.nextToken() // move to ';'
-    p.nextToken() // move past ';'
+	if p.peekTok.Type != token.SEMICOLON {
+		p.addError("expected ';' after for init")
+		return nil
+	}
+	p.nextToken() // move to ';'
+	p.nextToken() // move past ';'
 
-    stmt.Condition = p.parseExpression(LOWEST)
-    if stmt.Condition == nil {
-        p.addError("expected for condition")
-        return nil
-    }
+	stmt.Condition = p.parseExpression(LOWEST)
+	if stmt.Condition == nil {
+		p.addError("expected for condition")
+		return nil
+	}
 
-    if p.peekTok.Type != token.SEMICOLON {
+	if p.peekTok.Type != token.SEMICOLON {
 		if p.curTok.Type != token.SEMICOLON {
-        	p.addError("expected ';' after for condition")
-        	return nil
+			p.addError("expected ';' after for condition")
+			return nil
 		}
-    }
+	}
 
 	if p.curTok.Type != token.SEMICOLON {
-    	p.nextToken() // move to ';'
+		p.nextToken() // move to ';'
 	}
-    p.nextToken() // move past ';'
+	p.nextToken() // move past ';'
 
-    stmt.Post = p.parseForPost()
-    if stmt.Post == nil {
-        p.addError("expected for post statement")
-        return nil
-    }
+	stmt.Post = p.parseForPost()
+	if stmt.Post == nil {
+		p.addError("expected for post statement")
+		return nil
+	}
 
-    if p.peekTok.Type != token.LBRACE {
-        p.addError("expected '{' after for post")
-        return nil
-    }
+	if p.peekTok.Type != token.LBRACE {
+		p.addError("expected '{' after for post")
+		return nil
+	}
 
-    p.nextToken() // move to '{'
-    stmt.Body = p.parseBlockStatement()
+	p.nextToken() // move to '{'
+	stmt.Body = p.parseBlockStatement()
 
-    return stmt
+	return stmt
 }
 
 func (p *Parser) parseWhileStatement() *WhileStatement {

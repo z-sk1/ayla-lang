@@ -5,27 +5,43 @@
   "publisher": "z-sk1",
   "version": "0.3.5",
   "icon": "icon.png",
+  "main": "./out/extension.js",
+  "activationEvents": [],
   "repository": {
     "url": "https://github.com/z-sk1/ayla-lang"
   },
   "engines": {
     "vscode": "^1.107.0"
   },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -watch -p ."
+  },
   "categories": [
     "Programming Languages"
   ],
   "contributes": {
-    "languages": [{
-      "id": "ayla",
-      "aliases": ["ayla", "ayla"],
-      "extensions": [".ayl",".ayla"],
-      "configuration": "./language-configuration.json"
-    }],
-    "grammars": [{
-      "language": "ayla",
-      "scopeName": "source.ayla",
-      "path": "./syntaxes/ayla.tmLanguage.json"
-    }],
+    "languages": [
+      {
+        "id": "ayla",
+        "aliases": [
+          "ayla",
+          "ayla"
+        ],
+        "extensions": [
+          ".ayl",
+          ".ayla"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "ayla",
+        "scopeName": "source.ayla",
+        "path": "./syntaxes/ayla.tmLanguage.json"
+      }
+    ],
     "iconThemes": [
       {
         "id": "ayla-icons",
@@ -33,5 +49,14 @@
         "path": "./icons/ayla-file-icons.json"
       }
     ]
+  },
+  "dependencies": {
+    "vscode": "^1.1.37",
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.107.0",
+    "typescript": "^5.0.0"
   }
 }

@@ -51,6 +51,7 @@ const (
 	// keywords
 	VAR      = "VAR"
 	CONST    = "CONST"
+	TYPE     = "TYPE"
 	STRUCT   = "STRUCT"
 	PRINT    = "PRINT"
 	IF       = "IF"
@@ -72,11 +73,13 @@ const (
 	FLOAT_TYPE  = "FLOAT_TYPE"
 	STRING_TYPE = "STRING_TYPE"
 	BOOL_TYPE   = "BOOL_TYPE"
+	ARR_TYPE    = "ARR_TYPE"
 )
 
 var keywords = map[string]TokenType{
 	"egg":    VAR,
 	"rock":   CONST,
+	"type":   TYPE,
 	"struct": STRUCT,
 
 	"ayla": IF,
@@ -93,6 +96,7 @@ var keywords = map[string]TokenType{
 	"float":  FLOAT_TYPE,
 	"string": STRING_TYPE,
 	"bool":   BOOL_TYPE,
+	"arr":    ARR_TYPE,
 
 	"four":   FOR,
 	"why":    WHILE,
