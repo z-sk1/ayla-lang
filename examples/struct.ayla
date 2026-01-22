@@ -1,11 +1,17 @@
-struct Person {
-    Name string
+type Person struct {
+    Name string 
     Age int
 }
 
-egg p = Person {
+egg p = Person{
     Name: "Ziad",
     Age: 13,
 }
 
-explode("${p.Name} is ${p.Age} years old")
+explodeln("${p.Name} is ${p.Age} years old")
+
+p = struct {
+    Lol: "lel"
+}
+
+explodeln(p.Lol)

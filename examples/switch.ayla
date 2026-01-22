@@ -5,7 +5,7 @@ decide yes {
         explode("x is 2")
     }
 
-    when 3 {
+    when x == 3 {
         explode("x is 3")
     }
 

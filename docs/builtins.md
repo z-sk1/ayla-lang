@@ -20,83 +20,48 @@ Hi
 ayla
 ```
 
-## **tsaln**:
-**tsaln** corresponds to fmt.Scanln() in Go. the parameter is a reference to the variable the value will be stored in.
+## **scanln**:
+**scanln** corresponds to fmt.Scanln() in Go. the parameter is a reference to the variable the value will be stored in.
 
 using the **&** symbol however is not needed.
 ```ayla
 egg name
 
 explode("what is your name?")
-tsaln(name)
+scanln(name)
 
 explode("Hello " + name + "!")
 ```
 > output: Hello {name}!
 
 **Please note:**
-tsaln() stores a string, so if you want to use it store other data types, make sure to use type casts
+scanln() stores a string, so if you want to use it store other data types, make sure to use type casts
 
-## **type casts**
-ayla lang supports 4 different casts.
+## **scankey**:
+**scankey** corresponds to Console.ReadKey() in C#. it takes in a key input without having to click [ENTER] like in scanln()
 
-- string()
+the parameter is also a reference to the variable the value will be stored in.
+
+using the **&** symbol is unneeded:
 ```ayla
-explode(string(4) + 2)
+egg key
+
+explodeln("Press [ENTER] to print something!")
+scankey(key)
+
+ayla key == "\n" {
+    explodeln("something")
+}
 ```
-> output: 42
-
-- int()
-```ayla
-egg num1
-egg num2
-
-explode("num 1?")
-tsaln(num1)
-
-explode("num 2?")
-tsaln(num2)
-
-explode(int(num1) + int(num2))
-```
-> input: 5, 4
-
-> output: 9
-
-- float()
-```ayla
-egg num1
-egg num2
-
-explode("num 1?")
-tsaln(num1)
-
-explode("num 2?")
-tsaln(num2)
-
-explode(float(num1) + float(num2))
-```
-> input: 5.5, 4.5
-
-> output: 10.0
-
-- bool()
-```ayla
-explode(bool(5))
-
-explode(bool(0))
-
-explode(bool(-3))
-```
-> output: yes, no, yes
+> output: something (if pressed ENTER)
 
 ## **type**:
 returns the type of the variable as a string
 
 ```ayla
-explode(type(5))
+explodeln(type(5))
 
-explode(type(yes))
+explodeln(type(yes))
 ```
 > output: int, bool
 
@@ -116,6 +81,46 @@ egg str = "ayla wow"
 explode(len(str))
 ```
 > output: 8
+
+## **toInt**:
+parse something to int
+
+```ayla
+explodeln(toInt(yes))
+```
+> output: 1
+
+## **toFloat**:
+parse something to float
+
+```ayla
+explodeln(toFloat("2.5") + 1.2)
+```
+> output: 3.7
+
+## **toString**:
+parse something to a string
+
+```ayla
+explodeln(toString([1, 2, 3]))
+```
+> output: [1, 2, 3]
+
+## **toBool**:
+parse something to a bool
+
+```ayla
+explodeln(toBool(1))
+```
+> output: yes
+
+## **toArr**:
+construct an array
+
+```ayla
+explodeln(toArr(1, 8, 2))
+```
+> output: [1, 8, 2]
 
 ## **push**:
 append a value to end of an array

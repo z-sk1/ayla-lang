@@ -1,0 +1,27 @@
+explodeln("1-12 times tables")
+
+egg score int
+egg total int
+
+why yes {
+    egg num1, num2 = randi(1, 12), randi(1, 12)
+    egg ans = num1 * num2
+
+    egg choice
+    explodeln("${num1} * ${num2} = ? (q to quit)")
+    scanln(choice)
+
+    ayla choice == "q" {
+        explodeln("Final score: ${score}/${total}")
+        kitkat
+    }
+
+    ayla toInt(choice) == ans {
+        explodeln("Correct!")
+        score = score + 1
+        total = total + 1
+    } elen {
+        explodeln("Incorrect! Correct is ${ans}")
+        total = total + 1
+    }
+}

@@ -42,7 +42,7 @@
       "patterns": [
         {
           "name": "keyword.control.ayla",
-          "match": "\\b(ayla|elen|four|why|back|kitkat|next|decide|when|otherwise)\\b"
+          "match": "\\b(ayla|elen|four|why|back|kitkat|next|decide|when|otherwise|spawn)\\b"
         }
       ]
     },

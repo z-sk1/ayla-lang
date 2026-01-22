@@ -15,6 +15,7 @@ const (
 	TypeFloat
 	TypeString
 	TypeBool
+	TypeArray
 	TypeNil
 	TypeStruct
 	TypeNamed
@@ -226,6 +227,9 @@ func (i *Interpreter) resolveType(expr parser.Expression) (*TypeInfo, error) {
 	case *parser.BoolLiteral:
 		return i.typeEnv["bool"], nil
 
+	case *parser.ArrayLiteral:
+		return i.typeEnv["arr"], nil
+
 	case *parser.NilLiteral:
 		return i.typeEnv["nil"], nil
 
@@ -401,6 +405,8 @@ func valueTypeOf(ti *TypeInfo) ValueType {
 		return BOOL
 	case TypeStruct:
 		return STRUCT
+	case TypeArray:
+		return ARR
 	default:
 		return NIL
 	}
@@ -418,6 +424,8 @@ func typeKindOf(vt ValueType) TypeKind {
 		return TypeBool
 	case STRUCT:
 		return TypeStruct
+	case ARR:
+		return TypeArray
 	default:
 		return TypeNil
 	}
@@ -433,6 +441,8 @@ func (i *Interpreter) typeInfoFromValue(v Value) *TypeInfo {
 		return i.typeEnv["string"]
 	case BoolValue:
 		return i.typeEnv["bool"]
+	case ArrayValue:
+		return i.typeEnv["arr"]
 	case *StructValue:
 		return v.TypeName
 	case NamedValue:
@@ -454,6 +464,8 @@ func (i *Interpreter) typeInfoFromIdent(name string) (*TypeInfo, bool) {
 		return i.typeEnv["string"], true
 	case "bool":
 		return i.typeEnv["bool"], true
+	case "arr":
+		return i.typeEnv["arr"], true
 	}
 
 	// user-defined
@@ -477,6 +489,8 @@ func defaultValueFromTypeInfo(node parser.Statement, ti *TypeInfo) (Value, error
 		return StringValue{V: ""}, nil
 	case TypeBool:
 		return BoolValue{V: false}, nil
+	case TypeArray:
+		return ArrayValue{Elements: make([]Value, 0)}, nil
 	case TypeStruct:
 		return &StructValue{
 			TypeName: ti,

@@ -126,6 +126,11 @@ type IdentType struct {
 
 func (*IdentType) typeNode() {}
 
+type SpawnStatement struct {
+	NodeBase
+	Body []Statement
+}
+
 type IfStatement struct {
 	NodeBase
 	Condition   Expression

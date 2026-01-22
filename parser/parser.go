@@ -17,6 +17,7 @@ type Parser struct {
 	peekTok2 token.Token // lookahead 2
 
 	errors []error
+	types  map[string]bool
 }
 
 type ParseError struct {
@@ -95,8 +96,17 @@ func (p *Parser) isTypeToken(t token.TokenType) bool {
 	}
 }
 
+func (p *Parser) isTypeName(name string) bool {
+	_, ok := p.types[name]
+	return ok
+}
+
 func New(l *lexer.Lexer) *Parser {
-	p := &Parser{l: l}
+	p := &Parser{
+		l:     l,
+		types: make(map[string]bool),
+	}
+
 	p.nextToken()
 	p.nextToken()
 	p.nextToken()
@@ -123,14 +133,31 @@ func (p *Parser) curPrecedence() int {
 	return LOWEST
 }
 
+func (p *Parser) consumeTerminators() {
+	for {
+		switch p.curTok.Type {
+		case token.NEWLINE, token.SEMICOLON:
+			p.nextToken()
+		default:
+			return
+		}
+	}
+}
+
 func (p *Parser) ParseProgram() []Statement {
 	var statements []Statement
 	for p.curTok.Type != token.EOF {
+		if p.curTok.Type == token.NEWLINE {
+			p.nextToken()
+		}
+
 		stmt := p.parseStatement()
 		if stmt != nil {
 			statements = append(statements, stmt)
 		}
 		p.nextToken()
+
+		p.consumeTerminators()
 	}
 
 	return statements
@@ -162,6 +189,8 @@ func (p *Parser) parseStatement() Statement {
 		return p.parseSwitchStatement()
 	case token.FUNC:
 		return p.parseFuncStatement()
+	case token.SPAWN:
+		return p.parseSpawnStatement()
 	case token.IF:
 		return p.parseIfStatement()
 	case token.FOR:
@@ -232,11 +261,6 @@ func (p *Parser) parseVarStatement() *VarStatement {
 		stmt.Value = p.parseExpression(LOWEST)
 	}
 
-	// optional semicolon
-	if p.peekTok.Type == token.SEMICOLON {
-		p.nextToken()
-	}
-
 	return stmt
 }
 
@@ -304,11 +328,6 @@ func (p *Parser) parseMultiVarStatement() *MultiVarStatement {
 		}
 	}
 
-	// optional semicolon
-	if p.peekTok.Type == token.SEMICOLON {
-		p.nextToken()
-	}
-
 	return stmt
 }
 
@@ -355,11 +374,6 @@ func (p *Parser) parseConstStatement() *ConstStatement {
 		stmt.Value = p.parseExpression(LOWEST)
 	}
 
-	// optional semicolon
-	if p.peekTok.Type == token.SEMICOLON {
-		p.nextToken()
-	}
-
 	return stmt
 }
 
@@ -395,11 +409,6 @@ func (p *Parser) parseMultiConstStatement() *MultiConstStatement {
 		}
 	}
 
-	// optional semicolon
-	if p.peekTok.Type == token.SEMICOLON {
-		p.nextToken()
-	}
-
 	return stmt
 }
 
@@ -421,11 +430,6 @@ func (p *Parser) parseAssignStatement() *AssignmentStatement {
 	stmt.Value = p.parseExpression(LOWEST)
 	if stmt.Value == nil {
 		return nil
-	}
-
-	// optional semicolon
-	if p.peekTok.Type == token.SEMICOLON {
-		p.nextToken()
 	}
 
 	return stmt
@@ -472,11 +476,6 @@ func (p *Parser) parseMultiAssignStatement() *MultiAssignmentStatement {
 		stmt.Value = p.parseTupleLiteral(stmt.Value)
 	}
 
-	// optional semicolon
-	if p.peekTok.Type == token.SEMICOLON {
-		p.nextToken()
-	}
-
 	return stmt
 }
 
@@ -491,6 +490,8 @@ func (p *Parser) parseTypeStatement() *TypeStatement {
 		return nil
 	}
 	stmt.Name = p.curTok.Literal
+
+	p.types[stmt.Name] = true
 
 	p.nextToken()
 
@@ -510,6 +511,7 @@ func (p *Parser) parseType() TypeNode {
 		token.STRING_TYPE,
 		token.FLOAT_TYPE,
 		token.BOOL_TYPE,
+		token.ARR_TYPE,
 		token.IDENT:
 		return &IdentType{
 			NodeBase: NodeBase{Token: p.curTok},
@@ -622,11 +624,6 @@ func (p *Parser) parseIndexAssignment() *IndexAssignmentStatement {
 	stmt.Index = idx
 	stmt.Value = val
 
-	// optional semicolon
-	if p.peekTok.Type == token.SEMICOLON {
-		p.nextToken()
-	}
-
 	return stmt
 }
 
@@ -638,10 +635,12 @@ func (p *Parser) parseStructLiteral(left Expression) Expression {
 	}
 
 	lit := &StructLiteral{
-		NodeBase: NodeBase{Token: p.curTok},
+		NodeBase: NodeBase{Token: p.curTok}, // ident
 		TypeName: ident,
 		Fields:   make(map[string]Expression),
 	}
+
+	p.nextToken() // {
 
 	// empty struct {}
 	if p.peekTok.Type == token.RBRACE {
@@ -688,19 +687,16 @@ func (p *Parser) parseStructLiteral(left Expression) Expression {
 		return nil
 	}
 
-	// optional semicolon
-	if p.peekTok.Type == token.SEMICOLON {
-		p.nextToken()
-	}
-
 	return lit
 }
 
 func (p *Parser) parseAnonymousStructLiteral() Expression {
 	lit := &AnonymousStructLiteral{
-		NodeBase: NodeBase{Token: p.curTok},
+		NodeBase: NodeBase{Token: p.curTok}, // struct keyword
 		Fields:   make(map[string]Expression),
 	}
+
+	p.nextToken() // {
 
 	// empty struct {}
 	if p.peekTok.Type == token.RBRACE {
@@ -747,11 +743,6 @@ func (p *Parser) parseAnonymousStructLiteral() Expression {
 		return nil
 	}
 
-	// optional semicolon
-	if p.peekTok.Type == token.SEMICOLON {
-		p.nextToken()
-	}
-
 	return lit
 }
 
@@ -784,11 +775,6 @@ func (p *Parser) parseMemberAssignment() *MemberAssignmentStatement {
 	p.nextToken() // value
 
 	val := p.parseExpression(LOWEST)
-
-	// optional semicolon
-	if p.peekTok.Type == token.SEMICOLON {
-		p.nextToken()
-	}
 
 	return &MemberAssignmentStatement{
 		NodeBase: NodeBase{Token: p.curTok},
@@ -844,6 +830,22 @@ func (p *Parser) parseIfStatement() *IfStatement {
 		p.nextToken() // '{'
 		stmt.Alternative = p.parseBlockStatement()
 	}
+
+	return stmt
+}
+
+func (p *Parser) parseSpawnStatement() *SpawnStatement {
+	stmt := &SpawnStatement{
+		NodeBase: NodeBase{Token: p.curTok},
+	}
+
+	p.nextToken() // {
+	if p.curTok.Type != token.LBRACE {
+		p.addError("expected '{' after spawn")
+		return nil
+	}
+
+	stmt.Body = p.parseBlockStatement()
 
 	return stmt
 }
@@ -989,7 +991,8 @@ func (p *Parser) parseFuncStatement() *FuncStatement {
 		if p.peekTok.Type == token.INT_TYPE ||
 			p.peekTok.Type == token.FLOAT_TYPE ||
 			p.peekTok.Type == token.STRING_TYPE ||
-			p.peekTok.Type == token.BOOL_TYPE {
+			p.peekTok.Type == token.BOOL_TYPE ||
+			p.isTypeName(p.peekTok.Literal) {
 
 			p.nextToken()
 			paramType = &Identifier{
@@ -1065,11 +1068,6 @@ func (p *Parser) parseFuncCall() Expression {
 	// parse args
 	call.Args = p.parseExpressionList(token.RPAREN)
 
-	// optional semicolon
-	if p.peekTok.Type == token.SEMICOLON {
-		p.nextToken()
-	}
-
 	return call
 }
 
@@ -1125,11 +1123,6 @@ func (p *Parser) parseReturnStatement() *ReturnStatement {
 		stmt.Values = append(stmt.Values, p.parseExpression(LOWEST))
 	}
 
-	// optional semicolon
-	if p.peekTok.Type == token.SEMICOLON {
-		p.nextToken()
-	}
-
 	return stmt
 }
 
@@ -1148,22 +1141,12 @@ func (p *Parser) parseBreakStatement() *BreakStatement {
 	stmt := &BreakStatement{}
 	stmt.NodeBase = NodeBase{Token: p.curTok}
 
-	// optional semicolon
-	if p.peekTok.Type == token.SEMICOLON {
-		p.nextToken()
-	}
-
 	return stmt
 }
 
 func (p *Parser) parseContinueStatement() *ContinueStatement {
 	stmt := &ContinueStatement{}
 	stmt.NodeBase = NodeBase{Token: p.curTok}
-
-	// optional semicolon
-	if p.peekTok.Type == token.SEMICOLON {
-		p.nextToken()
-	}
 
 	return stmt
 }
@@ -1451,6 +1434,9 @@ func (p *Parser) parsePrimary() Expression {
 		}
 		return nil
 
+	case token.STRUCT:
+		return p.parseAnonymousStructLiteral()
+
 	case token.IDENT:
 		ident := &Identifier{NodeBase: NodeBase{Token: p.curTok}, Value: p.curTok.Literal}
 
@@ -1458,11 +1444,8 @@ func (p *Parser) parsePrimary() Expression {
 			return p.parseFuncCall()
 		}
 
-		if p.peekTok.Type == token.LBRACE {
-			p.nextToken() // move to {
-			if p.peekTok.Type != token.CASE {
-				return p.parseStructLiteral(ident)
-			}
+		if p.peekTok.Type == token.LBRACE && p.isTypeName(ident.Value) {
+			return p.parseStructLiteral(ident)
 		}
 
 		return ident

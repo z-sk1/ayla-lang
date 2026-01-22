@@ -12,6 +12,7 @@ type Token struct {
 const (
 	ILLEGAL = "ILLEGAL"
 	EOF     = "EOF"
+	NEWLINE = "NEWLINE"
 
 	// identifiers
 	IDENT  = "IDENT"
@@ -62,6 +63,7 @@ const (
 	FUNC     = "FUNC"
 	RETURN   = "RETURN"
 	CONTINUE = "CONTINUE"
+	SPAWN    = "SPAWN"
 	FOR      = "FOR"
 	WHILE    = "WHILE"
 	BREAK    = "BREAK"
@@ -89,8 +91,9 @@ var keywords = map[string]TokenType{
 	"when":      CASE,
 	"otherwise": DEFAULT,
 
-	"fun":  FUNC,
-	"back": RETURN,
+	"fun":   FUNC,
+	"back":  RETURN,
+	"spawn": SPAWN,
 
 	"int":    INT_TYPE,
 	"float":  FLOAT_TYPE,

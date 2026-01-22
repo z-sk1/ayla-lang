@@ -1,0 +1,30 @@
+egg key string 
+egg timer int
+egg running bool
+egg quit bool
+
+explodeln("Press [ENTER] to start and stop stopwatch and q to quit")
+
+spawn {
+    why yes {
+        scankey(key)
+        ayla key == "\n" {
+            running = !running
+        } elen ayla key == "q" {
+            running = no
+            explodeln("Final: ${timer}s")
+            quit = yes
+            kitkat
+        }
+    }
+}
+
+why yes {
+    ayla running {
+        timer = timer + 1
+        explodeln("Elapsed: ${timer}s")
+        wait(1000)
+    } elen ayla quit {
+        kitkat
+    }
+}

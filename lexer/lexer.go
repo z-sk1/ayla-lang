@@ -99,6 +99,15 @@ func (l *Lexer) readString() string {
 	return str
 }
 
+func unescapeString(s string) string {
+	s = strings.ReplaceAll(s, `\n`, "\n")
+	s = strings.ReplaceAll(s, `\r`, "\r")
+	s = strings.ReplaceAll(s, `\t`, "\t")
+	s = strings.ReplaceAll(s, `\"`, `"`)
+	s = strings.ReplaceAll(s, `\\`, `\`)
+	return s
+}
+
 func (l *Lexer) peekChar() byte {
 	if l.readPosition >= len(l.input) {
 		return 0
@@ -108,7 +117,7 @@ func (l *Lexer) peekChar() byte {
 }
 
 func (l *Lexer) skipWhitespace() {
-	for l.ch == ' ' || l.ch == '\t' || l.ch == '\n' || l.ch == '\r' {
+	for l.ch == ' ' || l.ch == '\t' || l.ch == '\r' {
 		l.readChar()
 	}
 }
@@ -121,7 +130,7 @@ func (l *Lexer) skipSingleLineComment() {
 
 func (l *Lexer) skipMultiLineComment() {
 	l.readChar() // consume *
-	l.readChar() // move past it 
+	l.readChar() // move past it
 
 	for {
 		if l.ch == 0 {
@@ -144,6 +153,9 @@ func (l *Lexer) NextToken() token.Token {
 	var tok token.Token
 
 	switch l.ch {
+	case '\n':
+		tok = token.Token{Type: token.NEWLINE, Literal: "NEWLINE", Line: l.line, Column: l.column}
+		
 	case '=':
 		if l.peekChar() == '=' {
 			ch := l.ch
@@ -169,7 +181,8 @@ func (l *Lexer) NextToken() token.Token {
 
 		tok = token.Token{Type: token.SLASH, Literal: "/", Line: l.line, Column: l.column}
 	case '"':
-		tok = token.Token{Type: token.STRING, Literal: l.readString(), Line: l.line, Column: l.column}
+		str := unescapeString(l.readString())
+		tok = token.Token{Type: token.STRING, Literal: str, Line: l.line, Column: l.column}
 		return tok
 	case ',':
 		tok = token.Token{Type: token.COMMA, Literal: ",", Line: l.line, Column: l.column}

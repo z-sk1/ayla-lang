@@ -1,4 +1,4 @@
-fun add(x, y) {
+fun add(x float, y float) {
     back x + y;
 }
 
@@ -19,20 +19,20 @@ egg oper;
 egg secondNum;
 
 explodeln("Firstnum");
-tsaln(firstNum);
+scanln(firstNum);
 
 explodeln("Operator");
-tsaln(oper);
+scanln(oper);
  
 explodeln("Secondnum");
-tsaln(secondNum);
+scanln(secondNum);
 
 ayla oper == "+" {
-    explodeln(firstNum + oper + secondNum + "=" + string(add(float(firstNum), float(secondNum))));
+    explodeln(firstNum + oper + secondNum + "=" + toString(add(toFloat(firstNum), toFloat(secondNum))));
 } elen ayla oper == "-" {
-    explodeln(firstNum + oper + secondNum + "=" + string(subtract(float(firstNum), float(secondNum))));
+    explodeln(firstNum + oper + secondNum + "=" + toString(subtract(toFloat(firstNum), toFloat(secondNum))));
 } elen ayla oper == "*" {
-    explodeln(firstNum + oper + secondNum + "=" + string(multiply(float(firstNum), float(secondNum))));
+    explodeln(firstNum + oper + secondNum + "=" + toString(multiply(toFloat(firstNum), toFloat(secondNum))));
 } elen ayla oper == "/" {
-    explodeln(firstNum + oper + secondNum + "=" + string(divide(float(firstNum), float(secondNum))));
+    explodeln(firstNum + oper + secondNum + "=" + toString(divide(toFloat(firstNum), toFloat(secondNum))));
 }
