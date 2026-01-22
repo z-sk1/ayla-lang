@@ -16,6 +16,34 @@ See [INSTRUCTIONS.md](./INSTRUCTIONS.md) for full step-by-step instructions for 
 
 ---
 
+# Installation and Usage
+See [INSTRUCTIONS.md](./INSTRUCTIONS.md) for full step-by-step instructions for macOS and Windows.
+
+---
+
+## built in functions!
+- `explode(...)` – prints values to stdout
+- `explodeln(...)` — prints values to stdout and adds '\n' at the end
+- `scanln(x)` – scans console input after clicking enter and stores it in variable
+- `scankey(x)` – scans key press in console and stores it in variable  
+- `toBool(x)` – parses a value to boolean
+- `toString(x)` – parses a value to string
+- `toInt(x)` – parses a value to integer
+- `toFloat(x)` – parses a value to float
+- `toArr(x)` – parses a value to array
+- `type(x)` – returns type of value as string
+- `len(x)` – returns length of arrays or strings
+- `push(arr, val)` – append to array
+- `pop(arr)` – remove and return last element
+- `insert(arr, index, val)` – insert value
+- `remove(arr, index)` – remove element at index
+- `clear(arr)` – remove all elements
+- `wait(ms)` – wait for a duration in milliseconds
+- `randi()` or `randi(max)` or `randi(min, max)`
+- `randf()` or `randf(max)` or `randf(min, max)`
+
+See [docs/builtins.md](docs/builtins.md) for more about built-in functions.
+
 # the features
 
 ## declaration and assignment
@@ -100,12 +128,6 @@ rock a, b
 ```
 > output: runtime error at 1:5: constants, a, b, must be initialised
 
-same for statically typed multi constants
-```ayla
-rock a, b int
-```
-> output: runtime error at 1:5: constants, a, b, must be initialised
-
 same principles for assignment
 ```ayla
 egg a, b
@@ -144,55 +166,6 @@ egg x = 5
 ```
 also valid
 
-## block scope
-in ayla, every block has its own **Environment**.
-```ayla
-ayla yes {
-    egg x = 2 // define inside if statement
-}
-
-explode(x) // error
-```
-> output: runtime error at 5:10: undefined variable: x
-
-if the lower scope cant find the variable, it will look for it in the parent environment
-```ayla
-egg x = 4
-
-ayla yes {
-    x = 2
-}
-
-explode(x)
-```
-> output: 2
-
-
-but you can also define a variable with the same name in the child environment, and it wont affect the one above
-```ayla
-egg x = 5
-
-ayla yes {
-    explodeln(x) // 5
-
-    x = 3
-
-    explodeln(x) // 3
-
-    egg x = 7
-
-    explodeln(x) // 7
-}
-
-explodeln(x) // 3, because was assigned 3 in child
-```
-> output:
-```
-5
-3
-7
-```
-
 ## comments
 you can use both single line and multiline comments
 
@@ -225,46 +198,6 @@ ayla foo {
 }
 ```
 > output: foo is yes
-
-but, you can also assign them any `string`, `int`, or `float` value
-
-these are the values that assign the boolean to `no`:
-- `""`
-- `0`
-- `0.0`
-- `nil`
-- `no`
-
-all the other values will give the boolean a `yes` value
-
-```ayla
-egg x bool = 42
-
-explodeln(x)
-```
-> output: yes
-
-```ayla
-egg x bool = 0
-
-explodeln(x)
-```
-> output: no
-
-```ayla
-egg x bool = ""
-
-explodeln(x)
-```
-> output: no
-
-*also with negatives*
-```ayla
-egg x bool = -2.2
-
-explodeln(x)
-```
-> output: yes
 
 ## string concatenation
 you can concatenate strings using the `+` operator.
@@ -471,34 +404,9 @@ fun add(x, y) (int) {
 
 explodeln(add(4, 2))
 ```
-output: 6
+> output: 6
 
-you will encounter a `Runtime error` if you use the wrong type
-```ayla
-fun add(x, y) (string) {
-    back x + y
-}
-
-explodeln(add(4, 1))
-```
-> output: runtime error at 5:14: return 1, expected string, got int
-
-you can also add types to parameters
-```ayla
-fun add(x int, y int) (int) {
-    back x + y
-}
-```
-
-you will encounter a `Runtime error` as well if you use the wrong type for the parameter
-```ayla
-fun add(x int, y int) (int) {
-    back x + y
-}
-
-egg sum = add("4", 2)
-```
-> output: runtime error at 5:14: paramteter 'x' expected int, got string
+to see more about functions see [docs/functions.md](docs/functions.md)
 
 ## arrays
 to initialise an array use square brackets: `[]`
@@ -530,53 +438,11 @@ explode(arr)
 > output: [hello, world]
 
 ## structs
-there are two types of structs in ayla lang, typed structs, and anonymous structs
+ayla supports typed, and anonymous structs
 
-### typed structs 
-firstly, typed structs require you to define a type of struct like this
-
+typed:
 ```ayla
-struct Person {
-    Name string
-    Age int
-}
-```
-
-and then use it to store data in variables like this
-
-```ayla 
-egg p = Person {
-    Name: "Ziad",
-    Age: 13
-}
-```
-
-then use the `.` symbol to access the fields inside the struct
-```ayla
-egg name = p.Name
-egg age = p.Age
-
-explode("${name} is ${age} years old")
-```
-> output: Ziad is 13 years old
-
-however, if you use the wrong type then you come across a `Runtime error`
-```ayla
-struct Operation {
-    Left int
-    Right int
-}
-
-egg o = Operation {
-    Left: "5",
-    Right: 3
-}
-```
-> output: runtime error at 6:19: field 'Left' type string should be int
-
-same thing for member expressions and assignment
-```ayla
-struct Person {
+type struct Person {
     Name string
     Age int
 }
@@ -586,87 +452,142 @@ egg p = Person {
     Age: 13
 }
 
-p.Age = "13"
+explode(p.Name + "is " + string(p.Age))
 ```
-> output: runtime error at 11:13: field 'Age' type string should be int
 
-if you use an unknown field not declared in the type struct you will also encounted a `Runtime error`
+for anonymous structs, since there is no struct type, just use the `struct` keyword to denote an anonymous struct
+anonymous:
 ```ayla
-struct Person {
-    Name string
-    Age int
-}
-
-egg p = Person {
+egg p = struct {
     Name: "Ziad",
-    Age: 13,
-    Extra: "extra field"
+    Age: 13
 }
+
+explode(p.Name + "is " + string(p.Age))
 ```
-> output: runtime error at 6:16: unknown field 'Extra' in struct Person
+for more about structs, check out [docs/structs.md](docs/structs.md)
 
-### anonymous structs
-then, anonymous structs dont require you to define a type
+## user defined types and aliases 
+ayla supports creating your own **named types** and **aliases**
 
-you can just initialise them with {}, in a similar way to arrays
+named types are a completely new type with an underlying type like `int`
+
+for example, in this snippet, you need to cast the integer to int since otherwise it would have a type of int
+```ayla
+type Age int
+
+egg age = Age(13)
+```
+
+you can also use the defined types as type annotation
+```ayla
+type Age int
+
+egg age Age = Age(13)
+```
+
+aliases are just a new name for a type, so they act exactly like their underlying type
+
+this means you dont need a type cast
+```ayla
+type Name = string
+
+egg n Name = "string"
+```
+
+see more about type definitons and aliases here: [docs/type-definitions.md](docs/type-definitions.md)
+
+## block scope
+in ayla, every block has its own **Environment**.
+```ayla
+ayla yes {
+    egg x = 2 // define inside if statement
+}
+
+explode(x) // error
+```
+> output: runtime error at 5:10: undefined variable: x
+
+if the lower scope cant find the variable, it will look for it in the parent environment
+```ayla
+egg x = 4
+
+ayla yes {
+    x = 2
+}
+
+explode(x)
+```
+> output: 2
+
+
+but you can also define a variable with the same name in the child environment, and it wont affect the one above
+```ayla
+egg x = 5
+
+ayla yes {
+    explodeln(x) // 5
+
+    x = 3
+
+    explodeln(x) // 3
+
+    egg x = 7
+
+    explodeln(x) // 7
+}
+
+explodeln(x) // 3, because was assigned 3 in child
+```
+> output:
+```
+5
+3
+7
+```
+
+## concurrency
+ayla supports basic concurrency using the `spawn` keyword.
+
+`spawn` runs a block of code **in parallel** with the rest of the program.
 
 ```ayla
-egg Operation = {
-    Left: 5,
-    Right: 4
+spawn {
+    why yes {
+        explodeln("tick")
+        wait(1000)
+    }
 }
 
-explode("${Operation.Left} + ${Operation.Right} = ${Operation.Left + Operation.Right})
+explodeln("running at the same time")
+Both blocks execute concurrently.
 ```
-> output: 5 + 4 = 9
 
-you can also use member expressions and assignment using the `.` symbol
-```ayla
-egg oper = {
-    Left: 4,
-    Right: 5,
-}
+## shared state:
 
-oper.Right = 10
-
-explode(oper.Right + oper.Left)
-```
-> output: 14
-
-you will also come across `Runtime errors` using anonymous structs in the same way as typed structs
-
-this happens if you use a different type compared to the one you declared in the field
+Spawned blocks share variables with the parent scope.
 
 ```ayla
-egg oper = {
-    Left: 5, // int
-    Right: 10
+egg counter = 0
+
+spawn {
+    why counter < 5 {
+        counter = counter + 1
+        wait(500)
+    }
 }
 
-oper.Left = "hi" // string
+why counter < 5 {
+    explodeln(counter)
+    wait(500)
+}
 ```
-> output: runtime error at 6:17: field 'Left' type string should be int
 
-## built in functions!
-- `explode(...)` – prints values to stdout
-- `explodeln(...)` — prints values to stdout and adds '\n' at the end
-- `tsaln(x)` – scans console input and stores it in variable
-- `bool(x)` – converts a value to boolean
-- `string(x)` – converts a value to string
-- `int(x)` – converts a value to integer
-- `float(x)` – converts a value to float
-- `type(x)` – returns type of value as string
-- `len(x)` – returns length of arrays or strings
-- `push(arr, val)` – append to array
-- `pop(arr)` – remove and return last element
-- `insert(arr, index, val)` – insert value
-- `remove(arr, index)` – remove element at index
-- `clear(arr)` – remove all elements
-- `wait(ms)` – wait for a duration in milliseconds
-- `randi()` or `randi(max)` or `randi(min, max)`
-- `randf()` or `randf(max)` or `randf(min, max)`
+there is currently no synchronization (locks, mutexes, channels)
 
-See [docs/builtins.md](docs/builtins.md) for more about built-in functions.
+so be careful when mutating shared variables from multiple spawns.
+
+For full details, see [docs/concurrency.md](docs/concurrency.md).
 
 ## runtime errors
 error handling for runtime errors

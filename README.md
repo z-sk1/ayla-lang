@@ -26,10 +26,11 @@ See [INSTRUCTIONS.md](./INSTRUCTIONS.md) for full step-by-step instructions for 
 - `explodeln(...)` — prints values to stdout and adds '\n' at the end
 - `scanln(x)` – scans console input after clicking enter and stores it in variable
 - `scankey(x)` – scans key press in console and stores it in variable  
-- `bool(x)` – converts a value to boolean
-- `string(x)` – converts a value to string
-- `int(x)` – converts a value to integer
-- `float(x)` – converts a value to float
+- `toBool(x)` – parses a value to boolean
+- `toString(x)` – parses a value to string
+- `toInt(x)` – parses a value to integer
+- `toFloat(x)` – parses a value to float
+- `toArr(x)` – parses a value to array
 - `type(x)` – returns type of value as string
 - `len(x)` – returns length of arrays or strings
 - `push(arr, val)` – append to array
