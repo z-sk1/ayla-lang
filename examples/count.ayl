@@ -1,0 +1,6 @@
+egg i int
+
+why i < 1000000 {
+    i = i + 1
+    explodeln(i)
+}

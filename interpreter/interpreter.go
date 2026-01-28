@@ -2,6 +2,7 @@ package interpreter
 
 import (
 	"fmt"
+	"math"
 	"math/rand"
 	"strconv"
 	"strings"
@@ -196,6 +197,17 @@ func typesAssignable(from, to *TypeInfo) bool {
 	return false
 }
 
+func promoteValueToType(v Value, to *TypeInfo) Value {
+	fromKind := typeKindOf(v.Type())
+
+	// int → float
+	if fromKind == TypeInt && to.Kind == TypeFloat {
+		return FloatValue{V: float64(v.(IntValue).V)}
+	}
+
+	return v
+}
+
 func unwrapNamed(v Value) Value {
 	for {
 		if nv, ok := v.(NamedValue); ok {
@@ -290,7 +302,7 @@ func (i *Interpreter) registerBuiltins() {
 			case STRING:
 				n, err := strconv.Atoi(v.(StringValue).V)
 				if err != nil {
-					return NilValue{}, NewRuntimeError(node, "could not convert string to int")
+					return NilValue{}, NewRuntimeError(node, fmt.Sprintf("could not parse string to int: %s", err.Error()))
 				}
 				return IntValue{V: n}, nil
 			default:
@@ -389,6 +401,41 @@ func (i *Interpreter) registerBuiltins() {
 		},
 	}
 
+	env.builtins["ord"] = &BuiltinFunc{
+		Name:  "ord",
+		Arity: 1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			s, ok := args[0].(StringValue)
+			if !ok {
+				return NilValue{}, fmt.Errorf("ord expects string")
+			}
+
+			r := []rune(s.V)
+			if len(r) != 1 {
+				return NilValue{}, fmt.Errorf("ord expects single character")
+			}
+
+			return IntValue{V: int(r[0])}, nil
+		},
+	}
+
+	env.builtins["chr"] = &BuiltinFunc{
+		Name:  "chr",
+		Arity: 1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			if len(args) != 1 {
+				return NilValue{}, fmt.Errorf("chr expects 1 argument")
+			}
+
+			v, ok := args[0].(IntValue)
+			if !ok {
+				return NilValue{}, fmt.Errorf("chr expects int")
+			}
+
+			return StringValue{V: string(rune(v.V))}, nil
+		},
+	}
+
 	env.builtins["len"] = &BuiltinFunc{
 		Name:  "len",
 		Arity: 1,
@@ -405,8 +452,8 @@ func (i *Interpreter) registerBuiltins() {
 		},
 	}
 
-	env.builtins["type"] = &BuiltinFunc{
-		Name:  "type",
+	env.builtins["typeof"] = &BuiltinFunc{
+		Name:  "typeof",
 		Arity: 1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
 			v := args[0]
@@ -431,11 +478,24 @@ func (i *Interpreter) registerBuiltins() {
 		Name:  "explodeln",
 		Arity: -1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			for _, v := range args {
-				if v.Type() != NIL {
-					fmt.Println(v.String())
+			if len(args) > 1 {
+				val := args[1:]
+
+				if args[0].Type() != NIL {
+					fmt.Print(args[0].String())
 				}
+
+				for _, v := range val {
+					fmt.Println(" " + v.String())
+				}
+
+				return NilValue{}, nil
 			}
+
+			if args[0].Type() != NIL {
+				fmt.Println(args[0].String())
+			}
+
 			return NilValue{}, nil
 		},
 	}
@@ -744,6 +804,36 @@ func (i *Interpreter) registerBuiltins() {
 			return NilValue{}, NewRuntimeError(node, "invalid amount of args, randf expects 0-2 args")
 		},
 	}
+
+	env.builtins["sin"] = &BuiltinFunc{
+		Name:  "sin",
+		Arity: 1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			val := args[0]
+
+			switch v := val.(type) {
+			case IntValue:
+				val = FloatValue{V: float64(v.V)}
+			}
+
+			return FloatValue{V: math.Sin(val.(FloatValue).V)}, nil
+		},
+	}
+
+	env.builtins["cos"] = &BuiltinFunc{
+		Name:  "cos",
+		Arity: 1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			val := args[0]
+
+			switch v := val.(type) {
+			case IntValue:
+				val = FloatValue{V: float64(v.V)}
+			}
+
+			return FloatValue{V: math.Cos(val.(FloatValue).V)}, nil
+		},
+	}
 }
 
 func unwrapStructType(t *TypeInfo) (*TypeInfo, error) {
@@ -825,7 +915,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 
 		default:
 			// egg x
-			val = NilValue{}
+			val = UninitializedValue{}
 		}
 
 		if err != nil {
@@ -859,11 +949,30 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		}
 
 		// variable must not exist
-		if _, ok := i.env.store[stmt.Name]; ok {
-			return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("cant redeclare var: %s", stmt.Name))
+		if _, ok := i.env.store[stmt.Name.Value]; ok {
+			return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("cant redeclare var: %s", stmt.Name.Value))
 		}
 
-		i.env.Define(stmt.Name, val)
+		if stmt.Type != nil {
+			expectedTI, _ := i.typeInfoFromIdent(stmt.Type.Value)
+			val = promoteValueToType(val, expectedTI)
+		}
+
+		i.env.Define(stmt.Name.Value, val)
+		return SignalNone{}, nil
+
+	case *parser.VarStatementNoKeyword:
+		val, err := i.EvalExpression(stmt.Value)
+		if err != nil {
+			return NilValue{}, err
+		}
+
+		// variable must not exist
+		if _, ok := i.env.store[stmt.Name.Value]; ok {
+			return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("cant redeclare var: %s", stmt.Name.Value))
+		}
+
+		i.env.Define(stmt.Name.Value, val)
 		return SignalNone{}, nil
 
 	case *parser.MultiVarStatement:
@@ -888,11 +997,11 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		}
 
 		for idx, name := range stmt.Names {
-			if _, ok := i.env.store[name]; ok {
-				return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("cannot redeclare var: %s", name))
+			if _, ok := i.env.store[name.Value]; ok {
+				return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("cannot redeclare var: %s", name.Value))
 			}
 
-			var v Value = NilValue{}
+			var v Value = UninitializedValue{}
 
 			switch {
 			case stmt.Value != nil:
@@ -912,7 +1021,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 					return SignalNone{}, err
 				}
 			default:
-				v = NilValue{}
+				v = UninitializedValue{}
 			}
 
 			if stmt.Type != nil {
@@ -941,7 +1050,41 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 				}
 			}
 
-			i.env.Define(name, v)
+			if stmt.Type != nil {
+				expectedTI, _ := i.typeInfoFromIdent(stmt.Type.Value)
+				v = promoteValueToType(v, expectedTI)
+			}
+
+			i.env.Define(name.Value, v)
+		}
+
+		return SignalNone{}, nil
+
+	case *parser.MultiVarStatementNoKeyword:
+		var values []Value
+
+		val, err := i.EvalExpression(stmt.Value)
+		if err != nil {
+			return SignalNone{}, err
+		}
+
+		tuple, ok := val.(TupleValue)
+		if !ok {
+			return SignalNone{}, NewRuntimeError(stmt, "multi var assignment expects tuple value")
+		}
+
+		if len(tuple.Values) != len(stmt.Names) {
+			return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("expected %d values, got %d", len(stmt.Names), len(tuple.Values)))
+		}
+
+		values = tuple.Values
+
+		for idx, name := range stmt.Names {
+			if _, ok := i.env.store[name.Value]; ok {
+				return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("cannot redeclare var: %s", name.Value))
+			}
+
+			i.env.Define(name.Value, values[idx])
 		}
 
 		return SignalNone{}, nil
@@ -951,7 +1094,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		var err error
 
 		if stmt.Value == nil {
-			return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("const %s must be initalised with a value", stmt.Name))
+			return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("const %s must be initalised with a value", stmt.Name.Value))
 		} else {
 			val, err = i.EvalExpression(stmt.Value)
 			if err != nil {
@@ -986,12 +1129,17 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		}
 
 		// check if variable already exist
-		if _, ok := i.env.store[stmt.Name]; ok {
-			return SignalNone{}, NewRuntimeError(s, fmt.Sprintf("cant redeclare const: %s", stmt.Name))
+		if _, ok := i.env.store[stmt.Name.Value]; ok {
+			return SignalNone{}, NewRuntimeError(s, fmt.Sprintf("cant redeclare const: %s", stmt.Name.Value))
+		}
+
+		if stmt.Type != nil {
+			expectedTI, _ := i.typeInfoFromIdent(stmt.Type.Value)
+			val = promoteValueToType(val, expectedTI)
 		}
 
 		// store const val
-		i.env.Define(stmt.Name, ConstValue{Value: val})
+		i.env.Define(stmt.Name.Value, ConstValue{Value: val})
 		return SignalNone{}, nil
 
 	case *parser.MultiConstStatement:
@@ -1002,9 +1150,9 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 
 			for _, name := range stmt.Names {
 				if name == stmt.Names[len(stmt.Names)-1] {
-					names = names + name
+					names = names + name.Value
 				} else {
-					names = names + (name + ", ")
+					names = names + (name.Value + ", ")
 				}
 			}
 
@@ -1029,8 +1177,8 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		}
 
 		for idx, name := range stmt.Names {
-			if _, ok := i.env.store[name]; ok {
-				return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("cannot redeclare const: %s", name))
+			if _, ok := i.env.store[name.Value]; ok {
+				return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("cannot redeclare const: %s", name.Value))
 			}
 
 			var v Value = NilValue{}
@@ -1065,7 +1213,12 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 				}
 			}
 
-			i.env.Define(name, v)
+			if stmt.Type != nil {
+				expectedTI, _ := i.typeInfoFromIdent(stmt.Type.Value)
+				v = promoteValueToType(v, expectedTI)
+			}
+
+			i.env.Define(name.Value, v)
 		}
 
 		return SignalNone{}, nil
@@ -1079,15 +1232,15 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			}
 
 			if stmt.Alias {
-				i.typeEnv[stmt.Name] = &TypeInfo{
-					Name:       stmt.Name,
+				i.typeEnv[stmt.Name.Value] = &TypeInfo{
+					Name:       stmt.Name.Value,
 					Kind:       underlying.Kind,
 					Underlying: underlying,
 					Alias:      true,
 				}
 			} else {
-				i.typeEnv[stmt.Name] = &TypeInfo{
-					Name:       stmt.Name,
+				i.typeEnv[stmt.Name.Value] = &TypeInfo{
+					Name:       stmt.Name.Value,
 					Kind:       TypeNamed,
 					Underlying: underlying,
 				}
@@ -1107,7 +1260,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			}
 
 			ti := &TypeInfo{
-				Name:   stmt.Name,
+				Name:   stmt.Name.Value,
 				Kind:   TypeStruct,
 				Fields: fields,
 			}
@@ -1116,7 +1269,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 				ti.Alias = true
 			}
 
-			i.typeEnv[stmt.Name] = ti
+			i.typeEnv[stmt.Name.Value] = ti
 			return SignalNone{}, nil
 		}
 
@@ -1126,13 +1279,19 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			return SignalNone{}, err
 		}
 
-		existingVal, ok := i.env.Get(stmt.Name)
+		existingVal, ok := i.env.Get(stmt.Name.Value)
 		if !ok {
-			return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("assignment to undefined variable: %s", stmt.Name))
+			return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("assignment to undefined variable: %s", stmt.Name.Value))
 		}
 
 		if _, isConst := existingVal.(ConstValue); isConst {
-			return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("cannot reassign to const: %s", stmt.Name))
+			return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("cannot reassign to const: %s", stmt.Name.Value))
+		}
+
+		switch existingVal.(type) {
+		case UninitializedValue:
+			i.env.Set(stmt.Name.Value, val)
+			return SignalNone{}, nil
 		}
 
 		expected := existingVal.Type()
@@ -1142,7 +1301,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("type mismatch: '%s' assigned to a '%s'", string(actual), string(expected)))
 		}
 
-		i.env.Set(stmt.Name, val)
+		i.env.Set(stmt.Name.Value, val)
 		return SignalNone{}, nil
 
 	case *parser.MultiAssignmentStatement:
@@ -1152,13 +1311,13 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		}
 
 		for idx, name := range stmt.Names {
-			existingVal, ok := i.env.Get(name)
+			existingVal, ok := i.env.Get(name.Value)
 			if !ok {
-				return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("assignment to undefined variable: %s", name))
+				return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("assignment to undefined variable: %s", name.Value))
 			}
 
 			if _, isConst := existingVal.(ConstValue); isConst {
-				return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("cannot reassign to const: %s", name))
+				return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("cannot reassign to const: %s", name.Value))
 			}
 
 			tuple, ok := val.(TupleValue)
@@ -1170,6 +1329,11 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 				return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("multi assign expected %d values, got %d", len(stmt.Names), len(tuple.Values)))
 			}
 
+			if _, ok := existingVal.(UninitializedValue); ok {
+				i.env.Set(name.Value, tuple.Values[idx])
+				continue
+			}
+
 			expected := existingVal.Type()
 			actual := tuple.Values[idx].Type()
 
@@ -1177,7 +1341,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 				return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("type mismatch: '%s' assigned to '%s'", string(actual), string(expected)))
 			}
 
-			i.env.Set(name, tuple.Values[idx])
+			i.env.Set(name.Value, tuple.Values[idx])
 		}
 
 		return SignalNone{}, nil
@@ -1251,7 +1415,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		return SignalNone{}, nil
 
 	case *parser.FuncStatement:
-		i.env.SetFunc(stmt.Name, &Func{Params: stmt.Params, Body: stmt.Body, ReturnTypes: stmt.ReturnTypes, Env: i.env})
+		i.env.SetFunc(stmt.Name.Value, &Func{Params: stmt.Params, Body: stmt.Body, ReturnTypes: stmt.ReturnTypes, Env: i.env})
 		return SignalNone{}, nil
 
 	case *parser.ReturnStatement:
@@ -1690,7 +1854,7 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 			return NilValue{}, err
 		}
 
-		return evalInfix(expr, left, expr.Operator, right)
+		return i.evalInfix(expr, left, expr.Operator, right)
 
 	case *parser.PrefixExpression:
 		right, err := i.EvalExpression(expr.Right)
@@ -1715,7 +1879,7 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 			out.WriteString(val.String())
 		}
 
-		return &StringValue{V: out.String()}, nil
+		return StringValue{V: out.String()}, nil
 
 	default:
 		return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("unhandled expression type: %T", e))
@@ -1723,7 +1887,7 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 }
 
 func (i *Interpreter) evalCall(e *parser.FuncCall) (Value, error) {
-	if ti, ok := i.typeEnv[e.Name]; ok {
+	if ti, ok := i.typeEnv[e.Name.Value]; ok {
 		if len(e.Args) != 1 {
 			return NilValue{}, NewRuntimeError(e, "type cast expects 1 arg")
 		}
@@ -1816,7 +1980,7 @@ func (i *Interpreter) evalTypeCast(target *TypeInfo, arg parser.Expression, node
 
 func (i *Interpreter) evalFuncCall(expr *parser.FuncCall) (Value, error) {
 	// built in?
-	if b, ok := i.env.builtins[expr.Name]; ok {
+	if b, ok := i.env.builtins[expr.Name.Value]; ok {
 		args := []Value{}
 
 		for _, a := range expr.Args {
@@ -1840,9 +2004,9 @@ func (i *Interpreter) evalFuncCall(expr *parser.FuncCall) (Value, error) {
 	}
 
 	// user-defined
-	fn, ok := i.env.GetFunc(expr.Name)
+	fn, ok := i.env.GetFunc(expr.Name.Value)
 	if !ok {
-		return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("unknown function: %s", expr.Name))
+		return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("unknown function: %s", expr.Name.Value))
 	}
 
 	if len(fn.Params) != len(expr.Args) {
@@ -1867,11 +2031,11 @@ func (i *Interpreter) evalFuncCall(expr *parser.FuncCall) (Value, error) {
 			if expected == "float" && val.Type() == INT {
 				val = FloatValue{V: float64(val.(IntValue).V)}
 			} else if actual != expected {
-				return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("parameter '%s' expected %v, got %v", param.Value, expected, actual))
+				return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("parameter '%s' expected %v, got %v", param.Name.Value, expected, actual))
 			}
 		}
 
-		newEnv.Define(param.Value, val)
+		newEnv.Define(param.Name.Value, val)
 	}
 
 	// execute body
@@ -1957,7 +2121,7 @@ func evalIndexExpression(node parser.Expression, left, idx Value) (Value, error)
 		}
 
 		r := []rune(left.V)
-		return &StringValue{V: string(r[idx])}, nil
+		return StringValue{V: string(r[idx])}, nil
 
 	default:
 		return NilValue{}, NewRuntimeError(node, fmt.Sprintf("indexing is not allowed with type: %T", left.Type()))
@@ -1984,8 +2148,8 @@ func evalMemberExpression(node parser.Expression, left Value, field string) (Val
 	return val, nil
 }
 
-func evalInfix(node *parser.InfixExpression, left Value, op string, right Value) (Value, error) {
-	// nil handling first
+func (i *Interpreter) evalInfix(node *parser.InfixExpression, left Value, op string, right Value) (Value, error) {
+	// nil handling
 	if _, ok := left.(NilValue); ok {
 		return evalNilInfix(node, op, right)
 	}
@@ -2009,7 +2173,7 @@ func evalInfix(node *parser.InfixExpression, left Value, op string, right Value)
 		ul := unwrapNamed(left)
 		ur := unwrapNamed(right)
 
-		res, err := evalInfix(node, ul, op, ur)
+		res, err := i.evalInfix(node, ul, op, ur)
 		if err != nil {
 			return NilValue{}, err
 		}
@@ -2061,7 +2225,14 @@ func evalIntInfix(node *parser.InfixExpression, left IntValue, op string, right 
 			return NilValue{}, NewRuntimeError(node, "undefined: division by zero")
 		}
 
-		return IntValue{V: left.V / right.V}, nil
+		return FloatValue{V: float64(left.V) / float64(right.V)}, nil
+
+	case "%":
+		if right.V == 0 {
+			return NilValue{}, NewRuntimeError(node, "undefined: mod by zero")
+		}
+
+		return IntValue{V: left.V % right.V}, nil
 	case "==":
 		return BoolValue{V: left.V == right.V}, nil
 	case "!=":

@@ -6,7 +6,7 @@ const node_1 = require("vscode-languageclient/node");
 let client;
 function activate(ctx) {
     const serverExe = ctx.asAbsolutePath("server/ayla-lsp");
-    client = new node_1.LanguageClient("ayla", "Ayla Language Server", {
+    client = new node_1.LanguageClient("ayla", "elen", {
         command: serverExe,
         transport: 0 // stdio
     }, {

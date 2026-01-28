@@ -5,13 +5,13 @@ type Person struct {
 
 egg p = Person{
     Name: "Ziad",
-    Age: 13,
+    Age: 13
 }
 
 explodeln("${p.Name} is ${p.Age} years old")
 
-p = struct {
-    Lol: "lel"
+egg lol = struct {
+    Lol: "lel",
 }
 
-explodeln(p.Lol)
+explodeln(lol.Lol)

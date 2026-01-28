@@ -212,6 +212,16 @@ func (n NilValue) String() string {
 	return "nil"
 }
 
+type UninitializedValue struct{}
+
+func (u UninitializedValue) Type() ValueType {
+	return NIL
+}
+
+func (u UninitializedValue) String() string {
+	return "nil"
+}
+
 func (i *Interpreter) resolveType(expr parser.Expression) (*TypeInfo, error) {
 	switch e := expr.(type) {
 

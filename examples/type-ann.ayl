@@ -1,10 +1,9 @@
-type Timespan float
+type Timespan int
 
-
-egg timer Timespan = Timespan(20)
+egg timer = Timespan(20)
 
 why int(timer) > 0 {
-    timer = timer - Timespan(1)
+    timer = timer - 1
 
     explodeln(timer)
     wait(1000)

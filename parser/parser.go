@@ -11,10 +11,10 @@ import (
 
 type Parser struct {
 	NodeBase
-	l        *lexer.Lexer
-	curTok   token.Token // current
-	peekTok  token.Token // lookahead 1
-	peekTok2 token.Token // lookahead 2
+	l       *lexer.Lexer
+	curTok  token.Token // current
+	peekTok token.Token // lookahead 1
+	peekBuf []token.Token
 
 	errors []error
 	types  map[string]bool
@@ -53,33 +53,29 @@ func atof(a string) float64 {
 	return val
 }
 
-func (p *Parser) parseIdentList() ([]string, []token.Token) {
-	names := []string{}
-	nameToks := []token.Token{}
+func (p *Parser) parseIdentList() []*Identifier {
+	idents := []*Identifier{}
 
-	// current token must be IDENT
-	if p.curTok.Type != token.IDENT {
-		p.addError("expected identifier")
-		return nil, nil
-	}
-
-	names = append(names, p.curTok.Literal)
-	nameToks = append(nameToks, p.curTok)
-
-	for p.peekTok.Type == token.COMMA {
-		p.nextToken() // move to ','
-		p.nextToken() // move to IDENT
-
+	for {
 		if p.curTok.Type != token.IDENT {
-			p.addError("expected identifier after ','")
-			return nil, nil
+			return idents
 		}
 
-		names = append(names, p.curTok.Literal)
-		nameToks = append(nameToks, p.curTok)
+		ident := &Identifier{
+			NodeBase: NodeBase{Token: p.curTok},
+			Value:    p.curTok.Literal,
+		}
+		idents = append(idents, ident)
+
+		if p.peekTok.Type != token.COMMA {
+			break
+		}
+
+		p.nextToken() // ,
+		p.nextToken() // next ident
 	}
 
-	return names, nameToks
+	return idents
 }
 
 func (p *Parser) isTypeToken(t token.TokenType) bool {
@@ -109,14 +105,31 @@ func New(l *lexer.Lexer) *Parser {
 
 	p.nextToken()
 	p.nextToken()
-	p.nextToken()
+
 	return p
 }
 
 func (p *Parser) nextToken() {
 	p.curTok = p.peekTok
-	p.peekTok = p.peekTok2
-	p.peekTok2 = p.l.NextToken()
+
+	if len(p.peekBuf) > 0 {
+		p.peekTok = p.peekBuf[0]
+		p.peekBuf = p.peekBuf[1:]
+	} else {
+		p.peekTok = p.l.NextToken()
+	}
+}
+
+func (p *Parser) peekN(n int) token.Token {
+	if n == 0 {
+		return p.peekTok
+	}
+
+	idx := n - 1
+	for len(p.peekBuf) <= idx {
+		p.peekBuf = append(p.peekBuf, p.l.NextToken())
+	}
+	return p.peekBuf[idx]
 }
 
 func (p *Parser) peekPrecedence() int {
@@ -131,6 +144,26 @@ func (p *Parser) curPrecedence() int {
 		return p
 	}
 	return LOWEST
+}
+
+func (p *Parser) peekUntilAssign() token.TokenType {
+	depth := 0
+	for i := 0; ; i++ {
+		tok := p.peekN(i)
+
+		switch tok.Type {
+		case token.LPAREN, token.LBRACKET:
+			depth++
+		case token.RPAREN, token.RBRACKET:
+			depth--
+		case token.WALRUS, token.ASSIGN:
+			if depth == 0 {
+				return tok.Type
+			}
+		case token.NEWLINE, token.EOF:
+			return token.ILLEGAL
+		}
+	}
 }
 
 func (p *Parser) consumeTerminators() {
@@ -166,20 +199,15 @@ func (p *Parser) ParseProgram() []Statement {
 func (p *Parser) parseStatement() Statement {
 	switch p.curTok.Type {
 	case token.VAR:
-		if p.peekTok.Type == token.IDENT {
-			// look ahead for comma
-			if p.peekTok2.Type == token.COMMA {
-				return p.parseMultiVarStatement()
-			}
+		if p.peekTok.Type == token.IDENT && p.peekN(1).Type == token.COMMA {
+			return p.parseMultiVarStatement()
 		}
 
 		return p.parseVarStatement()
+
 	case token.CONST:
-		if p.peekTok.Type == token.IDENT {
-			// look ahead for comma
-			if p.peekTok2.Type == token.COMMA {
-				return p.parseMultiConstStatement()
-			}
+		if p.peekTok.Type == token.IDENT && p.peekN(1).Type == token.COMMA {
+			return p.parseMultiConstStatement()
 		}
 
 		return p.parseConstStatement()
@@ -206,7 +234,11 @@ func (p *Parser) parseStatement() Statement {
 	case token.IDENT:
 		// multi assignment: a, b = ...
 		if p.peekTok.Type == token.COMMA {
-			return p.parseMultiAssignStatement()
+			if p.peekUntilAssign() == token.WALRUS {
+				return p.parseMultiVarStatementNoKeyword()
+			} else if p.peekUntilAssign() == token.ASSIGN {
+				return p.parseMultiAssignStatement()
+			}
 		}
 
 		// arr[idx] = ...
@@ -218,6 +250,11 @@ func (p *Parser) parseStatement() Statement {
 		// reassignment
 		if p.peekTok.Type == token.ASSIGN {
 			return p.parseAssignStatement()
+		}
+
+		// single inferred
+		if p.peekTok.Type == token.WALRUS {
+			return p.parseVarStatementNoKeyword()
 		}
 
 		// member assignment
@@ -243,7 +280,11 @@ func (p *Parser) parseVarStatement() *VarStatement {
 		p.addError("expected identifier after 'egg'")
 		return nil
 	}
-	stmt.Name = p.curTok.Literal
+
+	stmt.Name = &Identifier{
+		NodeBase: NodeBase{Token: p.curTok},
+		Value:    p.curTok.Literal,
+	}
 
 	// optional type
 	if p.isTypeToken(p.peekTok.Type) || p.peekTok.Type == token.IDENT {
@@ -264,48 +305,30 @@ func (p *Parser) parseVarStatement() *VarStatement {
 	return stmt
 }
 
-func (p *Parser) parseVarStatementNoSemicolon() *VarStatement {
-	stmt := &VarStatement{
-		NodeBase: NodeBase{Token: p.curTok}, // 'egg'
+func (p *Parser) parseVarStatementNoKeyword() *VarStatementNoKeyword {
+	stmt := &VarStatementNoKeyword{
+		NodeBase: NodeBase{Token: p.curTok}, // ident
 	}
 
-	// egg -> name
-	p.nextToken()
-	if p.curTok.Type != token.IDENT {
-		p.addError("expected identifier after 'egg'")
-		return nil
-	}
-	stmt.Name = p.curTok.Literal
-
-	// optional type
-	if p.isTypeToken(p.peekTok.Type) {
-		p.nextToken()
-		stmt.Type = &Identifier{
-			NodeBase: NodeBase{Token: p.curTok},
-			Value:    p.curTok.Literal,
-		}
+	stmt.Name = &Identifier{
+		NodeBase: NodeBase{Token: p.curTok},
+		Value:    p.curTok.Literal,
 	}
 
-	// optional assignment
-	if p.peekTok.Type == token.ASSIGN {
-		p.nextToken()
-		p.nextToken()
-		stmt.Value = p.parseExpression(LOWEST)
-	}
+	p.nextToken() // :=
+	p.nextToken() // expr
+	stmt.Value = p.parseExpression(LOWEST)
 
 	return stmt
 }
 
 func (p *Parser) parseMultiVarStatement() *MultiVarStatement {
 	stmt := &MultiVarStatement{
-		NodeBase: NodeBase{Token: p.curTok},
+		NodeBase: NodeBase{Token: p.curTok}, // egg
 	}
 
 	p.nextToken() // ident
-	stmt.Names, stmt.NameTokens = p.parseIdentList()
-	if stmt.Names == nil {
-		return nil
-	}
+	stmt.Names = p.parseIdentList()
 
 	// optional type
 	if p.isTypeToken(p.peekTok.Type) {
@@ -321,29 +344,57 @@ func (p *Parser) parseMultiVarStatement() *MultiVarStatement {
 		p.nextToken() // move to '='
 		p.nextToken() // move to expr start
 
-		stmt.Value = p.parseExpression(LOWEST)
+		values := p.parseTupleList()
 
-		if p.peekTok.Type == token.COMMA {
-			stmt.Value = p.parseTupleLiteral(stmt.Value)
+		if len(values) == 1 {
+			stmt.Value = values[0]
+		} else {
+			stmt.Value = &TupleLiteral{
+				NodeBase: NodeBase{Token: p.curTok},
+				Values:   values,
+			}
 		}
 	}
 
 	return stmt
 }
 
-func (p *Parser) parseTupleLiteral(first Expression) *TupleLiteral {
-	values := []Expression{first}
+func (p *Parser) parseMultiVarStatementNoKeyword() *MultiVarStatementNoKeyword {
+	stmt := &MultiVarStatementNoKeyword{
+		NodeBase: NodeBase{Token: p.curTok}, // idents
+	}
+
+	stmt.Names = p.parseIdentList()
+
+	p.nextToken() // :=
+	p.nextToken() // move to expr start
+
+	values := p.parseTupleList()
+
+	if len(values) == 1 {
+		stmt.Value = values[0]
+	} else {
+		stmt.Value = &TupleLiteral{
+			NodeBase: NodeBase{Token: p.curTok},
+			Values:   values,
+		}
+	}
+
+	return stmt
+}
+
+func (p *Parser) parseTupleList() []Expression {
+	values := []Expression{}
+
+	values = append(values, p.parseExpression(LOWEST))
 
 	for p.peekTok.Type == token.COMMA {
-		p.nextToken()
-		p.nextToken()
+		p.nextToken() // ,
+		p.nextToken() // next expr
 		values = append(values, p.parseExpression(LOWEST))
 	}
 
-	return &TupleLiteral{
-		NodeBase: NodeBase{Token: p.curTok},
-		Values:   values,
-	}
+	return values
 }
 
 func (p *Parser) parseConstStatement() *ConstStatement {
@@ -356,7 +407,10 @@ func (p *Parser) parseConstStatement() *ConstStatement {
 		p.addError("expected identifier after 'egg'")
 		return nil
 	}
-	stmt.Name = p.curTok.Literal
+	stmt.Name = &Identifier{
+		NodeBase: NodeBase{Token: p.curTok},
+		Value:    p.curTok.Literal,
+	}
 
 	// type
 	if p.isTypeToken(p.peekTok.Type) {
@@ -383,10 +437,7 @@ func (p *Parser) parseMultiConstStatement() *MultiConstStatement {
 	}
 
 	p.nextToken() // ident
-	stmt.Names, stmt.NameTokens = p.parseIdentList()
-	if stmt.Names == nil {
-		return nil
-	}
+	stmt.Names = p.parseIdentList()
 
 	// optional type
 	if p.isTypeToken(p.peekTok.Type) {
@@ -402,10 +453,15 @@ func (p *Parser) parseMultiConstStatement() *MultiConstStatement {
 		p.nextToken() // move to '='
 		p.nextToken() // move to expr start
 
-		stmt.Value = p.parseExpression(LOWEST)
+		values := p.parseTupleList()
 
-		if p.peekTok.Type == token.COMMA {
-			stmt.Value = p.parseTupleLiteral(stmt.Value)
+		if len(values) == 1 {
+			stmt.Value = values[0]
+		} else {
+			stmt.Value = &TupleLiteral{
+				NodeBase: NodeBase{Token: p.curTok},
+				Values:   values,
+			}
 		}
 	}
 
@@ -417,7 +473,10 @@ func (p *Parser) parseAssignStatement() *AssignmentStatement {
 	stmt.NodeBase = NodeBase{Token: p.curTok}
 
 	// current token is IDENT
-	stmt.Name = p.curTok.Literal
+	stmt.Name = &Identifier{
+		NodeBase: NodeBase{Token: p.curTok},
+		Value:    p.curTok.Literal,
+	}
 
 	// move to =
 	p.nextToken()
@@ -435,28 +494,12 @@ func (p *Parser) parseAssignStatement() *AssignmentStatement {
 	return stmt
 }
 
-func (p *Parser) parseAssignmentNoSemicolon() *AssignmentStatement {
-	stmt := &AssignmentStatement{}
-	stmt.NodeBase = NodeBase{Token: p.curTok}
-	stmt.Name = p.curTok.Literal
-
-	// consume '='
-	p.nextToken()
-	p.nextToken()
-
-	stmt.Value = p.parseExpression(LOWEST)
-	return stmt
-}
-
 func (p *Parser) parseMultiAssignStatement() *MultiAssignmentStatement {
 	stmt := &MultiAssignmentStatement{
 		NodeBase: NodeBase{Token: p.curTok},
 	}
 
-	stmt.Names, _ = p.parseIdentList()
-	if stmt.Names == nil {
-		return nil
-	}
+	stmt.Names = p.parseIdentList()
 
 	// expect '='
 	if p.peekTok.Type != token.ASSIGN {
@@ -467,13 +510,15 @@ func (p *Parser) parseMultiAssignStatement() *MultiAssignmentStatement {
 	p.nextToken() // move to '='
 	p.nextToken() // move to expr
 
-	stmt.Value = p.parseExpression(LOWEST)
-	if stmt.Value == nil {
-		return nil
-	}
+	values := p.parseTupleList()
 
-	if p.peekTok.Type == token.COMMA {
-		stmt.Value = p.parseTupleLiteral(stmt.Value)
+	if len(values) == 1 {
+		stmt.Value = values[0]
+	} else {
+		stmt.Value = &TupleLiteral{
+			NodeBase: NodeBase{Token: p.curTok},
+			Values:   values,
+		}
 	}
 
 	return stmt
@@ -489,9 +534,12 @@ func (p *Parser) parseTypeStatement() *TypeStatement {
 		p.addError("expected identifier after 'type'")
 		return nil
 	}
-	stmt.Name = p.curTok.Literal
+	stmt.Name = &Identifier{
+		NodeBase: NodeBase{Token: p.curTok},
+		Value:    p.curTok.Literal,
+	}
 
-	p.types[stmt.Name] = true
+	p.types[stmt.Name.Value] = true
 
 	p.nextToken()
 
@@ -519,7 +567,7 @@ func (p *Parser) parseType() TypeNode {
 		}
 	case token.STRUCT:
 		if p.peekTok.Type != token.LBRACE {
-			p.addError("expected '{' after idenfifier")
+			p.addError("expected '{' after identifier")
 			return nil
 		}
 		p.nextToken()
@@ -528,6 +576,7 @@ func (p *Parser) parseType() TypeNode {
 
 		// move to first field or }
 		p.nextToken()
+		p.consumeTerminators()
 
 		for p.curTok.Type != token.RBRACE {
 			if p.curTok.Type != token.IDENT {
@@ -547,6 +596,7 @@ func (p *Parser) parseType() TypeNode {
 			fieldType := p.parseType()
 			fields = append(fields, &StructField{Name: fieldName, Type: fieldType})
 			p.nextToken()
+			p.consumeTerminators()
 		}
 
 		return &StructType{
@@ -635,20 +685,19 @@ func (p *Parser) parseStructLiteral(left Expression) Expression {
 	}
 
 	lit := &StructLiteral{
-		NodeBase: NodeBase{Token: p.curTok}, // ident
+		NodeBase: NodeBase{Token: p.curTok},
 		TypeName: ident,
 		Fields:   make(map[string]Expression),
 	}
 
-	p.nextToken() // {
+	p.nextToken() // move to '{'
+	p.nextToken() // move inside struct
+	p.consumeTerminators()
 
 	// empty struct {}
-	if p.peekTok.Type == token.RBRACE {
-		p.nextToken()
+	if p.curTok.Type == token.RBRACE {
 		return lit
 	}
-
-	p.nextToken() // move to first field key
 
 	for {
 		if p.curTok.Type != token.IDENT {
@@ -662,24 +711,24 @@ func (p *Parser) parseStructLiteral(left Expression) Expression {
 			p.addError("expected ':' after field name")
 			return nil
 		}
-		p.nextToken()
 
+		p.nextToken() // :
 		p.nextToken() // value
 		lit.Fields[fieldName] = p.parseExpression(LOWEST)
+		p.nextToken()
 
-		if p.peekTok.Type == token.COMMA {
-			p.nextToken() // ,
-			if p.peekTok.Type == token.RBRACE {
-				p.nextToken() // }
+		p.consumeTerminators()
+
+		if p.curTok.Type == token.COMMA {
+			p.nextToken()
+			p.consumeTerminators()
+			if p.curTok.Type == token.RBRACE {
 				break
 			}
-
-			p.nextToken() // next field name
 			continue
 		}
 
-		if p.peekTok.Type == token.RBRACE {
-			p.nextToken() // }
+		if p.curTok.Type == token.RBRACE {
 			break
 		}
 
@@ -692,19 +741,17 @@ func (p *Parser) parseStructLiteral(left Expression) Expression {
 
 func (p *Parser) parseAnonymousStructLiteral() Expression {
 	lit := &AnonymousStructLiteral{
-		NodeBase: NodeBase{Token: p.curTok}, // struct keyword
+		NodeBase: NodeBase{Token: p.curTok},
 		Fields:   make(map[string]Expression),
 	}
 
-	p.nextToken() // {
+	p.nextToken() // move to '{'
+	p.nextToken() // move inside
+	p.consumeTerminators()
 
-	// empty struct {}
-	if p.peekTok.Type == token.RBRACE {
-		p.nextToken() // }
+	if p.curTok.Type == token.RBRACE {
 		return lit
 	}
-
-	p.nextToken() // move to first field name
 
 	for {
 		if p.curTok.Type != token.IDENT {
@@ -718,24 +765,24 @@ func (p *Parser) parseAnonymousStructLiteral() Expression {
 			p.addError("expected ':' after field name")
 			return nil
 		}
-		p.nextToken()
 
+		p.nextToken() // :
 		p.nextToken() // value
 		lit.Fields[fieldName] = p.parseExpression(LOWEST)
+		p.nextToken()
 
-		if p.peekTok.Type == token.COMMA {
-			p.nextToken() // ,
-			if p.peekTok.Type == token.RBRACE {
-				p.nextToken() // }
+		p.consumeTerminators()
+
+		if p.curTok.Type == token.COMMA {
+			p.nextToken()
+			p.consumeTerminators()
+			if p.curTok.Type == token.RBRACE {
 				break
 			}
-
-			p.nextToken() // next field name
 			continue
 		}
 
-		if p.peekTok.Type == token.RBRACE {
-			p.nextToken() // }
+		if p.curTok.Type == token.RBRACE {
 			break
 		}
 
@@ -966,7 +1013,10 @@ func (p *Parser) parseFuncStatement() *FuncStatement {
 		p.addError("expected identifier after 'fun'")
 		return nil
 	}
-	stmt.Name = p.curTok.Literal
+	stmt.Name = &Identifier{
+		NodeBase: NodeBase{Token: p.curTok},
+		Value:    p.curTok.Literal,
+	}
 
 	// (
 	p.nextToken()
@@ -984,7 +1034,10 @@ func (p *Parser) parseFuncStatement() *FuncStatement {
 			return nil
 		}
 
-		paramName := p.curTok.Literal
+		paramName := &Identifier{
+			NodeBase: NodeBase{Token: p.curTok},
+			Value:    p.curTok.Literal,
+		}
 		var paramType *Identifier = nil
 
 		// optional type
@@ -1003,7 +1056,7 @@ func (p *Parser) parseFuncStatement() *FuncStatement {
 
 		stmt.Params = append(stmt.Params, &ParametersClause{
 			NodeBase: NodeBase{Token: p.curTok},
-			Value:    paramName,
+			Name:     paramName,
 			Type:     paramType,
 		})
 
@@ -1056,7 +1109,13 @@ func (p *Parser) parseFuncStatement() *FuncStatement {
 }
 
 func (p *Parser) parseFuncCall() Expression {
-	call := &FuncCall{NodeBase: NodeBase{Token: p.curTok}, Name: p.curTok.Literal}
+	call := &FuncCall{
+		NodeBase: NodeBase{Token: p.curTok},
+		Name: &Identifier{
+			NodeBase: NodeBase{Token: p.curTok},
+			Value:    p.curTok.Literal,
+		},
+	}
 
 	// expect '('
 	p.nextToken()
@@ -1128,13 +1187,13 @@ func (p *Parser) parseReturnStatement() *ReturnStatement {
 
 func (p *Parser) parseForInit() Statement {
 	if p.curTok.Type == token.VAR {
-		return p.parseVarStatementNoSemicolon()
+		return p.parseVarStatement()
 	}
-	return p.parseAssignmentNoSemicolon()
+	return p.parseAssignStatement()
 }
 
 func (p *Parser) parseForPost() Statement {
-	return p.parseAssignmentNoSemicolon()
+	return p.parseAssignStatement()
 }
 
 func (p *Parser) parseBreakStatement() *BreakStatement {
@@ -1244,37 +1303,41 @@ func (p *Parser) parseBlockStatement() []Statement {
 	return statements
 }
 
+func (p *Parser) parseIndexExpression(left Expression) Expression {
+	exp := &IndexExpression{
+		NodeBase: NodeBase{Token: p.curTok}, // '['
+		Left:     left,
+	}
+
+	p.nextToken() // move to index expression
+	exp.Index = p.parseExpression(LOWEST)
+
+	if p.peekTok.Type != token.RBRACKET {
+		p.addError("expected ']'")
+		return nil
+	}
+
+	p.nextToken() // consume ']'
+
+	return exp
+}
+
 func (p *Parser) parseExpression(precedence int) Expression {
 	left := p.parsePrimary()
 
 	for {
-
 		if p.peekTok.Type == token.LBRACKET {
-			p.nextToken() // [
-			p.nextToken() // index expr
-
-			index := p.parseExpression(LOWEST)
-
-			if p.peekTok.Type != token.RBRACKET {
-				p.addError("expected ']'")
-				return nil
-			}
-			p.nextToken() // ]
-
-			left = &IndexExpression{
-				NodeBase: NodeBase{Token: p.curTok},
-				Left:     left,
-				Index:    index,
-			}
+			p.nextToken() // '['
+			left = p.parseIndexExpression(left)
 			continue
 		}
 
 		if p.peekTok.Type == token.DOT {
-			p.nextToken() // move to dot
-			p.nextToken() // move to identifier
+			p.nextToken()
+			p.nextToken()
 
 			if p.curTok.Type != token.IDENT {
-				p.addError("expected property name idenfifier after '.'")
+				p.addError("expected property name identifier after '.'")
 				return nil
 			}
 
@@ -1286,11 +1349,12 @@ func (p *Parser) parseExpression(precedence int) Expression {
 					Value:    p.curTok.Literal,
 				},
 			}
-
 			continue
 		}
 
-		if p.peekTok.Type == token.SEMICOLON || precedence >= p.peekPrecedence() {
+		if p.peekTok.Type == token.SEMICOLON ||
+			p.peekTok.Type == token.RPAREN ||
+			precedence >= p.peekPrecedence() {
 			break
 		}
 

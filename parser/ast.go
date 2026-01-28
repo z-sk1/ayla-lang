@@ -40,6 +40,8 @@ const (
 	PRODUCT     // * /
 	PREFIX      // !x -z
 	MEMBER      // p.x
+	CALL        // ()
+	INDEX       // []
 )
 
 var precedences = map[token.TokenType]int{
@@ -59,55 +61,68 @@ var precedences = map[token.TokenType]int{
 
 	token.ASTERISK: PRODUCT,
 	token.SLASH:    PRODUCT,
+	token.MOD:      PRODUCT,
 
-	token.DOT: MEMBER,
+	token.DOT:      MEMBER,
+	token.LPAREN:   CALL,
+	token.LBRACKET: INDEX,
 }
 
 type VarStatement struct {
 	NodeBase
-	Name  string
+	Name  *Identifier
 	Type  *Identifier // if no type defaults to nil, and then automatically chooses type
+	Value Expression
+}
+
+type VarStatementNoKeyword struct {
+	NodeBase
+	Name  *Identifier
 	Value Expression
 }
 
 type MultiVarStatement struct {
 	NodeBase
-	Names      []string
-	NameTokens []token.Token
-	Type       *Identifier
-	Value      Expression
+	Names []*Identifier
+	Type  *Identifier
+	Value Expression
+}
+
+type MultiVarStatementNoKeyword struct {
+	NodeBase
+	Names []*Identifier
+	Value Expression
 }
 
 type ConstStatement struct {
 	NodeBase
-	Name  string
+	Name  *Identifier
 	Type  *Identifier // if no type defaults to nil, and then automatically chooses type
 	Value Expression
 }
 
 type MultiConstStatement struct {
 	NodeBase
-	Names      []string
-	NameTokens []token.Token
-	Type       *Identifier
-	Value      Expression
+	Names []*Identifier
+	Type  *Identifier
+	Value Expression
 }
 
 type AssignmentStatement struct {
 	NodeBase
-	Name  string
+	Name  *Identifier
 	Value Expression
 }
 
 type MultiAssignmentStatement struct {
 	NodeBase
-	Names []string
+	Names []*Identifier
 	Value Expression
 }
 
 type TypeStatement struct {
 	NodeBase
-	Name  string
+	Name  *Identifier
 	Type  TypeNode
 	Alias bool
 }
@@ -140,13 +155,13 @@ type IfStatement struct {
 
 type ParametersClause struct {
 	NodeBase
-	Type  *Identifier
-	Value string
+	Type *Identifier
+	Name *Identifier
 }
 
 type FuncStatement struct {
 	NodeBase
-	Name        string
+	Name        *Identifier
 	Params      []*ParametersClause
 	Body        []Statement
 	ReturnTypes []*Identifier
@@ -154,7 +169,7 @@ type FuncStatement struct {
 
 type FuncCall struct {
 	NodeBase
-	Name string
+	Name *Identifier
 	Args []Expression
 }
 

@@ -1,6 +1,8 @@
-egg text = "Ayla lang is so much better than datafall"
+egg text = "Yara's the worst person ever "
 
-four egg i int = 0; i < len(text); i = i + 1 {
-    explode(text[i])
-    wait(50)
+why yes {
+    four egg j int = 0; j < len(text); j = j + 1 {
+        explode(text[j])
+        wait(25)
+    }
 }

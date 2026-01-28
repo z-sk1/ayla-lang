@@ -25,6 +25,8 @@ const (
 	MINUS    = "-"
 	SLASH    = "/"
 	ASTERISK = "*"
+	MOD      = "%"
+	WALRUS = "WALRUS"
 
 	EQ     = "EQ"
 	NOT_EQ = "NOT_EQ"

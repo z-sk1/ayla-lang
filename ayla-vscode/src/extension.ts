@@ -9,7 +9,7 @@ export function activate(ctx: vscode.ExtensionContext) {
 
     client = new LanguageClient(
         "ayla",
-        "Ayla Language Server",
+        "elen",
         {
             command: serverExe,
             transport: 0 // stdio

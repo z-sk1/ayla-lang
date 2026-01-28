@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"os"
 
 	"github.com/z-sk1/ayla-lang/lexer"
@@ -89,6 +90,11 @@ type HoverResult struct {
 }
 
 func main() {
+	f, err := os.Create("ayla-lsp.log")
+	if err == nil {
+		log.SetOutput(f)
+	}
+
 	server := NewServer()
 	server.Run()
 }
@@ -118,6 +124,9 @@ func (s *Server) handleMessage(req *Request) {
 	switch req.Method {
 	case "initialize":
 		s.handleIntialize(req)
+
+	case "initialized":
+		return
 
 	case "textDocument/didOpen":
 		s.handleDidOpen(req)
@@ -188,6 +197,7 @@ func (s *Server) handleHover(req *Request) {
 	l := lexer.New(text)
 	p := parser.New(l)
 	program := p.ParseProgram()
+	rootScope := BuildSymbols(program)
 
 	ident := findIdentAt(program, params.Position)
 	if ident == nil {
@@ -195,78 +205,20 @@ func (s *Server) handleHover(req *Request) {
 		return
 	}
 
-	decl := findDeclaration(program, ident.Value)
-
-	if decl == nil {
+	sym := rootScope.Resolve(ident.Value)
+	if sym == nil {
 		s.sendResponse(req.ID, nil)
 		return
 	}
 
-	var (
-		typeIdent *parser.Identifier
-		keyword   string
-	)
-
-	switch d := decl.(type) {
-
-	case *parser.VarStatement:
-		typeIdent = d.Type
-		keyword = "egg"
-		if typeIdent == nil && d.Value != nil {
-			typeIdent = inferExprType(program, d.Value)
-		}
-
-	case *parser.ConstStatement:
-		typeIdent = d.Type
-		keyword = "rock"
-		if typeIdent == nil && d.Value != nil {
-			typeIdent = inferExprType(program, d.Value)
-		}
-
-	case *parser.MultiVarStatement:
-		typeIdent = d.Type
-		keyword = "egg"
-
-		tuple, ok := d.Value.(*parser.TupleLiteral)
-		if !ok {
-			break
-		}
-
-		for i, name := range d.Names {
-			if name == ident.Value && i < len(tuple.Values) {
-				typeIdent = inferExprType(program, tuple.Values[i])
-				break
-			}
-		}
-
-	case *parser.MultiConstStatement:
-		typeIdent = d.Type
-		keyword = "rock"
-
-		tuple, ok := d.Value.(*parser.TupleLiteral)
-		if !ok {
-			break
-		}
-
-		for i, name := range d.Names {
-			if name == ident.Value && i < len(tuple.Values) {
-				typeIdent = inferExprType(program, tuple.Values[i])
-				break
-			}
+	if sym.Type == nil && sym.Value != nil {
+		inferred := inferExprType(rootScope, sym.Value)
+		if inferred != nil {
+			sym.Type = inferred
 		}
 	}
 
-	typeStr := "unknown"
-	if typeIdent != nil {
-		typeStr = typeIdent.Value
-	}
-
-	hoverText := fmt.Sprintf(
-		"```ayla\n%s %s %s\n```",
-		keyword,
-		ident.Value,
-		typeStr,
-	)
+	hoverText := hoverFromSymbol(sym)
 
 	hover := HoverResult{
 		Contents: map[string]interface{}{
@@ -276,6 +228,31 @@ func (s *Server) handleHover(req *Request) {
 	}
 
 	s.sendResponse(req.ID, hover)
+}
+
+func hoverFromSymbol(sym *Symbol) string {
+	typeStr := "unknown"
+	if sym.Type != nil {
+		typeStr = sym.Type.Value
+	}
+
+	switch sym.Kind {
+	case SymVar:
+		return fmt.Sprintf("```ayla\negg %s %s\n```", sym.Name, typeStr)
+	case SymConst:
+		return fmt.Sprintf("```ayla\nrock %s %s\n```", sym.Name, typeStr)
+	case SymFunc:
+		return fmt.Sprintf("```ayla\nfun %s (...)\n```", sym.Name)
+	case SymParam:
+		return fmt.Sprintf("```ayla\nparam %s %s\n```", sym.Name, typeStr)
+	case SymStructField:
+		return fmt.Sprintf("```ayla\nfield %s %s\n```", sym.Name, typeStr)
+	case SymType:
+		return fmt.Sprintf("```ayla\ntype %s\n```", sym.Name)
+	case SymUserType:
+		return fmt.Sprintf("```ayla\ntype %s %s\n```", sym.Name, typeStr)
+	}
+	return sym.Name
 }
 
 func (s *Server) handleDefinition(req *Request) {
@@ -291,6 +268,7 @@ func (s *Server) handleDefinition(req *Request) {
 	l := lexer.New(text)
 	p := parser.New(l)
 	program := p.ParseProgram()
+	rootScope := BuildSymbols(program)
 
 	ident := findIdentAt(program, params.Position)
 	if ident == nil {
@@ -298,13 +276,12 @@ func (s *Server) handleDefinition(req *Request) {
 		return
 	}
 
-	decl := findDeclaration(program, ident.Value)
-	if decl == nil {
-		s.sendResponse(req.ID, nil)
+	sym := rootScope.Resolve(ident.Value)
+	if sym == nil {
 		return
 	}
 
-	line, col := decl.Pos()
+	line, col := sym.Ident.Pos()
 
 	line--
 	col--
@@ -336,104 +313,60 @@ func findIdentAt(statements []parser.Statement, pos Position) *parser.Identifier
 	return nil
 }
 
-func findDeclaration(program []parser.Statement, name string) parser.Statement {
-	for i := len(program) - 1; i >= 0; i-- {
-		if d := findDeclarationInStmt(program[i], name); d != nil {
-			return d
-		}
-	}
-
-	return nil
-}
-
-func findDeclarationInStmt(stmt parser.Statement, name string) parser.Statement {
-	switch s := stmt.(type) {
-	case *parser.VarStatement:
-		if s.Name == name {
-			return s
-		}
-
-	case *parser.ConstStatement:
-		if s.Name == name {
-			return s
-		}
-
-	case *parser.MultiVarStatement:
-		for _, n := range s.Names {
-			if n == name {
-				return s
-			}
-		}
-
-	case *parser.MultiConstStatement:
-		for _, n := range s.Names {
-			if n == name {
-				return s
-			}
-		}
-
-	case *parser.FuncStatement:
-		for i := len(s.Body) - 1; i >= 0; i-- {
-			if d := findDeclarationInStmt(s.Body[i], name); d != nil {
-				return d
-			}
-		}
-
-	case *parser.ForStatement:
-		if s.Init != nil {
-			if d := findDeclarationInStmt(s.Init, name); d != nil {
-				return d
-			}
-		}
-		for i := len(s.Body) - 1; i >= 0; i-- {
-			if d := findDeclarationInStmt(s.Body[i], name); d != nil {
-				return d
-			}
-		}
-
-	case *parser.WhileStatement:
-		for i := len(s.Body) - 1; i >= 0; i-- {
-			if d := findDeclarationInStmt(s.Body[i], name); d != nil {
-				return d
-			}
-		}
-
-	case *parser.IfStatement:
-		for i := len(s.Consequence) - 1; i >= 0; i-- {
-			if d := findDeclarationInStmt(s.Consequence[i], name); d != nil {
-				return d
-			}
-		}
-		for i := len(s.Alternative) - 1; i >= 0; i-- {
-			if d := findDeclarationInStmt(s.Alternative[i], name); d != nil {
-				return d
-			}
-		}
-	}
-
-	return nil
-}
-
 func walkForIdent(n parser.Node, pos Position) *parser.Identifier {
+	if n == nil {
+		return nil
+	}
+
 	switch n := n.(type) {
 
 	case *parser.Identifier:
-		if posInsideIdent(n, pos) {
+		if posInsideTok(n.NodeBase.Token, pos) {
 			return n
 		}
 
 	case *parser.ExpressionStatement:
 		return walkForIdent(n.Expression, pos)
 
-	case *parser.VarStatement:
-		// Check identifier being declared
-		if posInsideIdent(&parser.Identifier{
-			NodeBase: n.NodeBase,
-			Value:    n.Name,
-		}, pos) {
+	case *parser.TypeStatement:
+		switch t := n.Type.(type) {
+
+		case *parser.IdentType:
+			typeName := t.Name
 			return &parser.Identifier{
 				NodeBase: n.NodeBase,
-				Value:    n.Name,
+				Value:    typeName,
+			}
+
+		case *parser.StructType:
+			var fieldNames string
+			for _, field := range t.Fields {
+				if field != nil && field.Name != nil {
+					fieldNames += field.Name.Value + "\n"
+				}
+			}
+			typeName := fmt.Sprintf("struct {\n%s}", fieldNames)
+			return &parser.Identifier{
+				NodeBase: n.NodeBase,
+				Value:    typeName,
+			}
+
+		default:
+			typeName := "unknown"
+			return &parser.Identifier{
+				NodeBase: n.NodeBase,
+				Value:    typeName,
+			}
+		}
+
+	case *parser.VarStatement:
+		if res := walkForIdent(n.Name, pos); res != nil {
+			return res
+		}
+
+		if n.Type != nil {
+			if res := walkForIdent(n.Type, pos); res != nil {
+				return res
 			}
 		}
 
@@ -442,14 +375,13 @@ func walkForIdent(n parser.Node, pos Position) *parser.Identifier {
 		}
 
 	case *parser.ConstStatement:
-		// check ident being declared
-		if posInsideIdent(&parser.Identifier{
-			NodeBase: n.NodeBase,
-			Value:    n.Name,
-		}, pos) {
-			return &parser.Identifier{
-				NodeBase: n.NodeBase,
-				Value:    n.Name,
+		if res := walkForIdent(n.Name, pos); res != nil {
+			return res
+		}
+
+		if n.Type != nil {
+			if res := walkForIdent(n.Type, pos); res != nil {
+				return res
 			}
 		}
 
@@ -458,11 +390,15 @@ func walkForIdent(n parser.Node, pos Position) *parser.Identifier {
 		}
 
 	case *parser.MultiVarStatement:
-		for i, tok := range n.NameTokens {
-			if posInsideTok(tok, pos) {
-				return &parser.Identifier{
-					Value: n.Names[i],
-				}
+		for _, name := range n.Names {
+			if res := walkForIdent(name, pos); res != nil {
+				return res
+			}
+		}
+
+		if n.Type != nil {
+			if res := walkForIdent(n.Type, pos); res != nil {
+				return res
 			}
 		}
 
@@ -471,11 +407,15 @@ func walkForIdent(n parser.Node, pos Position) *parser.Identifier {
 		}
 
 	case *parser.MultiConstStatement:
-		for i, tok := range n.NameTokens {
-			if posInsideTok(tok, pos) {
-				return &parser.Identifier{
-					Value: n.Names[i],
-				}
+		for _, name := range n.Names {
+			if res := walkForIdent(name, pos); res != nil {
+				return res
+			}
+		}
+
+		if n.Type != nil {
+			if res := walkForIdent(n.Type, pos); res != nil {
+				return res
 			}
 		}
 
@@ -484,17 +424,24 @@ func walkForIdent(n parser.Node, pos Position) *parser.Identifier {
 		}
 
 	case *parser.AssignmentStatement:
-		if posInsideIdent(&parser.Identifier{
-			NodeBase: n.NodeBase,
-			Value:    n.Name,
-		}, pos) {
-			return &parser.Identifier{
-				NodeBase: n.NodeBase,
-				Value:    n.Name,
+		if res := walkForIdent(n.Name, pos); res != nil {
+			return res
+		}
+
+		if n.Value != nil {
+			return walkForIdent(n.Value, pos)
+		}
+
+	case *parser.MultiAssignmentStatement:
+		for _, name := range n.Names {
+			if res := walkForIdent(name, pos); res != nil {
+				return res
 			}
 		}
 
-		return walkForIdent(n.Value, pos)
+		if n.Value != nil {
+			return walkForIdent(n.Value, pos)
+		}
 
 	case *parser.InfixExpression:
 		if res := walkForIdent(n.Left, pos); res != nil {
@@ -502,10 +449,50 @@ func walkForIdent(n parser.Node, pos Position) *parser.Identifier {
 		}
 		return walkForIdent(n.Right, pos)
 
+	case *parser.IndexAssignmentStatement:
+		if res := walkForIdent(n.Left, pos); res != nil {
+			return res
+		}
+		if res := walkForIdent(n.Index, pos); res != nil {
+			return res
+		}
+		return walkForIdent(n.Value, pos)
+
+	case *parser.IndexExpression:
+		if res := walkForIdent(n.Left, pos); res != nil {
+			return res
+		}
+		return walkForIdent(n.Index, pos)
+
 	case *parser.PrefixExpression:
 		return walkForIdent(n.Right, pos)
 
+	case *parser.MemberExpression:
+		if res := walkForIdent(n.Left, pos); res != nil {
+			return res
+		}
+		if res := walkForIdent(n.Field, pos); res != nil {
+			return res
+		}
+
 	case *parser.FuncStatement:
+		if res := walkForIdent(n.Name, pos); res != nil {
+			return res
+		}
+
+		for _, param := range n.Params {
+			if res := walkForIdent(param, pos); res != nil {
+				return res
+			}
+		}
+
+		for _, stmt := range n.Body {
+			if res := walkForIdent(stmt, pos); res != nil {
+				return res
+			}
+		}
+
+	case *parser.SpawnStatement:
 		for _, stmt := range n.Body {
 			if res := walkForIdent(stmt, pos); res != nil {
 				return res
@@ -513,12 +500,26 @@ func walkForIdent(n parser.Node, pos Position) *parser.Identifier {
 		}
 
 	case *parser.FuncCall:
+		if res := walkForIdent(n.Name, pos); res != nil {
+			return res
+		}
+
 		for _, arg := range n.Args {
 			if res := walkForIdent(arg, pos); res != nil {
 				return res
 			}
 		}
 
+	case *parser.StructLiteral:
+		if res := walkForIdent(n.TypeName, pos); res != nil {
+			return res
+		}
+
+		for _, field := range n.Fields {
+			if res := walkForIdent(field, pos); res != nil {
+				return res
+			}
+		}
 	case *parser.IfStatement:
 		if res := walkForIdent(n.Condition, pos); res != nil {
 			return res
@@ -570,33 +571,18 @@ func walkForIdent(n parser.Node, pos Position) *parser.Identifier {
 	return nil
 }
 
-func posInsideIdent(ident *parser.Identifier, pos Position) bool {
-	line1, col1 := ident.Pos()
-
-	// token → LSP (0-based)
-	line := line1 - 1
-	start := col1 - 1
-	end := start + len(ident.Value)
-
-	if pos.Line != line {
-		return false
-	}
-
-	// tolerate VS Code click jitter
-	return pos.Character >= start-len(ident.Value) && pos.Character <= end
-}
-
 func posInsideTok(tok token.Token, pos Position) bool {
 	// convert token position to 0-based
 	line := tok.Line - 1
 	startCol := tok.Column - 1
-	endCol := startCol + len(tok.Literal)
+	endCol := startCol
+	startCol = startCol - len(tok.Literal)
 
 	if pos.Line != line {
 		return false
 	}
 
-	return pos.Character >= startCol-len(tok.Literal) && pos.Character < endCol
+	return pos.Character >= startCol && pos.Character < endCol
 }
 
 func tokenRange(pe *parser.ParseError) Range {
@@ -701,7 +687,7 @@ func writeMessage(w *bufio.Writer, data []byte) {
 	w.Flush()
 }
 
-func inferExprType(program []parser.Statement, expr parser.Expression) *parser.Identifier {
+func inferExprType(scope *Scope, expr parser.Expression) *parser.Identifier {
 	switch e := expr.(type) {
 
 	case *parser.IntLiteral:
@@ -726,8 +712,8 @@ func inferExprType(program []parser.Statement, expr parser.Expression) *parser.I
 		return &parser.Identifier{Value: e.TypeName.Value}
 
 	case *parser.InfixExpression:
-		left := inferExprType(program, e.Left)
-		right := inferExprType(program, e.Right)
+		left := inferExprType(scope, e.Left)
+		right := inferExprType(scope, e.Right)
 
 		if left == nil || right == nil {
 			return nil
@@ -745,28 +731,15 @@ func inferExprType(program []parser.Statement, expr parser.Expression) *parser.I
 		}
 
 	case *parser.PrefixExpression:
-		return inferExprType(program, e.Right)
+		return inferExprType(scope, e.Right)
 
 	case *parser.Identifier:
-		if d := findDeclaration(program, e.Value); d != nil {
-			if d, ok := d.(*parser.VarStatement); ok {
-				if d.Type != nil {
-					return d.Type
-				}
-				if d.Value != nil {
-					return inferExprType(program, d.Value)
-				}
-			}
-
-			if d, ok := d.(*parser.ConstStatement); ok {
-				if d.Type != nil {
-					return d.Type
-				}
-				if d.Value != nil {
-					return inferExprType(program, d.Value)
-				}
-			}
+		sym := scope.Resolve(e.Value)
+		if sym == nil {
+			return nil
 		}
+
+		return sym.Type
 	}
 
 	return nil

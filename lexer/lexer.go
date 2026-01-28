@@ -155,7 +155,7 @@ func (l *Lexer) NextToken() token.Token {
 	switch l.ch {
 	case '\n':
 		tok = token.Token{Type: token.NEWLINE, Literal: "NEWLINE", Line: l.line, Column: l.column}
-		
+
 	case '=':
 		if l.peekChar() == '=' {
 			ch := l.ch
@@ -187,11 +187,20 @@ func (l *Lexer) NextToken() token.Token {
 	case ',':
 		tok = token.Token{Type: token.COMMA, Literal: ",", Line: l.line, Column: l.column}
 	case ':':
-		tok = token.Token{Type: token.COLON, Literal: ":", Line: l.line, Column: l.column}
+		if l.peekChar() == '=' {
+			ch := l.ch
+			l.readChar()
+			tok = token.Token{Type: token.WALRUS, Literal: string(ch) + string(l.ch), Line: l.line, Column: l.column}
+		} else {
+			tok = token.Token{Type: token.COLON, Literal: ":", Line: l.line, Column: l.column}
+		}
+
 	case '.':
 		tok = token.Token{Type: token.DOT, Literal: ".", Line: l.line, Column: l.column}
 	case '*':
 		tok = token.Token{Type: token.ASTERISK, Literal: "*", Line: l.line, Column: l.column}
+	case '%':
+		tok = token.Token{Type: token.MOD, Literal: "%", Line: l.line, Column: l.column}
 	case '<':
 		if l.peekChar() == '=' {
 			ch := l.ch
