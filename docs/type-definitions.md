@@ -35,3 +35,29 @@ the available types are:
 - `bool`
 - `arr`
 - `struct` - learn more about in [docs/structs.md](docs/structs.md)
+
+## aliases
+aliases are just a new name for a primitive type and are completely equivalent to them
+
+```ayla
+type Number = int
+```
+
+so you dont need to type cast to `Number` here since it is completely equivalent to `int`
+
+```ayla
+type Number = int
+
+egg x Number = 5
+
+explodeln(x)
+```
+> output: 5
+
+the available types are:
+- `int`
+- `float`
+- `string`
+- `bool`
+- `arr`
+- `struct` - learn more about in [docs/structs.md](docs/structs.md)

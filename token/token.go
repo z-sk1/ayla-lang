@@ -26,7 +26,7 @@ const (
 	SLASH    = "/"
 	ASTERISK = "*"
 	MOD      = "%"
-	WALRUS = "WALRUS"
+	WALRUS   = "WALRUS"
 
 	EQ     = "EQ"
 	NOT_EQ = "NOT_EQ"
@@ -77,7 +77,6 @@ const (
 	FLOAT_TYPE  = "FLOAT_TYPE"
 	STRING_TYPE = "STRING_TYPE"
 	BOOL_TYPE   = "BOOL_TYPE"
-	ARR_TYPE    = "ARR_TYPE"
 )
 
 var keywords = map[string]TokenType{
@@ -101,7 +100,6 @@ var keywords = map[string]TokenType{
 	"float":  FLOAT_TYPE,
 	"string": STRING_TYPE,
 	"bool":   BOOL_TYPE,
-	"arr":    ARR_TYPE,
 
 	"four":   FOR,
 	"why":    WHILE,

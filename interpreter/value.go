@@ -19,6 +19,7 @@ const (
 	TypeNil
 	TypeStruct
 	TypeNamed
+	TypeAny
 )
 
 type TypeInfo struct {
@@ -27,6 +28,7 @@ type TypeInfo struct {
 	Underlying *TypeInfo
 	Alias      bool
 	Fields     map[string]*TypeInfo // for structs
+	Elem       *TypeInfo            // arrays / slices
 }
 
 type NamedValue struct {
@@ -154,6 +156,7 @@ func (b BoolValue) String() string {
 
 type ArrayValue struct {
 	Elements []Value
+	ElemType *TypeInfo
 }
 
 func (a ArrayValue) Type() ValueType {
@@ -238,7 +241,36 @@ func (i *Interpreter) resolveType(expr parser.Expression) (*TypeInfo, error) {
 		return i.typeEnv["bool"], nil
 
 	case *parser.ArrayLiteral:
-		return i.typeEnv["arr"], nil
+		if len(e.Elements) == 0 {
+			// empty array has no element type yet
+			return &TypeInfo{
+				Kind: TypeArray,
+				Elem: i.typeEnv["any"], // or nil for now
+			}, nil
+		}
+
+		firstType, err := i.resolveType(e.Elements[0])
+		if err != nil {
+			return nil, err
+		}
+
+		for _, el := range e.Elements[1:] {
+			t, err := i.resolveType(el)
+			if err != nil {
+				return nil, err
+			}
+			if !typesAssignable(t, firstType) {
+				return nil, NewRuntimeError(
+					e,
+					"array elements must have the same type",
+				)
+			}
+		}
+
+		return &TypeInfo{
+			Kind: TypeArray,
+			Elem: firstType,
+		}, nil
 
 	case *parser.NilLiteral:
 		return i.typeEnv["nil"], nil
@@ -308,6 +340,18 @@ func (i *Interpreter) resolveTypeNode(t parser.TypeNode) (*TypeInfo, error) {
 			Fields: fields,
 		}, nil
 
+	case *parser.ArrayType:
+		elemTI, err := i.resolveTypeNode(tn.Elem)
+		if err != nil {
+			return nil, err
+		}
+
+		return &TypeInfo{
+			Name: "[]" + elemTI.Name,
+			Kind: TypeArray,
+			Elem: elemTI,
+		}, nil
+
 	default:
 		return nil, fmt.Errorf("unsupported type node %T", t)
 	}
@@ -340,7 +384,6 @@ func (i Interpreter) resolveTypeFromName(node parser.Statement, name string) (Va
 
 	return "", NewRuntimeError(node, fmt.Sprintf("unknown type: %s", name))
 }
-
 func valuesEqual(a, b Value) bool {
 	if a.Type() != b.Type() {
 		return false
@@ -452,7 +495,16 @@ func (i *Interpreter) typeInfoFromValue(v Value) *TypeInfo {
 	case BoolValue:
 		return i.typeEnv["bool"]
 	case ArrayValue:
-		return i.typeEnv["arr"]
+		if v.ElemType == nil {
+			panic("ArrayValue with nil ElemType")
+		}
+
+		return &TypeInfo{
+			Name: "[]" + v.ElemType.Name,
+			Kind: TypeArray,
+			Elem: v.ElemType,
+		}
+
 	case *StructValue:
 		return v.TypeName
 	case NamedValue:
@@ -474,8 +526,6 @@ func (i *Interpreter) typeInfoFromIdent(name string) (*TypeInfo, bool) {
 		return i.typeEnv["string"], true
 	case "bool":
 		return i.typeEnv["bool"], true
-	case "arr":
-		return i.typeEnv["arr"], true
 	}
 
 	// user-defined
@@ -500,7 +550,11 @@ func defaultValueFromTypeInfo(node parser.Statement, ti *TypeInfo) (Value, error
 	case TypeBool:
 		return BoolValue{V: false}, nil
 	case TypeArray:
-		return ArrayValue{Elements: make([]Value, 0)}, nil
+		if ti.Elem == nil {
+			return NilValue{}, NewRuntimeError(node, "array type missing element type")
+		}
+
+		return ArrayValue{Elements: make([]Value, 0), ElemType: ti.Elem}, nil
 	case TypeStruct:
 		return &StructValue{
 			TypeName: ti,

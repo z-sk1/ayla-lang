@@ -85,7 +85,7 @@ func (p *Parser) isTypeToken(t token.TokenType) bool {
 		token.STRING_TYPE,
 		token.BOOL_TYPE,
 		token.FLOAT_TYPE,
-		token.ARR_TYPE:
+		token.LBRACKET:
 		return true
 	default:
 		return false
@@ -276,29 +276,21 @@ func (p *Parser) parseVarStatement() *VarStatement {
 
 	// egg -> name
 	p.nextToken()
-	if p.curTok.Type != token.IDENT {
-		p.addError("expected identifier after 'egg'")
-		return nil
-	}
-
 	stmt.Name = &Identifier{
 		NodeBase: NodeBase{Token: p.curTok},
 		Value:    p.curTok.Literal,
 	}
 
 	// optional type
-	if p.isTypeToken(p.peekTok.Type) || p.peekTok.Type == token.IDENT {
-		p.nextToken()
-		stmt.Type = &Identifier{
-			NodeBase: NodeBase{Token: p.curTok},
-			Value:    p.curTok.Literal,
-		}
+	if p.isTypeToken(p.peekTok.Type) || p.isTypeName(p.peekTok.Literal) {
+		p.nextToken() // move to type start
+		stmt.Type = p.parseType()
 	}
 
 	// optional assignment
 	if p.peekTok.Type == token.ASSIGN {
-		p.nextToken()
-		p.nextToken()
+		p.nextToken() // move to '='
+		p.nextToken() // move to expression
 		stmt.Value = p.parseExpression(LOWEST)
 	}
 
@@ -331,12 +323,9 @@ func (p *Parser) parseMultiVarStatement() *MultiVarStatement {
 	stmt.Names = p.parseIdentList()
 
 	// optional type
-	if p.isTypeToken(p.peekTok.Type) {
+	if p.isTypeToken(p.peekTok.Type) || p.isTypeName(p.peekTok.Literal) {
 		p.nextToken()
-		stmt.Type = &Identifier{
-			NodeBase: NodeBase{Token: p.curTok},
-			Value:    p.curTok.Literal,
-		}
+		stmt.Type = p.parseType()
 	}
 
 	// optional assignment
@@ -413,12 +402,9 @@ func (p *Parser) parseConstStatement() *ConstStatement {
 	}
 
 	// type
-	if p.isTypeToken(p.peekTok.Type) {
+	if p.isTypeToken(p.peekTok.Type) || p.isTypeName(p.peekTok.Literal) {
 		p.nextToken()
-		stmt.Type = &Identifier{
-			NodeBase: NodeBase{Token: p.curTok},
-			Value:    p.curTok.Literal,
-		}
+		stmt.Type = p.parseType()
 	}
 
 	// assignment
@@ -440,12 +426,9 @@ func (p *Parser) parseMultiConstStatement() *MultiConstStatement {
 	stmt.Names = p.parseIdentList()
 
 	// optional type
-	if p.isTypeToken(p.peekTok.Type) {
+	if p.isTypeToken(p.peekTok.Type) || p.isTypeName(p.peekTok.Literal) {
 		p.nextToken()
-		stmt.Type = &Identifier{
-			NodeBase: NodeBase{Token: p.curTok},
-			Value:    p.curTok.Literal,
-		}
+		stmt.Type = p.parseType()
 	}
 
 	// optional assignment
@@ -559,53 +542,80 @@ func (p *Parser) parseType() TypeNode {
 		token.STRING_TYPE,
 		token.FLOAT_TYPE,
 		token.BOOL_TYPE,
-		token.ARR_TYPE,
 		token.IDENT:
 		return &IdentType{
 			NodeBase: NodeBase{Token: p.curTok},
 			Name:     p.curTok.Literal,
 		}
 	case token.STRUCT:
-		if p.peekTok.Type != token.LBRACE {
-			p.addError("expected '{' after identifier")
-			return nil
-		}
-		p.nextToken()
-
-		fields := []*StructField{}
-
-		// move to first field or }
-		p.nextToken()
-		p.consumeTerminators()
-
-		for p.curTok.Type != token.RBRACE {
-			if p.curTok.Type != token.IDENT {
-				p.addError("expected field name inside struct type")
-				return nil
-			}
-			fieldName := &Identifier{
-				NodeBase: NodeBase{Token: p.curTok},
-				Value:    p.curTok.Literal,
-			}
-			// type identifier
-			p.nextToken()
-			if !(p.isTypeToken(p.curTok.Type)) && p.curTok.Type != token.IDENT {
-				p.addError(fmt.Sprintf("expected type name after field name '%s'", fieldName.Value))
-				return nil
-			}
-			fieldType := p.parseType()
-			fields = append(fields, &StructField{Name: fieldName, Type: fieldType})
-			p.nextToken()
-			p.consumeTerminators()
-		}
-
-		return &StructType{
-			NodeBase: NodeBase{Token: p.curTok},
-			Fields:   fields,
-		}
+		return p.parseStructType()
+	case token.LBRACKET:
+		return p.parseArrayType()
 	default:
 		p.addError("unknown type")
 		return nil
+	}
+}
+
+func (p *Parser) parseArrayType() TypeNode {
+	// curTok == '['
+
+	if p.peekTok.Type != token.RBRACKET {
+		p.addError("expected ']' in array type")
+		return nil
+	}
+
+	p.nextToken() // move to ']'
+	p.nextToken() // move to element type (e.g. 'string')
+
+	elem := p.parseType()
+	if elem == nil {
+		return nil
+	}
+
+	return &ArrayType{
+		NodeBase: NodeBase{Token: p.curTok},
+		Elem:     elem,
+	}
+}
+
+func (p *Parser) parseStructType() TypeNode {
+	if p.peekTok.Type != token.LBRACE {
+		p.addError("expected '{' after identifier")
+		return nil
+	}
+	p.nextToken()
+
+	fields := []*StructField{}
+
+	// move to first field or }
+	p.nextToken()
+	p.consumeTerminators()
+
+	for p.curTok.Type != token.RBRACE {
+		if p.curTok.Type != token.IDENT {
+			p.addError("expected field name inside struct type")
+			return nil
+		}
+		fieldName := &Identifier{
+			NodeBase: NodeBase{Token: p.curTok},
+			Value:    p.curTok.Literal,
+		}
+		// type identifier
+		p.nextToken()
+		if !(p.isTypeToken(p.curTok.Type)) && p.curTok.Type != token.IDENT {
+			p.addError(fmt.Sprintf("expected type name after field name '%s'", fieldName.Value))
+			return nil
+		}
+		fieldType := p.parseType()
+		fields = append(fields, &StructField{Name: fieldName, Type: fieldType})
+		p.nextToken()
+		p.consumeTerminators()
+	}
+
+	return &StructType{
+		NodeBase: NodeBase{Token: p.curTok},
+		Fields:   fields,
 	}
 }
 
@@ -1038,20 +1048,10 @@ func (p *Parser) parseFuncStatement() *FuncStatement {
 			NodeBase: NodeBase{Token: p.curTok},
 			Value:    p.curTok.Literal,
 		}
-		var paramType *Identifier = nil
-
-		// optional type
-		if p.peekTok.Type == token.INT_TYPE ||
-			p.peekTok.Type == token.FLOAT_TYPE ||
-			p.peekTok.Type == token.STRING_TYPE ||
-			p.peekTok.Type == token.BOOL_TYPE ||
-			p.isTypeName(p.peekTok.Literal) {
-
-			p.nextToken()
-			paramType = &Identifier{
-				NodeBase: NodeBase{Token: p.curTok},
-				Value:    p.curTok.Literal,
-			}
+		
+		var paramType TypeNode
+		if p.isTypeToken(p.peekTok.Type) || p.isTypeName(p.peekTok.Literal) {
+			paramType = p.parseType()
 		}
 
 		stmt.Params = append(stmt.Params, &ParametersClause{

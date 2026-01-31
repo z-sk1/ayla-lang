@@ -1,6 +1,7 @@
-egg i int
+fun add(a, b) {
+    back a + b
+}
 
-why i < 1000000 {
-    i = i + 1
-    explodeln(i)
+four egg i int; i < 1000000; i = i + 1 {
+    add(1, 2)
 }

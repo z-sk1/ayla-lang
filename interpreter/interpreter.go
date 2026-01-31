@@ -173,7 +173,16 @@ func assignable(expected *TypeInfo, v Value) bool {
 }
 
 func typesAssignable(from, to *TypeInfo) bool {
+	if from == nil || to == nil {
+		return false
+	}
+
 	if from == to {
+		return true
+	}
+
+	// any absorbs everything
+	if from.Kind == TypeAny || to.Kind == TypeAny {
 		return true
 	}
 
@@ -185,11 +194,17 @@ func typesAssignable(from, to *TypeInfo) bool {
 		return typesAssignable(from, to.Underlying)
 	}
 
-	// named types must match exactly
+	// arrays: element types must be assignable
+	if from.Kind == TypeArray && to.Kind == TypeArray {
+		return typesAssignable(from.Elem, to.Elem)
+	}
+
+	// named types: nominal typing
 	if from.Kind == TypeNamed || to.Kind == TypeNamed {
 		return from == to
 	}
 
+	// numeric widening
 	if from.Kind == TypeInt && to.Kind == TypeFloat {
 		return true
 	}
@@ -197,15 +212,34 @@ func typesAssignable(from, to *TypeInfo) bool {
 	return false
 }
 
-func promoteValueToType(v Value, to *TypeInfo) Value {
-	fromKind := typeKindOf(v.Type())
+func promoteValueToType(v Value, ti *TypeInfo) Value {
+	ti = unwrapAlias(ti)
 
-	// int → float
-	if fromKind == TypeInt && to.Kind == TypeFloat {
-		return FloatValue{V: float64(v.(IntValue).V)}
+	switch v := v.(type) {
+
+	case ArrayValue:
+		if ti.Kind != TypeArray {
+			return v
+		}
+
+		return ArrayValue{
+			Elements: v.Elements,
+			ElemType: ti.Elem, // attach declared element type
+		}
+
+	case *ArrayValue:
+		if ti.Kind != TypeArray {
+			return v
+		}
+
+		return ArrayValue{
+			Elements: v.Elements,
+			ElemType: ti.Elem, // attach declared element type
+		}
+
+	default:
+		return v
 	}
-
-	return v
 }
 
 func unwrapNamed(v Value) Value {
@@ -892,49 +926,32 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		var val Value
 		var err error
 
-		switch {
-		case stmt.Value != nil:
-			// egg x = expr
-			v, err := i.EvalExpression(stmt.Value)
+		if stmt.Value != nil {
+			val, err = i.EvalExpression(stmt.Value)
 			if err != nil {
 				return SignalNone{}, err
 			}
-			val = v
-
-		case stmt.Type != nil:
-			// egg x int
-			expectedTI, ok := i.typeInfoFromIdent(stmt.Type.Value)
-			if !ok {
-				return SignalNone{}, NewRuntimeError(
-					stmt,
-					"unknown type: "+stmt.Type.Value,
-				)
+		} else if stmt.Type != nil {
+			expectedTI, err := i.resolveTypeNode(stmt.Type)
+			if err != nil {
+				return SignalNone{}, err
 			}
 
 			val, err = defaultValueFromTypeInfo(stmt, expectedTI)
-
-		default:
-			// egg x
+			if err != nil {
+				return SignalNone{}, err
+			}
+		} else {
 			val = UninitializedValue{}
 		}
 
-		if err != nil {
-			return SignalNone{}, err
-		}
-
-		if stmt.Type != nil {
-			expectedTI, ok := i.typeInfoFromIdent(stmt.Type.Value)
-			if !ok {
-				return SignalNone{}, NewRuntimeError(
-					stmt,
-					"unknown type: "+stmt.Type.Value,
-				)
+		if stmt.Type != nil && stmt.Value != nil {
+			expectedTI, err := i.resolveTypeNode(stmt.Type)
+			if err != nil {
+				return SignalNone{}, err
 			}
 
-			actualTI := i.typeInfoFromValue(val)
-
-			actualTI = unwrapAlias(actualTI)
-			expectedTI = unwrapAlias(expectedTI)
+			actualTI := unwrapAlias(i.typeInfoFromValue(val))
 
 			if !typesAssignable(actualTI, expectedTI) {
 				return SignalNone{}, NewRuntimeError(
@@ -946,15 +963,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 					),
 				)
 			}
-		}
 
-		// variable must not exist
-		if _, ok := i.env.store[stmt.Name.Value]; ok {
-			return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("cant redeclare var: %s", stmt.Name.Value))
-		}
-
-		if stmt.Type != nil {
-			expectedTI, _ := i.typeInfoFromIdent(stmt.Type.Value)
 			val = promoteValueToType(val, expectedTI)
 		}
 
@@ -1003,34 +1012,35 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 
 			var v Value = UninitializedValue{}
 
-			switch {
-			case stmt.Value != nil:
+			if stmt.Value != nil {
 				v = values[idx]
-			case stmt.Type != nil:
-				var err error
-				expectedTI, ok := i.typeInfoFromIdent(stmt.Type.Value)
-				if !ok {
-					return SignalNone{}, NewRuntimeError(
-						stmt,
-						"unknown type: "+stmt.Type.Value,
-					)
+			}
+
+			var err error
+
+			if stmt.Value != nil {
+				v, err = i.EvalExpression(stmt.Value)
+				if err != nil {
+					return SignalNone{}, err
+				}
+			} else if stmt.Type != nil {
+				expectedTI, err := i.resolveTypeNode(stmt.Type)
+				if err != nil {
+					return SignalNone{}, err
 				}
 
 				v, err = defaultValueFromTypeInfo(stmt, expectedTI)
 				if err != nil {
 					return SignalNone{}, err
 				}
-			default:
+			} else {
 				v = UninitializedValue{}
 			}
 
 			if stmt.Type != nil {
-				expectedTI, ok := i.typeInfoFromIdent(stmt.Type.Value)
-				if !ok {
-					return SignalNone{}, NewRuntimeError(
-						stmt,
-						"unknown type: "+stmt.Type.Value,
-					)
+				expectedTI, err := i.resolveTypeNode(stmt.Type)
+				if err != nil {
+					return SignalNone{}, err
 				}
 
 				actualTI := i.typeInfoFromValue(v)
@@ -1048,11 +1058,6 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 						),
 					)
 				}
-			}
-
-			if stmt.Type != nil {
-				expectedTI, _ := i.typeInfoFromIdent(stmt.Type.Value)
-				v = promoteValueToType(v, expectedTI)
 			}
 
 			i.env.Define(name.Value, v)
@@ -1103,12 +1108,9 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		}
 
 		if stmt.Type != nil {
-			expectedTI, ok := i.typeInfoFromIdent(stmt.Type.Value)
-			if !ok {
-				return SignalNone{}, NewRuntimeError(
-					stmt,
-					"unknown type: "+stmt.Type.Value,
-				)
+			expectedTI, err := i.resolveTypeNode(stmt.Type)
+			if err != nil {
+				return SignalNone{}, err
 			}
 
 			actualTI := i.typeInfoFromValue(val)
@@ -1131,11 +1133,6 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		// check if variable already exist
 		if _, ok := i.env.store[stmt.Name.Value]; ok {
 			return SignalNone{}, NewRuntimeError(s, fmt.Sprintf("cant redeclare const: %s", stmt.Name.Value))
-		}
-
-		if stmt.Type != nil {
-			expectedTI, _ := i.typeInfoFromIdent(stmt.Type.Value)
-			val = promoteValueToType(val, expectedTI)
 		}
 
 		// store const val
@@ -1186,14 +1183,31 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			if stmt.Value != nil {
 				v = values[idx]
 			}
+			var err error
+
+			if stmt.Value != nil {
+				v, err = i.EvalExpression(stmt.Value)
+				if err != nil {
+					return SignalNone{}, err
+				}
+			} else if stmt.Type != nil {
+				expectedTI, err := i.resolveTypeNode(stmt.Type)
+				if err != nil {
+					return SignalNone{}, err
+				}
+
+				v, err = defaultValueFromTypeInfo(stmt, expectedTI)
+				if err != nil {
+					return SignalNone{}, err
+				}
+			} else {
+				v = UninitializedValue{}
+			}
 
 			if stmt.Type != nil {
-				expectedTI, ok := i.typeInfoFromIdent(stmt.Type.Value)
-				if !ok {
-					return SignalNone{}, NewRuntimeError(
-						stmt,
-						"unknown type: "+stmt.Type.Value,
-					)
+				expectedTI, err := i.resolveTypeNode(stmt.Type)
+				if err != nil {
+					return SignalNone{}, err
 				}
 
 				actualTI := i.typeInfoFromValue(v)
@@ -1211,11 +1225,6 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 						),
 					)
 				}
-			}
-
-			if stmt.Type != nil {
-				expectedTI, _ := i.typeInfoFromIdent(stmt.Type.Value)
-				v = promoteValueToType(v, expectedTI)
 			}
 
 			i.env.Define(name.Value, v)
@@ -1642,7 +1651,7 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 	case *parser.Identifier:
 		v, ok := i.env.Get(expr.Value)
 		if !ok {
-			return NilValue{}, NewRuntimeError(e, fmt.Sprintf("undefined variable: %s", expr.Value))
+			return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("undefined variable: %s", expr.Value))
 		}
 
 		if c, isConst := v.(ConstValue); isConst {
@@ -1653,15 +1662,41 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 
 	case *parser.ArrayLiteral:
 		elements := []Value{}
-		for _, el := range expr.Elements {
+		var elemType *TypeInfo
+
+		for idx, el := range expr.Elements {
 			val, err := i.EvalExpression(el)
 			if err != nil {
 				return NilValue{}, err
 			}
 
+			valType := unwrapAlias(i.typeInfoFromValue(val))
+
+			if idx == 0 {
+				elemType = unwrapAlias(valType)
+			} else {
+				if !typesAssignable(valType, elemType) {
+					return NilValue{}, NewRuntimeError(expr, fmt.Sprintf(
+						"array element %d has type %s, expected %s",
+						idx,
+						valType.Name,
+						elemType.Name,
+					))
+				}
+			}
+
 			elements = append(elements, val)
 		}
-		return ArrayValue{Elements: elements}, nil
+
+		// empty array literal → needs context
+		if elemType == nil {
+			return NilValue{}, fmt.Errorf("cannot infer type of empty array")
+		}
+
+		return ArrayValue{
+			Elements: elements,
+			ElemType: elemType,
+		}, nil
 
 	case *parser.FuncCall:
 		return i.evalCall(expr)
@@ -1677,7 +1712,7 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 			return NilValue{}, err
 		}
 
-		val, err := evalIndexExpression(expr, left, index)
+		val, err := i.evalIndexExpression(expr, left, index)
 		if err != nil {
 			return NilValue{}, err
 		}
@@ -2025,10 +2060,13 @@ func (i *Interpreter) evalFuncCall(expr *parser.FuncCall) (Value, error) {
 
 		// enforce type if parameter has one
 		if param.Type != nil {
-			actual := string(val.Type())
-			expected := param.Type.Value
+			actual := i.typeInfoFromValue(unwrapNamed(val))
+			expected, err := i.resolveTypeNode(param.Type)
+			if err != nil {
+				return NilValue{}, err
+			}
 
-			if expected == "float" && val.Type() == INT {
+			if expected.Kind == TypeFloat && actual.Kind == TypeInt {
 				val = FloatValue{V: float64(val.(IntValue).V)}
 			} else if actual != expected {
 				return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("parameter '%s' expected %v, got %v", param.Name.Value, expected, actual))
@@ -2093,9 +2131,19 @@ func (i *Interpreter) evalFuncCall(expr *parser.FuncCall) (Value, error) {
 	return NilValue{}, nil
 }
 
-func evalIndexExpression(node parser.Expression, left, idx Value) (Value, error) {
-	switch left := left.(type) {
-	case ArrayValue:
+func (i *Interpreter) evalIndexExpression(node parser.Expression, left, idx Value) (Value, error) {
+	left = unwrapNamed(left)
+
+	typ := i.typeInfoFromValue(left)
+
+	switch typ.Kind {
+	case TypeArray:
+		arr, ok := left.(*ArrayValue)
+		if !ok {
+			v := left.(ArrayValue)
+			arr = &v
+		}
+
 		idxVal, ok := idx.(IntValue)
 		if !ok {
 			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("array index: %v, must be int", idxVal.V))
@@ -2103,12 +2151,13 @@ func evalIndexExpression(node parser.Expression, left, idx Value) (Value, error)
 
 		idx := idxVal.V
 
-		if idx < 0 || idx >= len(left.Elements) {
+		if idx < 0 || idx >= len(arr.Elements) {
 			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("array index: %d, out of bounds", idx))
 		}
 
-		return left.Elements[idx], nil
-	case StringValue:
+		return arr.Elements[idxVal.V], nil
+
+	case TypeString:
 		idxVal, ok := idx.(IntValue)
 		if !ok {
 			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("string index: %v, must be int", idxVal.V))
@@ -2116,15 +2165,38 @@ func evalIndexExpression(node parser.Expression, left, idx Value) (Value, error)
 
 		idx := idxVal.V
 
-		if idx < 0 || idx >= len(left.V) {
+		if idx < 0 || idx >= len(left.(StringValue).V) {
 			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("string index: %d, out of bounds", idx))
 		}
 
-		r := []rune(left.V)
+		r := []rune(left.(StringValue).V)
 		return StringValue{V: string(r[idx])}, nil
 
 	default:
-		return NilValue{}, NewRuntimeError(node, fmt.Sprintf("indexing is not allowed with type: %T", left.Type()))
+		var typeStr string
+		typeInt := 0
+
+		switch int(typ.Kind) {
+		case 0:
+			typeStr = "int"
+		case 1:
+			typeStr = "float"
+		case 3:
+			typeStr = "bool"
+		case 5:
+			typeStr = "nil"
+		case 6:
+			typeStr = "sturct"
+		default:
+			typeStr = ""
+			typeInt = int(typ.Kind)
+		}
+
+		if typeStr != "" {
+			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("indexing is not allowed with type: %s", typeStr))
+		}
+
+		return NilValue{}, NewRuntimeError(node, fmt.Sprintf("indexing is not allowed with type: %d", typeInt))
 	}
 }
 

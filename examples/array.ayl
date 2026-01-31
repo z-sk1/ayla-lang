@@ -1,3 +1,4 @@
-egg a arr = [1, 2, 3, 4]
+egg a = ["1", "2", "3"]
+a[1] = 4
 
-explodeln(a[0])
+explode(a)

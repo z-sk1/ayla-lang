@@ -31,7 +31,7 @@ See [INSTRUCTIONS.md](./INSTRUCTIONS.md) for full step-by-step instructions for 
 - `toInt(x)` – parses a value to integer
 - `toFloat(x)` – parses a value to float
 - `toArr(x)` – parses a value to array
-- `type(x)` – returns type of value as string
+- `typeof(x)` – returns type of value as string
 - `len(x)` – returns length of arrays or strings
 - `push(arr, val)` – append to array
 - `pop(arr)` – remove and return last element
@@ -43,6 +43,12 @@ See [INSTRUCTIONS.md](./INSTRUCTIONS.md) for full step-by-step instructions for 
 - `randf()` or `randf(max)` or `randf(min, max)`
 
 See [docs/builtins.md](docs/builtins.md) for more about built-in functions.
+
+## type casts
+- `int()` – converts value to integer
+- `float()` – converts value to float
+- `string()` – converts value to string
+- `bool()` – converts value to bool
 
 # the features
 

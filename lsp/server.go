@@ -230,11 +230,29 @@ func (s *Server) handleHover(req *Request) {
 	s.sendResponse(req.ID, hover)
 }
 
-func hoverFromSymbol(sym *Symbol) string {
-	typeStr := "unknown"
-	if sym.Type != nil {
-		typeStr = sym.Type.Value
+func typeNodeToString(t parser.TypeNode) string {
+	if t == nil {
+		return "unknown"
 	}
+
+	switch tt := t.(type) {
+
+	case *parser.IdentType:
+		return tt.Name
+
+	case *parser.ArrayType:
+		return "[]" + typeNodeToString(tt.Elem)
+
+	case *parser.StructType:
+		return "struct" // or expand fields later
+
+	default:
+		return "unknown"
+	}
+}
+
+func hoverFromSymbol(sym *Symbol) string {
+	typeStr := typeNodeToString(sym.Type)
 
 	switch sym.Kind {
 	case SymVar:
@@ -687,29 +705,68 @@ func writeMessage(w *bufio.Writer, data []byte) {
 	w.Flush()
 }
 
-func inferExprType(scope *Scope, expr parser.Expression) *parser.Identifier {
+func sameTypeNode(a, b parser.TypeNode) bool {
+	switch ta := a.(type) {
+	case *parser.IdentType:
+		tb, ok := b.(*parser.IdentType)
+		return ok && ta.Name == tb.Name
+
+	case *parser.ArrayType:
+		tb, ok := b.(*parser.ArrayType)
+		return ok && sameTypeNode(ta.Elem, tb.Elem)
+
+	default:
+		return false
+	}
+}
+
+func isIdent(t parser.TypeNode, name string) bool {
+	id, ok := t.(*parser.IdentType)
+	return ok && id.Name == name
+}
+
+func inferExprType(scope *Scope, expr parser.Expression) parser.TypeNode {
 	switch e := expr.(type) {
 
 	case *parser.IntLiteral:
-		return &parser.Identifier{Value: "int"}
+		return &parser.IdentType{Name: "int"}
 
 	case *parser.FloatLiteral:
-		return &parser.Identifier{Value: "float"}
+		return &parser.IdentType{Name: "float"}
 
 	case *parser.StringLiteral:
-		return &parser.Identifier{Value: "string"}
+		return &parser.IdentType{Name: "string"}
 
 	case *parser.BoolLiteral:
-		return &parser.Identifier{Value: "bool"}
+		return &parser.IdentType{Name: "bool"}
 
 	case *parser.ArrayLiteral:
-		return &parser.Identifier{Value: "arr"}
+		if len(e.Elements) == 0 {
+			return nil // cannot infer empty array without context
+		}
+
+		elemType := inferExprType(scope, e.Elements[0])
+		if elemType == nil {
+			return nil
+		}
+
+		// optional: verify all elements match
+		for _, el := range e.Elements[1:] {
+			t := inferExprType(scope, el)
+			if t == nil || !sameTypeNode(elemType, t) {
+				return nil
+			}
+		}
+
+		return &parser.ArrayType{
+			Elem: elemType,
+		}
 
 	case *parser.AnonymousStructLiteral:
-		return &parser.Identifier{Value: "struct"}
+		return &parser.IdentType{Name: "struct"}
 
 	case *parser.StructLiteral:
-		return &parser.Identifier{Value: e.TypeName.Value}
+		return &parser.IdentType{Name: e.TypeName.Value}
 
 	case *parser.InfixExpression:
 		left := inferExprType(scope, e.Left)
@@ -719,16 +776,18 @@ func inferExprType(scope *Scope, expr parser.Expression) *parser.Identifier {
 			return nil
 		}
 
-		// very simple rules for now
-		if left.Value == right.Value {
+		// same types → same result
+		if sameTypeNode(left, right) {
 			return left
 		}
 
 		// int + float => float
-		if (left.Value == "int" && right.Value == "float") ||
-			(left.Value == "float" && right.Value == "int") {
-			return &parser.Identifier{Value: "float"}
+		if isIdent(left, "int") && isIdent(right, "float") ||
+			isIdent(left, "float") && isIdent(right, "int") {
+			return &parser.IdentType{Name: "float"}
 		}
+
+		return nil
 
 	case *parser.PrefixExpression:
 		return inferExprType(scope, e.Right)

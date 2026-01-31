@@ -23,7 +23,7 @@ type Symbol struct {
 	Kind   SymbolKind
 	Name   string
 	Ident  *parser.Identifier // where it is declared
-	Type   *parser.Identifier // optional: string, int, struct Foo, etc
+	Type   parser.TypeNode
 	Value  parser.Expression
 	Parent *Symbol // optional (struct, function)
 }
@@ -232,9 +232,9 @@ func buildInScope(scope *Scope, stmts []parser.Statement) {
 				Kind:  SymUserType,
 				Name:  s.Name.Value,
 				Ident: s.Name,
-				Type: &parser.Identifier{
+				Type: &parser.IdentType{
 					NodeBase: s.NodeBase,
-					Value:    typeName,
+					Name:    typeName,
 				},
 			})
 

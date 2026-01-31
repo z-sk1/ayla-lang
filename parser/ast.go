@@ -71,7 +71,7 @@ var precedences = map[token.TokenType]int{
 type VarStatement struct {
 	NodeBase
 	Name  *Identifier
-	Type  *Identifier // if no type defaults to nil, and then automatically chooses type
+	Type  TypeNode // if no type defaults to nil, and then automatically chooses type
 	Value Expression
 }
 
@@ -84,7 +84,7 @@ type VarStatementNoKeyword struct {
 type MultiVarStatement struct {
 	NodeBase
 	Names []*Identifier
-	Type  *Identifier
+	Type  TypeNode
 	Value Expression
 }
 
@@ -97,14 +97,14 @@ type MultiVarStatementNoKeyword struct {
 type ConstStatement struct {
 	NodeBase
 	Name  *Identifier
-	Type  *Identifier // if no type defaults to nil, and then automatically chooses type
+	Type  TypeNode // if no type defaults to nil, and then automatically chooses type
 	Value Expression
 }
 
 type MultiConstStatement struct {
 	NodeBase
 	Names []*Identifier
-	Type  *Identifier
+	Type  TypeNode
 	Value Expression
 }
 
@@ -141,6 +141,13 @@ type IdentType struct {
 
 func (*IdentType) typeNode() {}
 
+type ArrayType struct {
+	NodeBase
+	Elem TypeNode
+}
+
+func (*ArrayType) typeNode() {}
+
 type SpawnStatement struct {
 	NodeBase
 	Body []Statement
@@ -155,7 +162,7 @@ type IfStatement struct {
 
 type ParametersClause struct {
 	NodeBase
-	Type *Identifier
+	Type TypeNode
 	Name *Identifier
 }
 
