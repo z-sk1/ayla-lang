@@ -227,16 +227,6 @@ func promoteValueToType(v Value, ti *TypeInfo) Value {
 			ElemType: ti.Elem, // attach declared element type
 		}
 
-	case *ArrayValue:
-		if ti.Kind != TypeArray {
-			return v
-		}
-
-		return ArrayValue{
-			Elements: v.Elements,
-			ElemType: ti.Elem, // attach declared element type
-		}
-
 	default:
 		return v
 	}
@@ -307,8 +297,8 @@ func initBuiltinTypes(typeEnv map[string]*TypeInfo) {
 		Kind: TypeNil,
 	}
 
-	typeEnv["any"] = &TypeInfo{
-		Name: "any",
+	typeEnv["thing"] = &TypeInfo{
+		Name: "thing",
 		Kind: TypeAny,
 	}
 }
@@ -965,6 +955,13 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			}
 
 			val = promoteValueToType(val, expectedTI)
+
+			if expectedTI.Kind == TypeAny {
+				val = NamedValue{
+					TypeName: expectedTI,
+					Value:    val,
+				}
+			}
 		}
 
 		i.env.Define(stmt.Name.Value, val)
@@ -1039,6 +1036,13 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 				}
 
 				v = promoteValueToType(v, expectedTI)
+
+				if expectedTI.Kind == TypeAny {
+					v = NamedValue{
+						TypeName: expectedTI,
+						Value:    v,
+					}
+				}
 			}
 
 			i.env.Define(name.Value, v)
@@ -1111,6 +1115,13 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			}
 
 			val = promoteValueToType(val, expectedTI)
+
+			if expectedTI.Kind == TypeAny {
+				val = NamedValue{
+					TypeName: expectedTI,
+					Value:    val,
+				}
+			}
 		}
 
 		// check if variable already exist
@@ -1190,6 +1201,13 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 				}
 
 				promoteValueToType(v, expectedTI)
+
+				if expectedTI.Kind == TypeAny {
+					v = NamedValue{
+						TypeName: expectedTI,
+						Value:    v,
+					}
+				}
 			}
 
 			i.env.Define(name.Value, v)
@@ -1641,12 +1659,7 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 				elemType = unwrapAlias(valType)
 			} else {
 				if !typesAssignable(valType, elemType) {
-					return NilValue{}, NewRuntimeError(expr, fmt.Sprintf(
-						"array element %d has type %s, expected %s",
-						idx,
-						valType.Name,
-						elemType.Name,
-					))
+					elemType = i.typeEnv["thing"]
 				}
 			}
 
@@ -2120,7 +2133,16 @@ func (i *Interpreter) evalIndexExpression(node parser.Expression, left, idx Valu
 			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("array index: %d, out of bounds", idx))
 		}
 
-		return arr.Elements[idxVal.V], nil
+		elem := arr.Elements[idx]
+
+		if arr.ElemType.Kind == TypeAny {
+			elem = NamedValue{
+				TypeName: arr.ElemType,
+				Value:    elem,
+			}
+		}
+
+		return elem, nil
 
 	case TypeString:
 		idxVal, ok := idx.(IntValue)
@@ -2151,7 +2173,9 @@ func (i *Interpreter) evalIndexExpression(node parser.Expression, left, idx Valu
 		case 5:
 			typeStr = "nil"
 		case 6:
-			typeStr = "sturct"
+			typeStr = "struct"
+		case 8:
+			typeStr = "thing"
 		default:
 			typeStr = ""
 			typeInt = int(typ.Kind)
@@ -2192,6 +2216,17 @@ func (i *Interpreter) evalInfix(node *parser.InfixExpression, left Value, op str
 	}
 	if _, ok := right.(NilValue); ok {
 		return evalNilInfix(node, op, left)
+	}
+
+	// strict any handling
+	leftTI := unwrapAlias(i.typeInfoFromValue(left))
+	rightTI := unwrapAlias(i.typeInfoFromValue(right))
+
+	if leftTI.Kind == TypeAny || rightTI.Kind == TypeAny {
+		return NilValue{}, NewRuntimeError(
+			node,
+			"cannot use 'thing' in operations, assert a type first",
+		)
 	}
 
 	// named values

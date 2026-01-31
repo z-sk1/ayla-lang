@@ -509,7 +509,6 @@ func (i *Interpreter) typeInfoFromValue(v Value) *TypeInfo {
 		return v.TypeName
 	case NamedValue:
 		return v.TypeName
-
 	default:
 		return i.typeEnv["nil"]
 	}

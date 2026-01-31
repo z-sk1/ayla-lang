@@ -543,6 +543,7 @@ func (p *Parser) parseType() TypeNode {
 		token.STRING_TYPE,
 		token.FLOAT_TYPE,
 		token.BOOL_TYPE,
+		token.ANY_TYPE,
 		token.IDENT:
 		return &IdentType{
 			NodeBase: NodeBase{Token: p.curTok},
