@@ -77,6 +77,7 @@ const (
 	FLOAT_TYPE  = "FLOAT_TYPE"
 	STRING_TYPE = "STRING_TYPE"
 	BOOL_TYPE   = "BOOL_TYPE"
+	ANY_TYPE    = "ANY_TYPE"
 )
 
 var keywords = map[string]TokenType{
@@ -100,6 +101,7 @@ var keywords = map[string]TokenType{
 	"float":  FLOAT_TYPE,
 	"string": STRING_TYPE,
 	"bool":   BOOL_TYPE,
+	"thing":  ANY_TYPE,
 
 	"four":   FOR,
 	"why":    WHILE,

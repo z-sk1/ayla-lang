@@ -85,6 +85,7 @@ func (p *Parser) isTypeToken(t token.TokenType) bool {
 		token.STRING_TYPE,
 		token.BOOL_TYPE,
 		token.FLOAT_TYPE,
+		token.ANY_TYPE,
 		token.LBRACKET:
 		return true
 	default:
@@ -1048,7 +1049,7 @@ func (p *Parser) parseFuncStatement() *FuncStatement {
 			NodeBase: NodeBase{Token: p.curTok},
 			Value:    p.curTok.Literal,
 		}
-		
+
 		var paramType TypeNode
 		if p.isTypeToken(p.peekTok.Type) || p.isTypeName(p.peekTok.Literal) {
 			paramType = p.parseType()

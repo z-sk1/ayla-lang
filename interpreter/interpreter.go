@@ -302,14 +302,14 @@ func initBuiltinTypes(typeEnv map[string]*TypeInfo) {
 		Kind: TypeBool,
 	}
 
-	typeEnv["arr"] = &TypeInfo{
-		Name: "arr",
-		Kind: TypeArray,
-	}
-
 	typeEnv["nil"] = &TypeInfo{
 		Name: "nil",
 		Kind: TypeNil,
+	}
+
+	typeEnv["any"] = &TypeInfo{
+		Name: "any",
+		Kind: TypeAny,
 	}
 }
 
@@ -977,7 +977,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		}
 
 		// variable must not exist
-		if _, ok := i.env.store[stmt.Name.Value]; ok {
+		if _, ok := i.env.Get(stmt.Name.Value); ok {
 			return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("cant redeclare var: %s", stmt.Name.Value))
 		}
 
@@ -1006,7 +1006,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		}
 
 		for idx, name := range stmt.Names {
-			if _, ok := i.env.store[name.Value]; ok {
+			if _, ok := i.env.Get(name.Value); ok {
 				return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("cannot redeclare var: %s", name.Value))
 			}
 
@@ -1014,27 +1014,6 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 
 			if stmt.Value != nil {
 				v = values[idx]
-			}
-
-			var err error
-
-			if stmt.Value != nil {
-				v, err = i.EvalExpression(stmt.Value)
-				if err != nil {
-					return SignalNone{}, err
-				}
-			} else if stmt.Type != nil {
-				expectedTI, err := i.resolveTypeNode(stmt.Type)
-				if err != nil {
-					return SignalNone{}, err
-				}
-
-				v, err = defaultValueFromTypeInfo(stmt, expectedTI)
-				if err != nil {
-					return SignalNone{}, err
-				}
-			} else {
-				v = UninitializedValue{}
 			}
 
 			if stmt.Type != nil {
@@ -1058,6 +1037,8 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 						),
 					)
 				}
+
+				v = promoteValueToType(v, expectedTI)
 			}
 
 			i.env.Define(name.Value, v)
@@ -1085,7 +1066,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		values = tuple.Values
 
 		for idx, name := range stmt.Names {
-			if _, ok := i.env.store[name.Value]; ok {
+			if _, ok := i.env.Get(name.Value); ok {
 				return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("cannot redeclare var: %s", name.Value))
 			}
 
@@ -1128,10 +1109,12 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 					),
 				)
 			}
+
+			val = promoteValueToType(val, expectedTI)
 		}
 
 		// check if variable already exist
-		if _, ok := i.env.store[stmt.Name.Value]; ok {
+		if _, ok := i.env.Get(stmt.Name.Value); ok {
 			return SignalNone{}, NewRuntimeError(s, fmt.Sprintf("cant redeclare const: %s", stmt.Name.Value))
 		}
 
@@ -1183,26 +1166,6 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			if stmt.Value != nil {
 				v = values[idx]
 			}
-			var err error
-
-			if stmt.Value != nil {
-				v, err = i.EvalExpression(stmt.Value)
-				if err != nil {
-					return SignalNone{}, err
-				}
-			} else if stmt.Type != nil {
-				expectedTI, err := i.resolveTypeNode(stmt.Type)
-				if err != nil {
-					return SignalNone{}, err
-				}
-
-				v, err = defaultValueFromTypeInfo(stmt, expectedTI)
-				if err != nil {
-					return SignalNone{}, err
-				}
-			} else {
-				v = UninitializedValue{}
-			}
 
 			if stmt.Type != nil {
 				expectedTI, err := i.resolveTypeNode(stmt.Type)
@@ -1225,6 +1188,8 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 						),
 					)
 				}
+
+				promoteValueToType(v, expectedTI)
 			}
 
 			i.env.Define(name.Value, v)
