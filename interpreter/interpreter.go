@@ -916,17 +916,26 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		var val Value
 		var err error
 
-		if stmt.Value != nil {
-			val, err = i.EvalExpression(stmt.Value)
+		var expectedTI *TypeInfo
+		if stmt.Type != nil {
+			expectedTI, err = i.resolveTypeNode(stmt.Type)
 			if err != nil {
 				return SignalNone{}, err
 			}
-		} else if stmt.Type != nil {
-			expectedTI, err := i.resolveTypeNode(stmt.Type)
-			if err != nil {
-				return SignalNone{}, err
+			expectedTI = unwrapAlias(expectedTI)
+		}
+
+		if stmt.Value != nil {
+			if arr, ok := stmt.Value.(*parser.ArrayLiteral); ok && expectedTI != nil && expectedTI.Kind == TypeArray {
+				val, err = i.evalArrayLiteral(arr, expectedTI.Elem)
+			} else {
+				val, err = i.EvalExpression(stmt.Value)
 			}
 
+			if err != nil {
+				return SignalNone{}, err
+			}
+		} else if expectedTI != nil {
 			val, err = defaultValueFromTypeInfo(stmt, expectedTI)
 			if err != nil {
 				return SignalNone{}, err
@@ -935,12 +944,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			val = UninitializedValue{}
 		}
 
-		if stmt.Type != nil && stmt.Value != nil {
-			expectedTI, err := i.resolveTypeNode(stmt.Type)
-			if err != nil {
-				return SignalNone{}, err
-			}
-
+		if expectedTI != nil && stmt.Value != nil {
 			actualTI := unwrapAlias(i.typeInfoFromValue(val))
 
 			if !typesAssignable(actualTI, expectedTI) {
@@ -1644,37 +1648,7 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 		return v, nil
 
 	case *parser.ArrayLiteral:
-		elements := []Value{}
-		var elemType *TypeInfo
-
-		for idx, el := range expr.Elements {
-			val, err := i.EvalExpression(el)
-			if err != nil {
-				return NilValue{}, err
-			}
-
-			valType := unwrapAlias(i.typeInfoFromValue(val))
-
-			if idx == 0 {
-				elemType = unwrapAlias(valType)
-			} else {
-				if !typesAssignable(valType, elemType) {
-					elemType = i.typeEnv["thing"]
-				}
-			}
-
-			elements = append(elements, val)
-		}
-
-		// empty array literal → needs context
-		if elemType == nil {
-			return NilValue{}, fmt.Errorf("cannot infer type of empty array")
-		}
-
-		return ArrayValue{
-			Elements: elements,
-			ElemType: elemType,
-		}, nil
+		return i.evalArrayLiteral(expr, nil)
 
 	case *parser.FuncCall:
 		return i.evalCall(expr)
@@ -1800,6 +1774,31 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 			Fields: fields,
 		}, nil
 
+	case *parser.TypeAssertExpression:
+		val, err := i.EvalExpression(expr.Expr)
+		if err != nil {
+			return NilValue{}, err
+		}
+
+		staticTI := unwrapAlias(i.typeInfoFromValue(val))
+		if staticTI.Kind != TypeAny {
+			return NilValue{}, NewRuntimeError(expr, "type assertion only allowed on 'thing'")
+		}
+
+		targetTI, err := i.resolveTypeNode(expr.Type)
+		if err != nil {
+			return NilValue{}, err
+		}
+
+		inner := unwrapNamed(val)
+		actualTI := unwrapAlias(i.typeInfoFromValue(inner))
+
+		if !typesAssignable(actualTI, targetTI) {
+			return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("type assertion failed: %s is not %s", actualTI.Name, targetTI.Name))
+		}
+
+		return promoteValueToType(inner, targetTI), nil
+
 	case *parser.InfixExpression:
 		if expr.Operator == "&&" {
 			left, err := i.EvalExpression(expr.Left)
@@ -1897,6 +1896,53 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 	default:
 		return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("unhandled expression type: %T", e))
 	}
+}
+
+func (i *Interpreter) evalArrayLiteral(expr *parser.ArrayLiteral, expected *TypeInfo) (Value, error) {
+	elements := []Value{}
+	var elemType *TypeInfo
+
+	if expected != nil {
+		elemType = unwrapAlias(expected)
+	}
+
+	for idx, el := range expr.Elements {
+		val, err := i.EvalExpression(el)
+		if err != nil {
+			return NilValue{}, err
+		}
+
+		valType := unwrapAlias(i.typeInfoFromValue(val))
+
+		if elemType == nil {
+			elemType = valType
+		} else {
+			if !typesAssignable(valType, elemType) {
+				return NilValue{}, NewRuntimeError(
+					expr,
+					fmt.Sprintf(
+						"array element %d expected %s but got %s",
+						idx,
+						elemType.Name,
+						valType.Name,
+					),
+				)
+			}
+		}
+
+		val = promoteValueToType(val, elemType)
+
+		elements = append(elements, val)
+	}
+
+	if elemType == nil {
+		return NilValue{}, NewRuntimeError(expr, "cannot infer type of empty array")
+	}
+
+	return ArrayValue{
+		Elements: elements,
+		ElemType: elemType,
+	}, nil
 }
 
 func (i *Interpreter) evalCall(e *parser.FuncCall) (Value, error) {
@@ -2110,6 +2156,13 @@ func (i *Interpreter) evalFuncCall(expr *parser.FuncCall) (Value, error) {
 }
 
 func (i *Interpreter) evalIndexExpression(node parser.Expression, left, idx Value) (Value, error) {
+	if nv, ok := left.(NamedValue); ok && nv.TypeName.Kind == TypeAny {
+		return NilValue{}, NewRuntimeError(
+			node,
+			"cannot index value of type thing without type assertion",
+		)
+	}
+
 	left = unwrapNamed(left)
 
 	typ := i.typeInfoFromValue(left)

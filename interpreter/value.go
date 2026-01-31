@@ -496,7 +496,7 @@ func (i *Interpreter) typeInfoFromValue(v Value) *TypeInfo {
 		return i.typeEnv["bool"]
 	case ArrayValue:
 		if v.ElemType == nil {
-			panic("ArrayValue with nil ElemType")
+			panic("ArrayValue ElemType is nil")
 		}
 
 		return &TypeInfo{

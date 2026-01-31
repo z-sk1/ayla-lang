@@ -1335,7 +1335,35 @@ func (p *Parser) parseExpression(precedence int) Expression {
 		}
 
 		if p.peekTok.Type == token.DOT {
-			p.nextToken()
+			p.nextToken() // .
+
+			// .(
+			if p.peekTok.Type == token.LPAREN {
+				p.nextToken() // (
+				p.nextToken() // start of type
+
+				typ := p.parseType()
+				if typ == nil {
+					p.addError("expected type in type assertion")
+					return nil
+				}
+
+				if p.peekTok.Type != token.RPAREN {
+					p.addError("expected ')' after type assertion")
+					return nil
+				}
+
+				p.nextToken() // )
+
+				left = &TypeAssertExpression{
+					NodeBase: NodeBase{Token: p.curTok},
+					Expr:     left,
+					Type:     typ,
+				}
+				continue
+			}
+
+			// .ident
 			p.nextToken()
 
 			if p.curTok.Type != token.IDENT {

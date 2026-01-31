@@ -248,6 +248,12 @@ type IndexAssignmentStatement struct {
 	Value Expression
 }
 
+type TypeAssertExpression struct {
+	NodeBase
+	Expr Expression
+	Type TypeNode
+}
+
 type IntLiteral struct {
 	NodeBase
 	Value int
