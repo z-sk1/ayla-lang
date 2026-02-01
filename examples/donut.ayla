@@ -1,8 +1,8 @@
 egg A float = 0.0
 egg B float = 0.0
 
-egg z arr
-egg b arr
+egg z []float
+egg b []int
 
 egg i int
 egg j int
