@@ -481,6 +481,12 @@ func (i *Interpreter) registerBuiltins() {
 		Arity: 1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
 			v := args[0]
+
+			switch v := v.(type) {
+			case ArrayValue:
+				return StringValue{V: "[]" + v.ElemType.Name}, nil
+			}
+
 			return StringValue{V: string(v.Type())}, nil
 		},
 	}
@@ -1794,7 +1800,7 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 		actualTI := unwrapAlias(i.typeInfoFromValue(inner))
 
 		if !typesAssignable(actualTI, targetTI) {
-			return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("type assertion failed: %s is not %s", actualTI.Name, targetTI.Name))
+			return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("type mismatch: %s asserted as %s", actualTI.Name, targetTI.Name))
 		}
 
 		return promoteValueToType(inner, targetTI), nil
@@ -1921,7 +1927,7 @@ func (i *Interpreter) evalArrayLiteral(expr *parser.ArrayLiteral, expected *Type
 				return NilValue{}, NewRuntimeError(
 					expr,
 					fmt.Sprintf(
-						"array element %d expected %s but got %s",
+						"array element %d expected %s but got %s (use []thing for mixed arrays)",
 						idx,
 						elemType.Name,
 						valType.Name,

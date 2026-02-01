@@ -1,3 +1,7 @@
-egg x []thing = ["1", [1]]
+egg x thing = 2
 
-explode(x[1].([]thing)[0].(int) + 1)
+explodeln(x.(int) + 3)
+
+egg a []thing = [1, [1]]
+
+explodeln(a[1].([]thing)[0].(int) + 1)
