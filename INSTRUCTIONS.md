@@ -12,7 +12,7 @@ add that folder to your **PATH**:
 
 1. press `Win + R`, type `sysdm.cpl`, and press enter  
 2. go to **Advanced** → **Environment Variables**  
-3. under **System variables**, find `Path` → **Edit`  
+3. under **System variables**, find `Path` → `Edit`  
 4. add: C:\ayla
 
 open a new **Command Prompt** and verify:
