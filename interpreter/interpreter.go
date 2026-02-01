@@ -1441,6 +1441,23 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 
 		return SignalNone{}, nil
 
+	case *parser.WithStatement:
+		val, err := i.EvalExpression(stmt.Expr)
+		if err != nil {
+			return SignalNone{}, err
+		}
+
+		oldEnv := i.env
+		i.env = NewEnvironment(oldEnv)
+
+		i.env.Define("it", ConstValue{Value: val})
+
+		sig, err := i.EvalStatements(stmt.Body)
+
+		i.env = oldEnv
+
+		return sig, err
+
 	case *parser.ForStatement:
 		loopEnv := NewEnvironment(i.env)
 		oldEnv := i.env

@@ -217,6 +217,12 @@ type DefaultClause struct {
 	Body []Statement
 }
 
+type WithStatement struct {
+	NodeBase
+	Expr Expression
+	Body []Statement
+}
+
 type BreakStatement struct {
 	NodeBase
 }

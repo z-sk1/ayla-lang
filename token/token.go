@@ -56,12 +56,12 @@ const (
 	CONST    = "CONST"
 	TYPE     = "TYPE"
 	STRUCT   = "STRUCT"
-	PRINT    = "PRINT"
 	IF       = "IF"
 	ELSE     = "ELSE"
 	SWITCH   = "SWITCH"
 	CASE     = "CASE"
 	DEFAULT  = "DEFAULT"
+	WITH     = "WITH"
 	FUNC     = "FUNC"
 	RETURN   = "RETURN"
 	CONTINUE = "CONTINUE"
@@ -92,6 +92,8 @@ var keywords = map[string]TokenType{
 	"decide":    SWITCH,
 	"when":      CASE,
 	"otherwise": DEFAULT,
+
+	"with": WITH,
 
 	"fun":   FUNC,
 	"back":  RETURN,

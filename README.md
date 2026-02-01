@@ -160,6 +160,7 @@ explodeln(a, b)
 2
 ```
 
+## slice types
 you can also annotate slice types like this
 ```ayla
 egg a []int = [1, 2, 3]
@@ -427,6 +428,36 @@ decide yes {
 
     otherwise {
         explode("x is more than 10")
+    }
+}
+```
+
+## with statement
+the `with` statement evaluates a value and makes it available inside a block as `it`
+
+```ayla
+with x {
+    explodeln(it)
+}
+```
+
+`with` does not modify the original value
+`it` behaves like a const
+
+```ayla
+egg x int = 5
+
+with x {
+    explodeln(it) // 5
+}
+```
+
+Nested `with` blocks shadow `it`
+
+```ayla
+with a {
+    with b {
+        explodeln(it) // b
     }
 }
 ```

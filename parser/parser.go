@@ -222,6 +222,8 @@ func (p *Parser) parseStatement() Statement {
 		return p.parseSpawnStatement()
 	case token.IF:
 		return p.parseIfStatement()
+	case token.WITH:
+		return p.parseWithStatement()
 	case token.FOR:
 		return p.parseForStatement()
 	case token.WHILE:
@@ -1286,6 +1288,35 @@ func (p *Parser) parseWhileStatement() *WhileStatement {
 	p.nextToken() // move to '{'
 
 	stmt.Body = p.parseBlockStatement()
+	return stmt
+}
+
+func (p *Parser) parseWithStatement() *WithStatement {
+	stmt := &WithStatement{
+		NodeBase: NodeBase{Token: p.curTok}, // with
+	}
+
+	p.nextToken()
+	stmt.Expr = p.parseExpression(LOWEST)
+	if stmt.Expr == nil {
+		return nil
+	}
+
+	p.nextToken()
+	if p.curTok.Type != token.LBRACE {
+		p.addError("expected '{' after expression")
+		return nil
+	}
+
+	p.nextToken() // move past {
+
+	stmt.Body = p.parseBlockStatement()
+
+	if p.curTok.Type != token.RBRACE {
+		p.addError("expected '}' after statements")
+		return nil
+	}
+
 	return stmt
 }
 
