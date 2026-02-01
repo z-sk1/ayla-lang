@@ -421,7 +421,29 @@ func (i *Interpreter) registerBuiltins() {
 		Name:  "toArr",
 		Arity: -1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			return ArrayValue{Elements: args}, nil
+			if len(args) == 0 {
+				return NilValue{}, NewRuntimeError(node, "toArr requires at least one argument")
+			}
+
+			elemType := unwrapAlias(i.typeInfoFromValue(args[0]))
+
+			elements := make([]Value, 0, len(args))
+			elements = append(elements, args[0])
+
+			for idx := 1; idx < len(args); idx++ {
+				t := unwrapAlias(i.typeInfoFromValue(args[idx]))
+
+				if !typesAssignable(t, elemType) {
+					return NilValue{}, NewRuntimeError(node, fmt.Sprintf("toArr argument %d expected %s but got %s (use []thing for mixed arrays)", idx, elemType.Name, t.Name))
+				}
+
+				elements = append(elements, args[idx])
+			}
+
+			return ArrayValue{
+				Elements: elements,
+				ElemType: elemType,
+			}, nil
 		},
 	}
 
@@ -932,15 +954,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		}
 
 		if stmt.Value != nil {
-			if arr, ok := stmt.Value.(*parser.ArrayLiteral); ok && expectedTI != nil && expectedTI.Kind == TypeArray {
-				val, err = i.evalArrayLiteral(arr, expectedTI.Elem)
-			} else {
-				val, err = i.EvalExpression(stmt.Value)
-			}
-
-			if err != nil {
-				return SignalNone{}, err
-			}
+			val, err = i.evalExprWithExpectedType(stmt.Value, expectedTI)
 		} else if expectedTI != nil {
 			val, err = defaultValueFromTypeInfo(stmt, expectedTI)
 			if err != nil {
@@ -950,28 +964,13 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			val = UninitializedValue{}
 		}
 
-		if expectedTI != nil && stmt.Value != nil {
-			actualTI := unwrapAlias(i.typeInfoFromValue(val))
+		if err != nil {
+			return SignalNone{}, err
+		}
 
-			if !typesAssignable(actualTI, expectedTI) {
-				return SignalNone{}, NewRuntimeError(
-					stmt,
-					fmt.Sprintf(
-						"type mismatch: '%s' assigned to '%s'",
-						actualTI.Name,
-						expectedTI.Name,
-					),
-				)
-			}
-
-			val = promoteValueToType(val, expectedTI)
-
-			if expectedTI.Kind == TypeAny {
-				val = NamedValue{
-					TypeName: expectedTI,
-					Value:    val,
-				}
-			}
+		val, err = i.assignWithType(stmt, val, expectedTI)
+		if err != nil {
+			return SignalNone{}, err
 		}
 
 		i.env.Define(stmt.Name.Value, val)
@@ -992,67 +991,39 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		return SignalNone{}, nil
 
 	case *parser.MultiVarStatement:
-		var values []Value
+		val, err := i.EvalExpression(stmt.Value)
+		if err != nil {
+			return SignalNone{}, err
+		}
 
-		if stmt.Value != nil {
-			val, err := i.EvalExpression(stmt.Value)
+		tuple, ok := val.(TupleValue)
+		if !ok {
+			return SignalNone{}, NewRuntimeError(stmt, "multi var assignment expects tuple value")
+		}
+
+		if len(tuple.Values) != len(stmt.Names) {
+			return SignalNone{}, NewRuntimeError(stmt,
+				fmt.Sprintf("expected %d values, got %d",
+					len(stmt.Names), len(tuple.Values)))
+		}
+
+		var expectedTI *TypeInfo
+		if stmt.Type != nil {
+			expectedTI, err = i.resolveTypeNode(stmt.Type)
 			if err != nil {
 				return SignalNone{}, err
 			}
-
-			tuple, ok := val.(TupleValue)
-			if !ok {
-				return SignalNone{}, NewRuntimeError(stmt, "multi var assignment expects tuple value")
-			}
-
-			if len(tuple.Values) != len(stmt.Names) {
-				return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("expected %d values, got %d", len(stmt.Names), len(tuple.Values)))
-			}
-
-			values = tuple.Values
 		}
 
 		for idx, name := range stmt.Names {
 			if _, ok := i.env.Get(name.Value); ok {
-				return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("cannot redeclare var: %s", name.Value))
+				return SignalNone{}, NewRuntimeError(stmt,
+					fmt.Sprintf("cannot redeclare var: %s", name.Value))
 			}
 
-			var v Value = UninitializedValue{}
-
-			if stmt.Value != nil {
-				v = values[idx]
-			}
-
-			if stmt.Type != nil {
-				expectedTI, err := i.resolveTypeNode(stmt.Type)
-				if err != nil {
-					return SignalNone{}, err
-				}
-
-				actualTI := i.typeInfoFromValue(v)
-
-				expectedTI = unwrapAlias(expectedTI)
-				actualTI = unwrapAlias(actualTI)
-
-				if !typesAssignable(actualTI, expectedTI) {
-					return SignalNone{}, NewRuntimeError(
-						stmt,
-						fmt.Sprintf(
-							"type mismatch: '%s' assigned to '%s'",
-							actualTI.Name,
-							expectedTI.Name,
-						),
-					)
-				}
-
-				v = promoteValueToType(v, expectedTI)
-
-				if expectedTI.Kind == TypeAny {
-					v = NamedValue{
-						TypeName: expectedTI,
-						Value:    v,
-					}
-				}
+			v, err := i.assignWithType(stmt, tuple.Values[idx], expectedTI)
+			if err != nil {
+				return SignalNone{}, err
 			}
 
 			i.env.Define(name.Value, v)
@@ -1093,45 +1064,23 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		var val Value
 		var err error
 
-		if stmt.Value == nil {
-			return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("const %s must be initalised with a value", stmt.Name.Value))
-		} else {
-			val, err = i.EvalExpression(stmt.Value)
+		var expectedTI *TypeInfo
+		if stmt.Type != nil {
+			expectedTI, err = i.resolveTypeNode(stmt.Type)
 			if err != nil {
 				return SignalNone{}, err
 			}
 		}
 
-		if stmt.Type != nil {
-			expectedTI, err := i.resolveTypeNode(stmt.Type)
+		if stmt.Value != nil {
+			val, err = i.evalExprWithExpectedType(stmt.Value, expectedTI)
+		} else if expectedTI != nil {
+			val, err = defaultValueFromTypeInfo(stmt, expectedTI)
 			if err != nil {
 				return SignalNone{}, err
 			}
-
-			actualTI := i.typeInfoFromValue(val)
-
-			expectedTI = unwrapAlias(expectedTI)
-			actualTI = unwrapAlias(actualTI)
-
-			if !typesAssignable(actualTI, expectedTI) {
-				return SignalNone{}, NewRuntimeError(
-					stmt,
-					fmt.Sprintf(
-						"type mismatch: '%s' assigned to '%s'",
-						actualTI.Name,
-						expectedTI.Name,
-					),
-				)
-			}
-
-			val = promoteValueToType(val, expectedTI)
-
-			if expectedTI.Kind == TypeAny {
-				val = NamedValue{
-					TypeName: expectedTI,
-					Value:    val,
-				}
-			}
+		} else {
+			return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("const %s must be initalised with a value", stmt.Name.Value))
 		}
 
 		// check if variable already exist
@@ -1144,8 +1093,6 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		return SignalNone{}, nil
 
 	case *parser.MultiConstStatement:
-		var values []Value
-
 		if stmt.Value == nil {
 			var names string
 
@@ -1158,67 +1105,41 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			}
 
 			return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("constants, %s, must be initialised", names))
-		} else {
-			var err error
-			val, err := i.EvalExpression(stmt.Value)
+		}
+
+		var err error
+		val, err := i.EvalExpression(stmt.Value)
+		if err != nil {
+			return SignalNone{}, err
+		}
+
+		tuple, ok := val.(TupleValue)
+		if !ok {
+			return SignalNone{}, NewRuntimeError(stmt, "multi const statement expects tuple value")
+		}
+
+		if len(tuple.Values) != len(stmt.Names) {
+			return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("expected %d values, got %d", len(tuple.Values), len(stmt.Names)))
+		}
+
+		var expectedTI *TypeInfo
+		if stmt.Type != nil {
+			expectedTI, err = i.resolveTypeNode(stmt.Type)
 			if err != nil {
 				return SignalNone{}, err
 			}
-
-			tuple, ok := val.(TupleValue)
-			if !ok {
-				return SignalNone{}, NewRuntimeError(stmt, "multi const statement expects tuple value")
-			}
-
-			if len(tuple.Values) != len(stmt.Names) {
-				return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("expected %d values, got %d", len(tuple.Values), len(stmt.Names)))
-			}
-
-			values = tuple.Values
 		}
 
 		for idx, name := range stmt.Names {
 			if _, ok := i.env.store[name.Value]; ok {
 				return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("cannot redeclare const: %s", name.Value))
 			}
-
-			var v Value = NilValue{}
-
-			if stmt.Value != nil {
-				v = values[idx]
+			v, err := i.assignWithType(stmt, tuple.Values[idx], expectedTI)
+			if err != nil {
+				return SignalNone{}, err
 			}
 
-			if stmt.Type != nil {
-				expectedTI, err := i.resolveTypeNode(stmt.Type)
-				if err != nil {
-					return SignalNone{}, err
-				}
-
-				actualTI := i.typeInfoFromValue(v)
-
-				expectedTI = unwrapAlias(expectedTI)
-				actualTI = unwrapAlias(actualTI)
-
-				if !typesAssignable(actualTI, expectedTI) {
-					return SignalNone{}, NewRuntimeError(
-						stmt,
-						fmt.Sprintf(
-							"type mismatch: '%s' assigned to '%s'",
-							actualTI.Name,
-							expectedTI.Name,
-						),
-					)
-				}
-
-				promoteValueToType(v, expectedTI)
-
-				if expectedTI.Kind == TypeAny {
-					v = NamedValue{
-						TypeName: expectedTI,
-						Value:    v,
-					}
-				}
-			}
+			v = ConstValue{Value: v}
 
 			i.env.Define(name.Value, v)
 		}
@@ -1904,6 +1825,76 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 	}
 }
 
+func (i *Interpreter) assignWithType(node parser.Node, v Value, expected *TypeInfo) (Value, error) {
+	if expected == nil {
+		return v, nil
+	}
+
+	expected = unwrapAlias(expected)
+	actual := unwrapAlias(i.typeInfoFromValue(v))
+
+	// special case: []thing absorbs array elem types
+	if expected.Kind == TypeArray && expected.Elem.Kind == TypeAny {
+		if arr, ok := v.(ArrayValue); ok {
+			arr.ElemType = expected.Elem
+			v = arr
+			actual = expected
+		}
+	}
+
+	if !typesAssignable(actual, expected) {
+		return NilValue{}, NewRuntimeError(
+			node,
+			fmt.Sprintf(
+				"type mismatch: '%s' assigned to '%s'",
+				actual.Name,
+				expected.Name,
+			),
+		)
+	}
+
+	v = promoteValueToType(v, expected)
+
+	if expected.Kind == TypeAny {
+		v = NamedValue{
+			TypeName: expected,
+			Value:    v,
+		}
+	}
+
+	return v, nil
+}
+
+func (i *Interpreter) evalExprWithExpectedType(expr parser.Expression, expected *TypeInfo) (Value, error) {
+
+	// unwrap aliases early
+	if expected != nil {
+		expected = unwrapAlias(expected)
+	}
+
+	switch e := expr.(type) {
+
+	case *parser.ArrayLiteral:
+		if expected != nil && expected.Kind == TypeArray {
+			return i.evalArrayLiteral(e, expected.Elem)
+		}
+		return i.EvalExpression(e)
+
+	case *parser.FuncCall:
+		if expected != nil &&
+			expected.Kind == TypeArray &&
+			expected.Elem.Kind == TypeAny &&
+			e.Name.Value == "toArr" {
+
+			return i.evalToArrWithExpectedElem(e, expected.Elem)
+		}
+		return i.EvalExpression(e)
+
+	default:
+		return i.EvalExpression(expr)
+	}
+}
+
 func (i *Interpreter) evalArrayLiteral(expr *parser.ArrayLiteral, expected *TypeInfo) (Value, error) {
 	elements := []Value{}
 	var elemType *TypeInfo
@@ -1948,6 +1939,46 @@ func (i *Interpreter) evalArrayLiteral(expr *parser.ArrayLiteral, expected *Type
 	return ArrayValue{
 		Elements: elements,
 		ElemType: elemType,
+	}, nil
+}
+
+func (i *Interpreter) evalToArrWithExpectedElem(
+	node *parser.FuncCall,
+	expectedElem *TypeInfo,
+) (Value, error) {
+
+	args := make([]Value, len(node.Args))
+	for idx, arg := range node.Args {
+		v, err := i.EvalExpression(arg)
+		if err != nil {
+			return NilValue{}, err
+		}
+		args[idx] = v
+	}
+
+	elements := make([]Value, 0, len(args))
+
+	for idx, v := range args {
+		t := unwrapAlias(i.typeInfoFromValue(v))
+
+		if !typesAssignable(t, expectedElem) {
+			return NilValue{}, NewRuntimeError(
+				node,
+				fmt.Sprintf(
+					"toArr argument %d expected %s but got %s",
+					idx,
+					expectedElem.Name,
+					t.Name,
+				),
+			)
+		}
+
+		elements = append(elements, promoteValueToType(v, expectedElem))
+	}
+
+	return ArrayValue{
+		Elements: elements,
+		ElemType: expectedElem,
 	}, nil
 }
 

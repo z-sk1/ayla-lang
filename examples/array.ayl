@@ -1,5 +1,3 @@
-rock a, b []int = [1, 2], [1, 54]
-
-a[1] = 3
+rock a []int = [1, 3]
 
 explode(a)
