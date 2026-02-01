@@ -1217,14 +1217,14 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			return SignalNone{}, nil
 		}
 
-		expected := existingVal.Type()
-		actual := val.Type()
+		expectedTI := unwrapAlias(i.typeInfoFromValue(existingVal))
 
-		if expected != actual {
-			return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("type mismatch: '%s' assigned to a '%s'", string(actual), string(expected)))
+		v, err := i.assignWithType(stmt, val, expectedTI)
+		if err != nil {
+			return SignalNone{}, err
 		}
 
-		i.env.Set(stmt.Name.Value, val)
+		i.env.Set(stmt.Name.Value, v)
 		return SignalNone{}, nil
 
 	case *parser.MultiAssignmentStatement:
@@ -1257,14 +1257,14 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 				continue
 			}
 
-			expected := existingVal.Type()
-			actual := tuple.Values[idx].Type()
+			expectedTI := unwrapAlias(i.typeInfoFromValue(existingVal))
 
-			if expected != actual {
-				return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("type mismatch: '%s' assigned to '%s'", string(actual), string(expected)))
+			v, err := i.assignWithType(stmt, tuple.Values[idx], expectedTI)
+			if err != nil {
+				return SignalNone{}, err
 			}
 
-			i.env.Set(name.Value, tuple.Values[idx])
+			i.env.Set(name.Value, v)
 		}
 
 		return SignalNone{}, nil

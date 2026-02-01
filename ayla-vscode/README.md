@@ -16,11 +16,6 @@ See [INSTRUCTIONS.md](./INSTRUCTIONS.md) for full step-by-step instructions for 
 
 ---
 
-# Installation and Usage
-See [INSTRUCTIONS.md](./INSTRUCTIONS.md) for full step-by-step instructions for macOS and Windows.
-
----
-
 ## built in functions!
 - `explode(...)` – prints values to stdout
 - `explodeln(...)` — prints values to stdout and adds '\n' at the end
@@ -31,7 +26,7 @@ See [INSTRUCTIONS.md](./INSTRUCTIONS.md) for full step-by-step instructions for 
 - `toInt(x)` – parses a value to integer
 - `toFloat(x)` – parses a value to float
 - `toArr(x)` – parses a value to array
-- `type(x)` – returns type of value as string
+- `typeof(x)` – returns type of value as string
 - `len(x)` – returns length of arrays or strings
 - `push(arr, val)` – append to array
 - `pop(arr)` – remove and return last element
@@ -43,6 +38,12 @@ See [INSTRUCTIONS.md](./INSTRUCTIONS.md) for full step-by-step instructions for 
 - `randf()` or `randf(max)` or `randf(min, max)`
 
 See [docs/builtins.md](docs/builtins.md) for more about built-in functions.
+
+## type casts
+- `int()` – converts value to integer
+- `float()` – converts value to float
+- `string()` – converts value to string
+- `bool()` – converts value to bool
 
 # the features
 
@@ -110,7 +111,7 @@ you can do type annotation, but not for every variable, the type at the end dict
 ```ayla
 egg a, b, c int
 
-explodeln(type(a), type(b), type(c))
+explodeln(typeof(a), typeof(b), typeof(c))
 
 explodeln(a)
 ```
@@ -154,6 +155,50 @@ explodeln(a, b)
 2
 ```
 
+you can also annotate slice types like this
+```ayla
+egg a []int = [1, 2, 3]
+
+explode(a[0])
+```
+> output: 1
+
+```ayla
+egg a [][]int = [[1], [2], [3]]
+
+explode(a[0][0])
+```
+> output: 1
+
+
+## the thing type
+the `thing` type is equivalent to `interface{}` or `any` from go
+
+you can assign any value to it
+
+```ayla
+egg x thing = 2
+
+explode(x)
+```
+> output: 2
+
+but, you must use type assertion to do operations with it
+```ayla
+egg x thing = 2
+
+explode(x.(int) + 1)
+```
+> output: 3
+
+otherwise you will come across a `Runtime error`
+```ayla
+egg x thing = 2
+
+explode(x + 1)
+```
+> output: runtime error at 3:11: cannot use 'thing' in operations, assert a type first
+
 ## semicolon
 semicolons are optional! put them if you want, or leave them out if you're more comfortable with that
 ```ayla
@@ -187,7 +232,7 @@ big comment */
 ```
 
 ## booleans
-for booleans, it is recommended to use the constants `yes` and `no`
+for booleans, use the constants `yes` and `no`
 ```ayla
 egg foo = yes
 
@@ -210,9 +255,9 @@ explode(a + b)
 ```
 > output: hello world
 
-you can also concatenate strings with other types by casting.
+you can also concatenate strings with other types by parsing.
 ```ayla 
-explode(string(4) + string(2))
+explode(toString(4) + toString(2))
 ```
 > output: 42
 
@@ -427,15 +472,19 @@ explode(arr[2])
 ```
 > output: 5
 
-and you can reassign a specific index
+ayla also supports mixed arrays, but you must use `[]thing`
+
 ```ayla
-egg arr = ["hello", 1]
-
-arr[1] = "world"
-
-explode(arr)
+egg arr []thing = [1, 2, "3"]
 ```
-> output: [hello, world]
+
+like `thing` you must use type assertion to do operations
+```ayla
+egg arr []thing = [1, 2, "3"]
+
+explode(arr[1].(int) + 1)
+```
+> output: 3
 
 ## structs
 ayla supports typed, and anonymous structs
