@@ -1,8 +1,8 @@
 egg text = "Yara's the worst person ever "
 
 why yes {
-    four egg j int = 0; j < len(text); j = j + 1 {
-        explode(text[j])
+    four _, s := range text {
+        explode(s)
         wait(25)
     }
 }

@@ -86,7 +86,8 @@ func (p *Parser) isTypeToken(t token.TokenType) bool {
 		token.BOOL_TYPE,
 		token.FLOAT_TYPE,
 		token.ANY_TYPE,
-		token.LBRACKET:
+		token.LBRACKET,
+		token.MAP:
 		return true
 	default:
 		return false
@@ -225,7 +226,7 @@ func (p *Parser) parseStatement() Statement {
 	case token.WITH:
 		return p.parseWithStatement()
 	case token.FOR:
-		return p.parseForStatement()
+		return p.parseFor()
 	case token.WHILE:
 		return p.parseWhileStatement()
 	case token.BREAK:
@@ -555,6 +556,8 @@ func (p *Parser) parseType() TypeNode {
 		return p.parseStructType()
 	case token.LBRACKET:
 		return p.parseArrayType()
+	case token.MAP:
+		return p.parseMapType()
 	default:
 		p.addError("unknown type")
 		return nil
@@ -620,6 +623,38 @@ func (p *Parser) parseStructType() TypeNode {
 	return &StructType{
 		NodeBase: NodeBase{Token: p.curTok},
 		Fields:   fields,
+	}
+}
+
+func (p *Parser) parseMapType() TypeNode {
+	if p.peekTok.Type != token.LBRACKET {
+		p.addError("expected '[' in key type")
+		return nil
+	}
+	p.nextToken() // [
+	p.nextToken() // key type (eg: string)
+
+	key := p.parseType()
+	if key == nil {
+		return nil
+	}
+
+	if p.peekTok.Type != token.RBRACKET {
+		p.addError("expected ']' after key type")
+		return nil
+	}
+	p.nextToken() // ]
+	p.nextToken() // value type (eg: string)
+
+	val := p.parseType()
+	if val == nil {
+		return nil
+	}
+
+	return &MapType{
+		NodeBase: NodeBase{Token: p.curTok},
+		Key:      key,
+		Value:    val,
 	}
 }
 
@@ -843,6 +878,54 @@ func (p *Parser) parseMemberAssignment() *MemberAssignmentStatement {
 		Field:    field,
 		Value:    val,
 	}
+}
+
+func (p *Parser) parseMapLiteral() Expression {
+	lit := &MapLiteral{
+		NodeBase: NodeBase{Token: p.curTok}, // {
+	}
+
+	pairs := []MapPair{}
+
+	// empty map
+	if p.peekTok.Type == token.RBRACE {
+		p.nextToken() // }
+		lit.Pairs = pairs
+		return lit
+	}
+
+	for {
+		p.nextToken() // key
+		key := p.parseExpression(LOWEST)
+
+		if p.peekTok.Type != token.COLON {
+			p.addError("expected ':' after map key")
+			return nil
+		}
+		p.nextToken() // :
+		p.nextToken() // value
+
+		value := p.parseExpression(LOWEST)
+
+		pairs = append(pairs, MapPair{
+			Key:   key,
+			Value: value,
+		})
+
+		if p.peekTok.Type != token.COMMA {
+			break
+		}
+		p.nextToken() // ,
+	}
+
+	if p.peekTok.Type != token.RBRACE {
+		p.addError("expected '}' after map literal")
+		return nil
+	}
+	p.nextToken() // }
+
+	lit.Pairs = pairs
+	return lit
 }
 
 func (p *Parser) parseIfStatement() *IfStatement {
@@ -1192,6 +1275,8 @@ func (p *Parser) parseReturnStatement() *ReturnStatement {
 func (p *Parser) parseForInit() Statement {
 	if p.curTok.Type == token.VAR {
 		return p.parseVarStatement()
+	} else if p.curTok.Type == token.IDENT && p.peekTok.Type == token.WALRUS {
+		return p.parseVarStatementNoKeyword()
 	}
 	return p.parseAssignStatement()
 }
@@ -1212,6 +1297,57 @@ func (p *Parser) parseContinueStatement() *ContinueStatement {
 	stmt.NodeBase = NodeBase{Token: p.curTok}
 
 	return stmt
+}
+
+func (p *Parser) parseFor() Statement {
+	p.nextToken() // move past 'for'
+
+	// for range m {}
+	if p.curTok.Type == token.RANGE {
+		return p.parseForRangeStatement([]*Identifier{})
+	}
+
+	idents := []*Identifier{}
+
+	if p.curTok.Type == token.IDENT {
+		idents = append(idents, &Identifier{
+			NodeBase: NodeBase{Token: p.curTok},
+			Value:    p.curTok.Literal,
+		})
+
+		for p.peekTok.Type == token.COMMA {
+			p.nextToken() // ,
+			p.nextToken() // ident
+
+			if p.curTok.Type != token.IDENT {
+				p.addError("expected identifier in for range")
+				return nil
+			}
+
+			idents = append(idents, &Identifier{
+				NodeBase: NodeBase{Token: p.curTok},
+				Value:    p.curTok.Literal,
+			})
+		}
+	}
+
+	if p.peekTok.Type == token.WALRUS {
+		p.nextToken() // :=
+		p.nextToken() // next token
+
+		if p.curTok.Type == token.RANGE {
+
+			if len(idents) > 2 {
+				p.addError("for range allows at most 2 variables")
+				return nil
+			}
+
+			return p.parseForRangeStatement(idents)
+		}
+	}
+
+	// otherwise: normal for
+	return p.parseForStatement()
 }
 
 func (p *Parser) parseForStatement() *ForStatement {
@@ -1264,6 +1400,39 @@ func (p *Parser) parseForStatement() *ForStatement {
 
 	p.nextToken() // move to '{'
 	stmt.Body = p.parseBlockStatement()
+
+	return stmt
+}
+
+func (p *Parser) parseForRangeStatement(idents []*Identifier) *ForRangeStatement {
+	stmt := &ForRangeStatement{
+		NodeBase: NodeBase{Token: p.curTok}, // range
+	}
+
+	if len(idents) > 2 {
+		p.addError("for range allows at most 2 variables")
+		return nil
+	}
+
+	if len(idents) >= 1 {
+		stmt.Key = idents[0]
+	}
+
+	if len(idents) == 2 {
+		stmt.Value = idents[1]
+	}
+
+	p.nextToken() // move to expr
+	expr := p.parseExpression(LOWEST)
+	stmt.Expr = expr
+
+	if p.peekTok.Type != token.LBRACE {
+		p.addError("expected '{' after range expression")
+		return nil
+	}
+
+	body := p.parseBlockStatement()
+	stmt.Body = body
 
 	return stmt
 }
@@ -1359,10 +1528,24 @@ func (p *Parser) parseExpression(precedence int) Expression {
 	left := p.parsePrimary()
 
 	for {
+
 		if p.peekTok.Type == token.LBRACKET {
 			p.nextToken() // '['
 			left = p.parseIndexExpression(left)
 			continue
+		}
+
+		if p.peekTok.Type == token.IN {
+			p.nextToken() // in
+			p.nextToken() // rhs
+
+			right := p.parseExpression(LOWEST)
+
+			return &InExpression{
+				NodeBase: NodeBase{Token: p.curTok},
+				Left:     left,
+				Right:    right,
+			}
 		}
 
 		if p.peekTok.Type == token.DOT {
@@ -1590,7 +1773,7 @@ func (p *Parser) parsePrimary() Expression {
 		return p.parseArrayLiteral()
 
 	case token.LBRACE:
-		return p.parseAnonymousStructLiteral()
+		return p.parseMapLiteral()
 
 	default:
 		return nil

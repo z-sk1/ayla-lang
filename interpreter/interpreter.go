@@ -199,6 +199,12 @@ func typesAssignable(from, to *TypeInfo) bool {
 		return typesAssignable(from.Elem, to.Elem)
 	}
 
+	// maps: keys and values must be assignable
+	if from.Kind == TypeMap && to.Kind == TypeMap {
+		return typesAssignable(from.Key, to.Key) &&
+			typesAssignable(from.Value, to.Value)
+	}
+
 	// named types: nominal typing
 	if from.Kind == TypeNamed || to.Kind == TypeNamed {
 		return from == to
@@ -273,28 +279,33 @@ func readKey() (rune, error) {
 
 func initBuiltinTypes(typeEnv map[string]*TypeInfo) {
 	typeEnv["int"] = &TypeInfo{
-		Name: "int",
-		Kind: TypeInt,
+		Name:         "int",
+		Kind:         TypeInt,
+		IsComparable: true,
 	}
 
 	typeEnv["float"] = &TypeInfo{
-		Name: "float",
-		Kind: TypeFloat,
+		Name:         "float",
+		Kind:         TypeFloat,
+		IsComparable: true,
 	}
 
 	typeEnv["string"] = &TypeInfo{
-		Name: "string",
-		Kind: TypeString,
+		Name:         "string",
+		Kind:         TypeString,
+		IsComparable: true,
 	}
 
 	typeEnv["bool"] = &TypeInfo{
-		Name: "bool",
-		Kind: TypeBool,
+		Name:         "bool",
+		Kind:         TypeBool,
+		IsComparable: true,
 	}
 
 	typeEnv["nil"] = &TypeInfo{
-		Name: "nil",
-		Kind: TypeNil,
+		Name:         "nil",
+		Kind:         TypeNil,
+		IsComparable: true,
 	}
 
 	typeEnv["thing"] = &TypeInfo{
@@ -518,9 +529,7 @@ func (i *Interpreter) registerBuiltins() {
 		Arity: -1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
 			for _, v := range args {
-				if v.Type() != NIL {
-					fmt.Print(v.String())
-				}
+				fmt.Print(v.String())
 			}
 			return NilValue{}, nil
 		},
@@ -533,9 +542,7 @@ func (i *Interpreter) registerBuiltins() {
 			if len(args) > 1 {
 				val := args[1:]
 
-				if args[0].Type() != NIL {
-					fmt.Print(args[0].String())
-				}
+				fmt.Print(args[0].String())
 
 				for _, v := range val {
 					fmt.Println(" " + v.String())
@@ -544,9 +551,7 @@ func (i *Interpreter) registerBuiltins() {
 				return NilValue{}, nil
 			}
 
-			if args[0].Type() != NIL {
-				fmt.Println(args[0].String())
-			}
+			fmt.Println(args[0].String())
 
 			return NilValue{}, nil
 		},
@@ -1499,6 +1504,141 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		i.env = oldEnv
 		return SignalNone{}, nil
 
+	case *parser.ForRangeStatement:
+		iterable, err := i.EvalExpression(stmt.Expr)
+		if err != nil {
+			return SignalNone{}, err
+		}
+
+		iterable = unwrapNamed(iterable)
+
+		switch v := iterable.(type) {
+		case ArrayValue:
+			for idx, elem := range v.Elements {
+				oldEnv := i.env
+				i.env = NewEnvironment(oldEnv)
+
+				if stmt.Key != nil && stmt.Key.Value != "_" {
+					i.env.Define(stmt.Key.Value, IntValue{V: idx})
+				}
+
+				if stmt.Value != nil && stmt.Value.Value != "_" {
+					i.env.Define(stmt.Value.Value, elem)
+				}
+
+				sig, err := i.EvalBlock(stmt.Body, false)
+
+				i.env = oldEnv
+
+				if err != nil {
+					return SignalNone{}, err
+				}
+
+				switch sig.(type) {
+				case SignalBreak:
+					return SignalNone{}, nil
+				case SignalContinue:
+					continue
+				case SignalReturn:
+					return sig, nil
+				}
+			}
+		case MapValue:
+			for k, val := range v.Entries {
+				oldEnv := i.env
+				i.env = NewEnvironment(oldEnv)
+
+				if stmt.Key != nil && stmt.Key.Value != "_" {
+					i.env.Define(stmt.Key.Value, k)
+				}
+
+				if stmt.Value != nil && stmt.Value.Value != "_" {
+					i.env.Define(stmt.Value.Value, val)
+				}
+
+				sig, err := i.EvalBlock(stmt.Body, false)
+
+				i.env = oldEnv
+
+				if err != nil {
+					return SignalNone{}, err
+				}
+
+				switch sig.(type) {
+				case SignalBreak:
+					return SignalNone{}, nil
+				case SignalContinue:
+					continue
+				case SignalReturn:
+					return sig, nil
+				}
+			}
+		case StringValue:
+			for idx, s := range v.V {
+				oldEnv := i.env
+				i.env = NewEnvironment(oldEnv)
+
+				if stmt.Key != nil && stmt.Key.Value != "_" {
+					i.env.Define(stmt.Key.Value, IntValue{V: idx})
+				}
+
+				if stmt.Value != nil && stmt.Value.Value != "_" {
+					i.env.Define(stmt.Value.Value, StringValue{V: string(s)})
+				}
+
+				sig, err := i.EvalBlock(stmt.Body, false)
+
+				i.env = oldEnv
+
+				if err != nil {
+					return SignalNone{}, err
+				}
+
+				switch sig.(type) {
+				case SignalBreak:
+					return SignalNone{}, nil
+				case SignalContinue:
+					continue
+				case SignalReturn:
+					return sig, nil
+				}
+			}
+		case IntValue:
+			for idx := range v.V {
+				oldEnv := i.env
+				i.env = NewEnvironment(oldEnv)
+
+				if stmt.Key != nil && stmt.Key.Value != "_" {
+					i.env.Define(stmt.Key.Value, IntValue{V: idx})
+				}
+
+				if stmt.Value != nil && stmt.Value.Value != "_" {
+					return SignalNone{}, NewRuntimeError(stmt, "integer range expects 1 variable")
+				}
+
+				sig, err := i.EvalBlock(stmt.Body, false)
+
+				i.env = oldEnv
+
+				if err != nil {
+					return SignalNone{}, err
+				}
+
+				switch sig.(type) {
+				case SignalBreak:
+					return SignalNone{}, nil
+				case SignalContinue:
+					continue
+				case SignalReturn:
+					return sig, nil
+				}
+			}
+		default:
+			return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("range expects (array|map|int|string), but got %s", unwrapAlias(i.typeInfoFromValue(iterable)).Name))
+		}
+
+		return SignalNone{}, nil
+
 	case *parser.WhileStatement:
 		for {
 			cond, err := i.EvalExpression(stmt.Condition)
@@ -1580,6 +1720,10 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 		return evalMemberExpression(expr, leftVal, expr.Field.Value)
 
 	case *parser.Identifier:
+		if expr.Value == "_" {
+			return NilValue{}, NewRuntimeError(expr, "cannot use '_' as a value")
+		}
+
 		v, ok := i.env.Get(expr.Value)
 		if !ok {
 			return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("undefined variable: %s", expr.Value))
@@ -1593,6 +1737,9 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 
 	case *parser.ArrayLiteral:
 		return i.evalArrayLiteral(expr, nil)
+
+	case *parser.MapLiteral:
+		return i.evalMapLiteral(expr, nil)
 
 	case *parser.FuncCall:
 		return i.evalCall(expr)
@@ -1823,6 +1970,38 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 	case *parser.GroupedExpression:
 		return i.EvalExpression(expr.Expression)
 
+	case *parser.InExpression:
+		elem, err := i.EvalExpression(expr.Left)
+		if err != nil {
+			return NilValue{}, err
+		}
+
+		set, err := i.EvalExpression(expr.Right)
+		if err != nil {
+			return NilValue{}, err
+		}
+
+		switch s := set.(type) {
+		case MapValue:
+			_, ok := s.Entries[elem]
+			return BoolValue{V: ok}, nil
+
+		case ArrayValue:
+			for _, v := range s.Elements {
+				if valuesEqual(v, elem) {
+					return BoolValue{V: true}, nil
+				}
+			}
+			return BoolValue{V: false}, nil
+		case StringValue:
+			if strings.Contains(s.V, elem.(StringValue).V) {
+				return BoolValue{V: true}, nil
+			}
+			return BoolValue{V: false}, nil
+		}
+
+		return NilValue{}, NewRuntimeError(expr, "in expects map or array or string")
+
 	case *parser.InterpolatedString:
 		is := expr
 		var out strings.Builder
@@ -1906,6 +2085,12 @@ func (i *Interpreter) evalExprWithExpectedType(expr parser.Expression, expected 
 			return i.evalToArrWithExpectedElem(e, expected.Elem)
 		}
 		return i.EvalExpression(e)
+
+	case *parser.MapLiteral:
+		if expected != nil && expected.Kind == TypeMap {
+			return i.evalMapLiteral(e, expected)
+		}
+		return i.evalMapLiteral(e, nil)
 
 	default:
 		return i.EvalExpression(expr)
@@ -1996,6 +2181,88 @@ func (i *Interpreter) evalToArrWithExpectedElem(
 	return ArrayValue{
 		Elements: elements,
 		ElemType: expectedElem,
+	}, nil
+}
+
+func (i *Interpreter) evalMapLiteral(expr *parser.MapLiteral, expected *TypeInfo) (Value, error) {
+	if len(expr.Pairs) == 0 {
+		if expected == nil || expected.Kind != TypeMap {
+			return NilValue{}, NewRuntimeError(expr, "cannot infer type of empty map")
+		}
+
+		return MapValue{
+			Entries:   map[Value]Value{},
+			KeyType:   expected.Key,
+			ValueType: expected.Value,
+		}, nil
+	}
+
+	k0, err := i.EvalExpression(expr.Pairs[0].Key)
+	if err != nil {
+		return NilValue{}, err
+	}
+
+	v0, err := i.EvalExpression(expr.Pairs[0].Value)
+	if err != nil {
+		return NilValue{}, err
+	}
+
+	keyTI := unwrapAlias(i.typeInfoFromValue(k0))
+	valTI := unwrapAlias(i.typeInfoFromValue(v0))
+
+	if expected != nil {
+		if !isComparableValue(k0) {
+			return NilValue{}, NewRuntimeError(expr,
+				fmt.Sprintf("map key type %s is not comparable", keyTI.Name))
+		}
+
+		if !typesAssignable(keyTI, expected.Key) {
+			return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("type mismatch: map key 0 expected %s but got %s", expected.Key.Name, keyTI.Name))
+		}
+		keyTI = expected.Key
+
+		if !typesAssignable(valTI, expected.Value) {
+			return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("type mismatch: map value 0 expected %s but got %s", expected.Value.Name, valTI.Name))
+		}
+		valTI = expected.Value
+	}
+
+	elems := map[Value]Value{}
+
+	for idx, e := range expr.Pairs {
+		k, err := i.EvalExpression(e.Key)
+		if err != nil {
+			return NilValue{}, err
+		}
+
+		v, err := i.EvalExpression(e.Value)
+		if err != nil {
+			return NilValue{}, err
+		}
+
+		kt := unwrapAlias(i.typeInfoFromValue(k))
+		vt := unwrapAlias(i.typeInfoFromValue(v))
+
+		if keyTI.Kind == TypeAny && !isComparableValue(k) {
+			return NilValue{}, NewRuntimeError(expr,
+				fmt.Sprintf("map key %d is not comparable", idx))
+		}
+
+		if !typesAssignable(kt, keyTI) {
+			return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("map key %d expected %s but got %s", idx, keyTI.Name, kt.Name))
+		}
+
+		if !typesAssignable(vt, valTI) {
+			return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("map value %d expected %s but got %s", idx, valTI.Name, vt.Name))
+		}
+
+		elems[k] = v
+	}
+
+	return MapValue{
+		Entries:   elems,
+		KeyType:   keyTI,
+		ValueType: valTI,
 	}, nil
 }
 
@@ -2146,8 +2413,8 @@ func (i *Interpreter) evalFuncCall(expr *parser.FuncCall) (Value, error) {
 
 			if expected.Kind == TypeFloat && actual.Kind == TypeInt {
 				val = FloatValue{V: float64(val.(IntValue).V)}
-			} else if actual != expected {
-				return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("parameter '%s' expected %v, got %v", param.Name.Value, expected, actual))
+			} else if !typesAssignable(actual, expected) {
+				return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("parameter '%s' expected %s, got %s", param.Name.Value, expected.Name, actual.Name))
 			}
 		}
 
@@ -2265,6 +2532,46 @@ func (i *Interpreter) evalIndexExpression(node parser.Expression, left, idx Valu
 
 		r := []rune(left.(StringValue).V)
 		return StringValue{V: string(r[idx])}, nil
+
+	case TypeMap:
+		mv := left.(MapValue)
+
+		// 1. type check key
+		keyType := unwrapAlias(i.typeInfoFromValue(idx))
+
+		if mv.KeyType.Kind == TypeAny {
+			if !isComparableValue(idx) {
+				return NilValue{}, NewRuntimeError(
+					node,
+					"value of this type cannot be used as map key",
+				)
+			}
+		} else {
+			if !typesAssignable(keyType, mv.KeyType) {
+				return NilValue{}, NewRuntimeError(
+					node,
+					fmt.Sprintf(
+						"map index expected %s but got %s",
+						mv.KeyType.Name,
+						keyType.Name,
+					),
+				)
+			}
+		}
+
+		val, ok := mv.Entries[idx]
+		if !ok {
+			return NilValue{}, nil
+		}
+
+		if mv.ValueType.Kind == TypeAny {
+			return NamedValue{
+				TypeName: mv.ValueType,
+				Value:    val,
+			}, nil
+		}
+
+		return val, nil
 
 	default:
 		var typeStr string

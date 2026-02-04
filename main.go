@@ -25,7 +25,7 @@ func main() {
 	}
 
 	if len(os.Args) == 1 {
-		fmt.Println("Welcome to ayla-lang v1.0.0, do ayla --help to see all commands.")
+		fmt.Println("Welcome to ayla-lang v1.1.0, do ayla --help to see all commands.")
 		return
 	}
 
@@ -38,7 +38,7 @@ func main() {
 
 		run()
 	case "--version":
-		fmt.Println("ayla-lang v1.0.0")
+		fmt.Println("ayla-lang v1.1.0")
 	case "--help":
 		fmt.Println(strings.Join(cmds, "\n"))
 	default:

@@ -33,7 +33,7 @@
       "patterns": [
         {
           "name": "keyword.declaration.ayla",
-          "match": "\\b(egg|rock|fun|type|struct|int|float|string|bool|thing)\\b"
+          "match": "\\b(egg|rock|fun|type|struct|int|float|string|bool|thing|map)\\b"
         }
       ]
     },
@@ -42,7 +42,7 @@
       "patterns": [
         {
           "name": "keyword.control.ayla",
-          "match": "\\b(ayla|elen|four|why|back|kitkat|next|decide|when|otherwise|spawn|with|it)\\b"
+          "match": "\\b(ayla|elen|four|why|back|kitkat|next|decide|when|otherwise|spawn|with|it|in|range)\\b"
         }
       ]
     },

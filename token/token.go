@@ -62,11 +62,14 @@ const (
 	CASE     = "CASE"
 	DEFAULT  = "DEFAULT"
 	WITH     = "WITH"
+	MAP      = "MAP"
+	IN       = "IN"
 	FUNC     = "FUNC"
 	RETURN   = "RETURN"
 	CONTINUE = "CONTINUE"
 	SPAWN    = "SPAWN"
 	FOR      = "FOR"
+	RANGE    = "RANGE"
 	WHILE    = "WHILE"
 	BREAK    = "BREAK"
 	TRUE     = "TRUE"
@@ -81,38 +84,34 @@ const (
 )
 
 var keywords = map[string]TokenType{
-	"egg":    VAR,
-	"rock":   CONST,
-	"type":   TYPE,
-	"struct": STRUCT,
-
-	"ayla": IF,
-	"elen": ELSE,
-
+	"egg":       VAR,
+	"rock":      CONST,
+	"type":      TYPE,
+	"struct":    STRUCT,
+	"ayla":      IF,
+	"elen":      ELSE,
 	"decide":    SWITCH,
 	"when":      CASE,
 	"otherwise": DEFAULT,
-
-	"with": WITH,
-
-	"fun":   FUNC,
-	"back":  RETURN,
-	"spawn": SPAWN,
-
-	"int":    INT_TYPE,
-	"float":  FLOAT_TYPE,
-	"string": STRING_TYPE,
-	"bool":   BOOL_TYPE,
-	"thing":  ANY_TYPE,
-
-	"four":   FOR,
-	"why":    WHILE,
-	"kitkat": BREAK,
-	"next":   CONTINUE,
-
-	"yes": TRUE,
-	"no":  FALSE,
-	"nil": NIL,
+	"with":      WITH,
+	"map":       MAP,
+	"in":        IN,
+	"fun":       FUNC,
+	"back":      RETURN,
+	"spawn":     SPAWN,
+	"int":       INT_TYPE,
+	"float":     FLOAT_TYPE,
+	"string":    STRING_TYPE,
+	"bool":      BOOL_TYPE,
+	"thing":     ANY_TYPE,
+	"four":      FOR,
+	"range":     RANGE,
+	"why":       WHILE,
+	"kitkat":    BREAK,
+	"next":      CONTINUE,
+	"yes":       TRUE,
+	"no":        FALSE,
+	"nil":       NIL,
 }
 
 func LookupIdent(ident string) TokenType {

@@ -1,0 +1,3 @@
+four i := range 5 {
+    explodeln(i)
+}

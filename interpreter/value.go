@@ -2,6 +2,7 @@ package interpreter
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -18,17 +19,21 @@ const (
 	TypeArray
 	TypeNil
 	TypeStruct
+	TypeMap
 	TypeNamed
 	TypeAny
 )
 
 type TypeInfo struct {
-	Name       string
-	Kind       TypeKind
-	Underlying *TypeInfo
-	Alias      bool
-	Fields     map[string]*TypeInfo // for structs
-	Elem       *TypeInfo            // arrays / slices
+	Name         string
+	Kind         TypeKind
+	Underlying   *TypeInfo
+	Alias        bool
+	Fields       map[string]*TypeInfo // for structs
+	Elem         *TypeInfo            // arrays / slices
+	Key          *TypeInfo            // maps
+	Value        *TypeInfo            // maps
+	IsComparable bool
 }
 
 type NamedValue struct {
@@ -52,10 +57,10 @@ const (
 	STRING      ValueType = "string"
 	BOOL        ValueType = "bool"
 	ARR         ValueType = "arr"
-	FUNCTION    ValueType = "function"
 	STRUCT_TYPE ValueType = "struct_type"
 	STRUCT      ValueType = "struct"
 	TUPLE       ValueType = "tuple"
+	MAP         ValueType = "map"
 	NIL         ValueType = "nil"
 )
 
@@ -205,6 +210,38 @@ func (s *StructValue) String() string {
 	return "struct " + s.TypeName.Name
 }
 
+type MapValue struct {
+	Entries   map[Value]Value
+	KeyType   *TypeInfo
+	ValueType *TypeInfo
+}
+
+func (m MapValue) Type() ValueType {
+	return MAP
+}
+
+func (m MapValue) String() string {
+	keys := make([]string, 0, len(m.Entries))
+	keyMap := map[string]Value{}
+
+	for k := range m.Entries {
+		ks := k.String()
+		keys = append(keys, ks)
+		keyMap[ks] = k
+	}
+
+	sort.Strings(keys)
+
+	parts := make([]string, 0, len(keys))
+	for _, ks := range keys {
+		k := keyMap[ks]
+		v := m.Entries[k]
+		parts = append(parts, fmt.Sprintf("%s: %s", k.String(), v.String()))
+	}
+
+	return fmt.Sprintf("map[%s]%s{%s}", m.KeyType.Name, m.ValueType.Name, strings.Join(parts, ", "))
+}
+
 type NilValue struct{}
 
 func (n NilValue) Type() ValueType {
@@ -245,7 +282,6 @@ func (i *Interpreter) resolveType(expr parser.Expression) (*TypeInfo, error) {
 			// empty array has no element type yet
 			return &TypeInfo{
 				Kind: TypeArray,
-				Elem: i.typeEnv["any"], // or nil for now
 			}, nil
 		}
 
@@ -350,6 +386,24 @@ func (i *Interpreter) resolveTypeNode(t parser.TypeNode) (*TypeInfo, error) {
 			Name: "[]" + elemTI.Name,
 			Kind: TypeArray,
 			Elem: elemTI,
+		}, nil
+
+	case *parser.MapType:
+		keyTI, err := i.resolveTypeNode(tn.Key)
+		if err != nil {
+			return nil, err
+		}
+
+		valTI, err := i.resolveTypeNode(tn.Value)
+		if err != nil {
+			return nil, err
+		}
+
+		return &TypeInfo{
+			Name:  fmt.Sprintf("map[%s]%s", keyTI.Name, valTI.Name),
+			Kind:  TypeMap,
+			Key:   keyTI,
+			Value: valTI,
 		}, nil
 
 	default:
@@ -505,6 +559,18 @@ func (i *Interpreter) typeInfoFromValue(v Value) *TypeInfo {
 			Elem: v.ElemType,
 		}
 
+	case MapValue:
+		if v.KeyType == nil || v.ValueType == nil {
+			panic("MapValue KeyType or ValueType is nil")
+		}
+
+		return &TypeInfo{
+			Name:  fmt.Sprintf("map[%s]%s", v.KeyType.Name, v.ValueType.Name),
+			Kind:  TypeMap,
+			Key:   v.KeyType,
+			Value: v.ValueType,
+		}
+
 	case *StructValue:
 		return v.TypeName
 	case NamedValue:
@@ -561,5 +627,28 @@ func defaultValueFromTypeInfo(node parser.Statement, ti *TypeInfo) (Value, error
 		}, nil
 	default:
 		return NilValue{}, NewRuntimeError(node, "cannot create default value for "+ti.Name)
+	}
+}
+
+func isComparableValue(v Value) bool {
+	v = unwrapNamed(v)
+
+	switch val := v.(type) {
+	case IntValue, FloatValue, BoolValue, StringValue, NilValue:
+		return true
+
+	case *StructValue:
+		for _, field := range val.Fields {
+			if !isComparableValue(field) {
+				return false
+			}
+		}
+		return true
+
+	case ArrayValue, MapValue:
+		return false
+
+	default:
+		return false
 	}
 }

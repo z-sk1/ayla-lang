@@ -155,6 +155,7 @@ explodeln(a, b)
 2
 ```
 
+## slice types
 you can also annotate slice types like this
 ```ayla
 egg a []int = [1, 2, 3]
@@ -308,12 +309,92 @@ oh yea also no brackets
 
 *for convenience*
 
+this is a classic c-style for loop
 ```ayla
 four egg i = 0; i < 5; i = i + 1 {
     explode(i) 
 }
 ```
 > output: 1 2 3 4 5
+
+but you can also do a for loop with `range` to iterate over maps, arrays, and strings, and ints
+
+arrays:
+```ayla
+x := [1, 2, 3]
+
+four i, v := range x {
+    explodeln(v)
+}
+```
+> output:
+```
+1
+2
+3
+```
+
+maps:
+```ayla
+x := {"a": 1, "b": 2}
+
+four k, v := range x {
+    explodeln(k)
+}
+```
+
+> output: 
+```
+a
+b
+```
+
+strings:
+```ayla
+x := "hiya"
+
+four i, v := range x {
+    explodeln(v)
+}
+```
+> output:
+```
+h
+i
+y
+a
+```
+
+ints:
+this is used as a repeat
+```ayla
+four i := range 5 {
+    explodeln(i)
+}
+```
+> output:
+```
+0
+1
+2
+3
+4
+```
+
+you can also use `_` to discard a variable like this
+```ayla
+x := [1, 2, 3]
+
+four _, v := range x {
+    explodeln(v)
+}
+```
+> output:
+```
+1
+2
+3
+```
 
 ### why loop
 the while loop has been renamed to `why` loop, for convenience
@@ -426,6 +507,36 @@ decide yes {
 }
 ```
 
+## with statement
+the `with` statement evaluates a value and makes it available inside a block as `it`
+
+```ayla
+with x {
+    explodeln(it)
+}
+```
+
+`with` does not modify the original value
+`it` behaves like a const
+
+```ayla
+egg x int = 5
+
+with x {
+    explodeln(it) // 5
+}
+```
+
+Nested `with` blocks shadow `it`
+
+```ayla
+with a {
+    with b {
+        explodeln(it) // b
+    }
+}
+```
+
 ## functions
 
 to declare a function use `fun`
@@ -485,6 +596,69 @@ egg arr []thing = [1, 2, "3"]
 explode(arr[1].(int) + 1)
 ```
 > output: 3
+
+## maps
+maps are created using the curly braces `{}`
+
+usually the type of the keys and values are inferred from the first key/value pair like so
+```ayla
+egg x = {"a": 1, "b": 2}
+```
+
+you would get a `Runtime error` if you mismatched the types
+
+```ayla
+egg x = {"a": 1, 3: 2}
+```
+> output: runtime error at 1:9: map key 1 expected string but got int
+ *it also uses 0-based indexing so here map key 1 would be referring to 3*
+
+you can also use type annotation using this go-like syntax
+```ayla
+egg x map[string]int = {"a": 1, "b": 2}
+```
+here, `string` correlates to the key type, whilst `int` correlates to the value type as shown in `"a"`: `1`
+
+you can also use `thing` if you want
+
+## in operator
+the `in` keyword checks for membership inside **maps** and **arrays** and **strings**
+
+maps:
+
+for maps it checks whether a key exists
+```ayla
+egg x = {"a": 1, "b": 1}
+
+ayla "a" in x {
+    explodeln("exists")
+}
+```
+> output: exists
+
+arrays:
+
+for arrays it checks a value exists
+```ayla
+egg x = [1, 2, 3]
+
+ayla 2 in x {
+    explodeln("exists")
+}
+```
+> output: exists
+
+strings:
+
+for strings it checks for the substring's existence
+```ayla
+egg x = "hello"
+
+ayla "he" in x {
+    explodeln("exists")
+}
+```
+> output: exists
 
 ## structs
 ayla supports typed, and anonymous structs

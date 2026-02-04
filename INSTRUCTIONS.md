@@ -2,7 +2,9 @@
 
 ## Windows
 
-to use the cli, please go to the **Releases** tab and download the Windows zip file.
+to use the cli, please go to the **Releases** tab and download the windows binary:
+- `ayla-win-amd64` for x86 windows machines
+- `ayla-win-arm64` for arm windows machines
 
 extract the zip, and move the `.exe` file to an easy to access folder, for example:
 
@@ -68,7 +70,49 @@ if macOS blocks the binary because it is from an unidentified developer, run:
 xattr -d com.apple.quarantine /usr/local/bin/ayla
 ```
 
-### running
+---
+
+## Linux
+to use the cli, please go to the **Releases** tab and download the linux binary:
+- `ayla-linux-amd64` for x86 linux machines
+- `ayla-linux-arm64` for arm linux machines
+
+or using curl:
+
+amd64:
+```bash
+curl -L -o ayla https://github.com/z-sk1/ayla-lang/releases/latest/download/ayla-linux-amd64
+```
+
+arm64:
+```bash
+curl -L -o ayla https://github.com/z-sk1/ayla-lang/releases/latest/download/ayla-linux-arm64
+```
+
+make the file executable:
+```bash
+chmod +x ayla
+```
+
+move it to a directory in your PATH:
+
+```bash
+sudo mv ayla /usr/local/bin
+```
+
+if `/usr/local/bin` does not exist, create it with:
+
+```bash
+sudo mkdir -p /usr/local/bin
+```
+
+verify it works:
+
+```bash
+ayla --help
+```
+
+## running
 
 to run a script do:
 

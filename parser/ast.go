@@ -50,6 +50,7 @@ var precedences = map[token.TokenType]int{
 
 	token.EQ:     EQUALS,
 	token.NOT_EQ: EQUALS,
+	token.IN:     EQUALS,
 
 	token.LT:  LESSGREATER,
 	token.GT:  LESSGREATER,
@@ -148,6 +149,14 @@ type ArrayType struct {
 
 func (*ArrayType) typeNode() {}
 
+type MapType struct {
+	NodeBase
+	Key   TypeNode
+	Value TypeNode
+}
+
+func (*MapType) typeNode() {}
+
 type SpawnStatement struct {
 	NodeBase
 	Body []Statement
@@ -186,6 +195,14 @@ type ForStatement struct {
 	Condition Expression // i < 5;
 	Post      Statement  // i = i + 1
 	Body      []Statement
+}
+
+type ForRangeStatement struct {
+	NodeBase
+	Key   *Identifier
+	Value *Identifier
+	Expr  Expression
+	Body  []Statement
 }
 
 type WhileStatement struct {
@@ -239,6 +256,16 @@ type ReturnStatement struct {
 type ArrayLiteral struct {
 	NodeBase
 	Elements []Expression
+}
+
+type MapLiteral struct {
+	NodeBase
+	Pairs []MapPair
+}
+
+type MapPair struct {
+	Key   Expression
+	Value Expression
 }
 
 type IndexExpression struct {
@@ -344,4 +371,10 @@ type PrefixExpression struct {
 type GroupedExpression struct {
 	NodeBase
 	Expression Expression
+}
+
+type InExpression struct {
+	NodeBase
+	Left  Expression
+	Right Expression
 }

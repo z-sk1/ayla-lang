@@ -10,7 +10,7 @@ egg p = Person{
 
 explodeln("${p.Name} is ${p.Age} years old")
 
-egg lol = struct {
+egg lol = struct{
     Lol: "lel",
 }
 
