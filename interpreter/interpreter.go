@@ -154,24 +154,6 @@ func toFloat(v Value) (float64, bool) {
 	}
 }
 
-func assignable(expected *TypeInfo, v Value) bool {
-	// Named value → must match exactly
-	if nv, ok := v.(NamedValue); ok {
-		return nv.TypeName == expected
-	}
-
-	if sv, ok := v.(*StructValue); ok {
-		return sv.TypeName == expected
-	}
-
-	if valueTypeOf(expected) == FLOAT && v.Type() == INT {
-		return true
-	}
-
-	// Plain value → must match underlying kind
-	return valueTypeOf(expected) == v.Type()
-}
-
 func typesAssignable(from, to *TypeInfo) bool {
 	if from == nil || to == nil {
 		return false
@@ -203,6 +185,10 @@ func typesAssignable(from, to *TypeInfo) bool {
 	if from.Kind == TypeMap && to.Kind == TypeMap {
 		return typesAssignable(from.Key, to.Key) &&
 			typesAssignable(from.Value, to.Value)
+	}
+
+	if from.Kind == TypeEnum && to.Kind == TypeEnum {
+		return from == to
 	}
 
 	// named types: nominal typing
@@ -981,6 +967,13 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		i.env.Define(stmt.Name.Value, val)
 		return SignalNone{}, nil
 
+	case *parser.VarStatementBlock:
+		for _, decl := range stmt.Decls {
+			i.EvalStatement(decl)
+		}
+
+		return SignalNone{}, nil
+
 	case *parser.VarStatementNoKeyword:
 		val, err := i.EvalExpression(stmt.Value)
 		if err != nil {
@@ -996,6 +989,39 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		return SignalNone{}, nil
 
 	case *parser.MultiVarStatement:
+		if stmt.Value == nil {
+			var expectedTI *TypeInfo
+			var err error
+
+			if stmt.Type != nil {
+				expectedTI, err = i.resolveTypeNode(stmt.Type)
+				if err != nil {
+					return SignalNone{}, err
+				}
+			}
+
+			for _, name := range stmt.Names {
+				if _, ok := i.env.Get(name.Value); ok {
+					return SignalNone{}, NewRuntimeError(stmt,
+						fmt.Sprintf("cannot redeclare var: %s", name.Value))
+				}
+
+				var v Value
+				if expectedTI != nil {
+					v, err = defaultValueFromTypeInfo(stmt, expectedTI)
+					if err != nil {
+						return SignalNone{}, err
+					}
+				} else {
+					v = UninitializedValue{}
+				}
+
+				i.env.Define(name.Value, v)
+			}
+
+			return SignalNone{}, nil
+		}
+
 		val, err := i.EvalExpression(stmt.Value)
 		if err != nil {
 			return SignalNone{}, err
@@ -1061,6 +1087,13 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			}
 
 			i.env.Define(name.Value, values[idx])
+		}
+
+		return SignalNone{}, nil
+
+	case *parser.ConstStatementBlock:
+		for _, decl := range stmt.Decls {
+			i.EvalStatement(decl)
 		}
 
 		return SignalNone{}, nil
@@ -1340,6 +1373,35 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		}
 
 		structVal.Fields[stmt.Field.Value] = val
+		return SignalNone{}, nil
+
+	case *parser.EnumStatement:
+		if _, ok := i.env.Get(stmt.Name.Value); ok {
+			return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("cannot redeclare enum: %s", stmt.Name.Value))
+		}
+
+		enumType := &TypeInfo{
+			Name:     stmt.Name.Value,
+			Kind:     TypeEnum,
+			Variants: make(map[string]int),
+		}
+
+		for idx, ident := range stmt.Variants {
+			name := ident.Value
+
+			if _, exists := enumType.Variants[name]; exists {
+				return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("duplicate enum variant: %s", name))
+			}
+
+			enumType.Variants[name] = idx
+		}
+
+		i.typeEnv[stmt.Name.Value] = enumType
+
+		i.env.Define(stmt.Name.Value, TypeValue{
+			TypeName: enumType,
+		})
+
 		return SignalNone{}, nil
 
 	case *parser.FuncStatement:
@@ -2604,23 +2666,42 @@ func (i *Interpreter) evalIndexExpression(node parser.Expression, left, idx Valu
 }
 
 func evalMemberExpression(node parser.Expression, left Value, field string) (Value, error) {
-	obj, ok := left.(*StructValue)
-	if !ok {
-		return NilValue{}, NewRuntimeError(node, "not a struct")
+	switch obj := left.(type) {
+	case *StructValue:
+
+		val, ok := obj.Fields[field]
+		if !ok {
+			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unknown field %s", field))
+		}
+
+		expectedType := obj.TypeName.Fields[field]
+
+		if val.Type() != valueTypeOf(expectedType) {
+			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("field '%s' type %v should be %v", field, val.Type(), expectedType))
+		}
+
+		return val, nil
+	case TypeValue:
+		if obj.TypeName.Kind != TypeEnum {
+			return NilValue{}, NewRuntimeError(node,
+				fmt.Sprintf("type %s has no members", obj.TypeName.Name))
+		}
+
+		idx, ok := obj.TypeName.Variants[field]
+		if !ok {
+			return NilValue{}, NewRuntimeError(node,
+				fmt.Sprintf("unknown enum variant %s.%s",
+					obj.TypeName.Name, field))
+		}
+
+		return EnumValue{
+			Enum:    obj.TypeName,
+			Variant: field,
+			Index:   idx,
+		}, nil
 	}
 
-	val, ok := obj.Fields[field]
-	if !ok {
-		return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unknown field %s", field))
-	}
-
-	expectedType := obj.TypeName.Fields[field]
-
-	if val.Type() != valueTypeOf(expectedType) {
-		return NilValue{}, NewRuntimeError(node, fmt.Sprintf("field '%s' type %v should be %v", field, val.Type(), expectedType))
-	}
-
-	return val, nil
+	return NilValue{}, NewRuntimeError(node, fmt.Sprintf("member expression expects enums or structs, but got %s", string(left.Type())))
 }
 
 func (i *Interpreter) evalInfix(node *parser.InfixExpression, left Value, op string, right Value) (Value, error) {

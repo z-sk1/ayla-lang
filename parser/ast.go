@@ -76,6 +76,11 @@ type VarStatement struct {
 	Value Expression
 }
 
+type VarStatementBlock struct {
+	NodeBase
+	Decls []Statement
+}
+
 type VarStatementNoKeyword struct {
 	NodeBase
 	Name  *Identifier
@@ -102,6 +107,11 @@ type ConstStatement struct {
 	Value Expression
 }
 
+type ConstStatementBlock struct {
+	NodeBase
+	Decls []Statement
+}
+
 type MultiConstStatement struct {
 	NodeBase
 	Names []*Identifier
@@ -119,6 +129,12 @@ type MultiAssignmentStatement struct {
 	NodeBase
 	Names []*Identifier
 	Value Expression
+}
+
+type EnumStatement struct {
+	NodeBase
+	Name     *Identifier
+	Variants []*Identifier
 }
 
 type TypeStatement struct {

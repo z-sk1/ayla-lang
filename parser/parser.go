@@ -78,6 +78,30 @@ func (p *Parser) parseIdentList() []*Identifier {
 	return idents
 }
 
+func (p *Parser) parseEnumVariants() []*Identifier {
+	var variants []*Identifier
+
+	for {
+		p.consumeTerminators()
+
+		if p.curTok.Type == token.RBRACE {
+			return variants
+		}
+
+		if p.curTok.Type != token.IDENT {
+			p.addError("expected identifier in enum body")
+			return nil
+		}
+
+		variants = append(variants, &Identifier{
+			NodeBase: NodeBase{Token: p.curTok},
+			Value:    p.curTok.Literal,
+		})
+
+		p.nextToken()
+	}
+}
+
 func (p *Parser) isTypeToken(t token.TokenType) bool {
 	switch t {
 	case
@@ -201,6 +225,10 @@ func (p *Parser) ParseProgram() []Statement {
 func (p *Parser) parseStatement() Statement {
 	switch p.curTok.Type {
 	case token.VAR:
+		if p.peekTok.Type == token.LPAREN {
+			return p.parseVarStatementBlock()
+		}
+
 		if p.peekTok.Type == token.IDENT && p.peekN(1).Type == token.COMMA {
 			return p.parseMultiVarStatement()
 		}
@@ -208,11 +236,17 @@ func (p *Parser) parseStatement() Statement {
 		return p.parseVarStatement()
 
 	case token.CONST:
+		if p.peekTok.Type == token.LPAREN {
+			return p.parseConstStatementBlock()
+		}
+
 		if p.peekTok.Type == token.IDENT && p.peekN(1).Type == token.COMMA {
 			return p.parseMultiConstStatement()
 		}
 
 		return p.parseConstStatement()
+	case token.ENUM:
+		return p.parseEnumStatement()
 	case token.TYPE:
 		return p.parseTypeStatement()
 	case token.SWITCH:
@@ -270,6 +304,97 @@ func (p *Parser) parseStatement() Statement {
 		expr := p.parseExpression(LOWEST)
 		return &ExpressionStatement{NodeBase: NodeBase{Token: p.curTok}, Expression: expr}
 	}
+	return nil
+}
+
+func (p *Parser) parseVarStatementBlock() *VarStatementBlock {
+	stmt := &VarStatementBlock{
+		NodeBase: NodeBase{Token: p.curTok}, // egg
+	}
+
+	if p.peekTok.Type != token.LPAREN {
+		p.addError("expected '(' in egg block")
+		return nil
+	}
+
+	p.nextToken() // (
+	p.nextToken() // first token inside block
+
+	for p.curTok.Type != token.RPAREN && p.curTok.Type != token.EOF {
+		p.consumeTerminators()
+
+		if p.curTok.Type == token.RPAREN {
+			break
+		}
+
+		decl := p.parseVarBlockDecl()
+		if decl != nil {
+			stmt.Decls = append(stmt.Decls, decl)
+		}
+
+		p.consumeTerminators()
+		p.nextToken()
+	}
+
+	return stmt
+}
+
+func (p *Parser) parseVarBlockDecl() Statement {
+	id := p.curTok
+	var stmt Statement = &VarStatement{
+		NodeBase: NodeBase{Token: id},
+	}
+
+	if p.curTok.Type != token.IDENT {
+		p.addError("expected identifier in egg block")
+		return nil
+	}
+
+	if p.peekTok.Type == token.COMMA {
+		stmt = &MultiVarStatement{
+			NodeBase: NodeBase{Token: id},
+		}
+	}
+
+	switch stmt := stmt.(type) {
+	case *VarStatement:
+		stmt.Name = &Identifier{
+			NodeBase: NodeBase{Token: p.curTok},
+			Value:    p.curTok.Literal,
+		}
+
+		if p.peekTok.Type == token.ASSIGN {
+			p.nextToken() // =
+			p.nextToken() // expression start
+
+			stmt.Value = p.parseExpression(LOWEST)
+		}
+
+		return stmt
+
+	case *MultiVarStatement:
+		stmt.Names = p.parseIdentList()
+
+		// optional assignment
+		if p.peekTok.Type == token.ASSIGN {
+			p.nextToken() // move to '='
+			p.nextToken() // move to expr start
+
+			values := p.parseTupleList()
+
+			if len(values) == 1 {
+				stmt.Value = values[0]
+			} else {
+				stmt.Value = &TupleLiteral{
+					NodeBase: NodeBase{Token: p.curTok},
+					Values:   values,
+				}
+			}
+		}
+
+		return stmt
+	}
+
 	return nil
 }
 
@@ -388,6 +513,109 @@ func (p *Parser) parseTupleList() []Expression {
 	}
 
 	return values
+}
+
+func (p *Parser) parseConstStatementBlock() *ConstStatementBlock {
+	stmt := &ConstStatementBlock{
+		NodeBase: NodeBase{Token: p.curTok}, // const
+	}
+
+	if p.peekTok.Type != token.LPAREN {
+		p.addError("expected '(' in const block")
+		return nil
+	}
+
+	p.nextToken() // (
+	p.nextToken() // first token inside block
+
+	for p.curTok.Type != token.RPAREN && p.curTok.Type != token.EOF {
+		p.consumeTerminators()
+
+		if p.curTok.Type == token.RPAREN {
+			break
+		}
+
+		decl := p.parseConstBlockDecl()
+		if decl != nil {
+			stmt.Decls = append(stmt.Decls, decl)
+		}
+
+		p.consumeTerminators()
+		p.nextToken()
+	}
+
+	return stmt
+}
+
+func (p *Parser) parseConstBlockDecl() Statement {
+	id := p.curTok
+	var stmt Statement = &ConstStatement{
+		NodeBase: NodeBase{Token: id},
+	}
+
+	if p.curTok.Type != token.IDENT {
+		p.addError("expected identifier in rock block")
+		return nil
+	}
+
+	if p.peekTok.Type == token.COMMA {
+		stmt = &MultiConstStatement{
+			NodeBase: NodeBase{Token: id},
+		}
+	}
+
+	switch stmt := stmt.(type) {
+
+	case *ConstStatement:
+		stmt.Name = &Identifier{
+			NodeBase: NodeBase{Token: p.curTok},
+			Value:    p.curTok.Literal,
+		}
+
+		if p.isTypeToken(p.peekTok.Type) || p.isTypeName(p.peekTok.Literal) {
+			p.nextToken()
+			stmt.Type = p.parseType()
+		}
+
+		// assignment
+		if p.peekTok.Type == token.ASSIGN {
+			p.nextToken()
+			p.nextToken()
+			stmt.Value = p.parseExpression(LOWEST)
+		}
+
+		return stmt
+	case *MultiConstStatement:
+		stmt.Names = p.parseIdentList()
+
+		if p.isTypeToken(p.peekTok.Type) || p.isTypeName(p.peekTok.Literal) {
+			p.nextToken()
+			stmt.Type = p.parseType()
+		}
+
+		// optional assignment
+		if p.peekTok.Type == token.ASSIGN {
+			p.nextToken() // move to '='
+			p.nextToken() // move to expr start
+
+			values := p.parseTupleList()
+
+			if len(values) == 1 {
+				stmt.Value = values[0]
+			} else {
+				stmt.Value = &TupleLiteral{
+					NodeBase: NodeBase{Token: p.curTok},
+					Values:   values,
+				}
+			}
+		}
+
+		stmt.Value = p.parseExpression(LOWEST)
+
+		return stmt
+	}
+
+	return nil
 }
 
 func (p *Parser) parseConstStatement() *ConstStatement {
@@ -926,6 +1154,44 @@ func (p *Parser) parseMapLiteral() Expression {
 
 	lit.Pairs = pairs
 	return lit
+}
+
+func (p *Parser) parseEnumStatement() *EnumStatement {
+	stmt := &EnumStatement{
+		NodeBase: NodeBase{Token: p.curTok}, // enum
+	}
+
+	// enum Color
+	if p.peekTok.Type != token.IDENT {
+		p.addError("expected identifier after 'enum'")
+		return nil
+	}
+	p.nextToken()
+
+	stmt.Name = &Identifier{
+		NodeBase: NodeBase{Token: p.curTok},
+		Value:    p.curTok.Literal,
+	}
+
+	// {
+	if p.peekTok.Type != token.LBRACE {
+		p.addError("expected '{' after enum identifier")
+		return nil
+	}
+	p.nextToken() // curTok == '{'
+
+	p.nextToken()
+
+	stmt.Variants = p.parseEnumVariants()
+
+	if p.curTok.Type != token.RBRACE {
+		p.addError("expected '}' after variants")
+		return nil
+	}
+
+	p.nextToken() // consume }
+
+	return stmt
 }
 
 func (p *Parser) parseIfStatement() *IfStatement {

@@ -56,6 +56,7 @@ const (
 	CONST    = "CONST"
 	TYPE     = "TYPE"
 	STRUCT   = "STRUCT"
+	ENUM     = "ENUM"
 	IF       = "IF"
 	ELSE     = "ELSE"
 	SWITCH   = "SWITCH"
@@ -88,6 +89,7 @@ var keywords = map[string]TokenType{
 	"rock":      CONST,
 	"type":      TYPE,
 	"struct":    STRUCT,
+	"enum":      ENUM,
 	"ayla":      IF,
 	"elen":      ELSE,
 	"decide":    SWITCH,

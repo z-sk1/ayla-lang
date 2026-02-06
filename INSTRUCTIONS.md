@@ -1,5 +1,19 @@
 # Installation & Usage
 
+## Language Server
+
+Ayla uses `elen` as it's lsp.
+
+Install it with:
+
+```bash
+go install github.com/z-sk1/ayla-lang/elen@latest
+```
+
+Make sure `$GOPATH/bin` is in your PATH.
+
+if go isnt in your path, please download go [here](https://go.dev).
+
 ## Windows
 
 to use the cli, please go to the **Releases** tab and download the windows binary:

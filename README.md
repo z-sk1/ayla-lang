@@ -16,8 +16,10 @@ https://marketplace.visualstudio.com/items?itemName=z-sk1.ayla
 
 this will add syntax highlighting
 
+## zed extemsopm
+
 # Installation and Usage
-See [INSTRUCTIONS.md](./INSTRUCTIONS.md) for full step-by-step instructions for macOS and Windows.
+See [INSTRUCTIONS.md](./INSTRUCTIONS.md) for full step-by-step instructions for macOS and Windows and Linux.
 
 ---
 

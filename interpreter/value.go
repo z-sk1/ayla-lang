@@ -20,6 +20,7 @@ const (
 	TypeNil
 	TypeStruct
 	TypeMap
+	TypeEnum
 	TypeNamed
 	TypeAny
 )
@@ -33,6 +34,7 @@ type TypeInfo struct {
 	Elem         *TypeInfo            // arrays / slices
 	Key          *TypeInfo            // maps
 	Value        *TypeInfo            // maps
+	Variants     map[string]int       // enums
 	IsComparable bool
 }
 
@@ -61,6 +63,7 @@ const (
 	STRUCT      ValueType = "struct"
 	TUPLE       ValueType = "tuple"
 	MAP         ValueType = "map"
+	ENUM        ValueType = "enum"
 	NIL         ValueType = "nil"
 )
 
@@ -242,6 +245,42 @@ func (m MapValue) String() string {
 	return fmt.Sprintf("map[%s]%s{%s}", m.KeyType.Name, m.ValueType.Name, strings.Join(parts, ", "))
 }
 
+type EnumValue struct {
+	Enum    *TypeInfo
+	Variant string
+	Index   int
+}
+
+func (e EnumValue) Type() ValueType {
+	return ENUM
+}
+
+func (e EnumValue) String() string {
+	return fmt.Sprintf("%s.%s", e.Enum.Name, e.Variant)
+}
+
+type TypeValue struct {
+	TypeName *TypeInfo
+}
+
+func (t TypeValue) String() string {
+	if t.TypeName.Kind == TypeEnum {
+		variants := make([]string, 0, len(t.TypeName.Variants))
+
+		for name := range t.TypeName.Variants {
+			variants = append(variants, name)
+		}
+
+		return fmt.Sprintf("%s: %s", t.TypeName.Name, strings.Join(variants, ", "))
+	}
+
+	return t.TypeName.Name
+}
+
+func (t TypeValue) Type() ValueType {
+	return valueTypeOf(t.TypeName) // or whatever you use
+}
+
 type NilValue struct{}
 
 func (n NilValue) Type() ValueType {
@@ -260,91 +299,6 @@ func (u UninitializedValue) Type() ValueType {
 
 func (u UninitializedValue) String() string {
 	return "nil"
-}
-
-func (i *Interpreter) resolveType(expr parser.Expression) (*TypeInfo, error) {
-	switch e := expr.(type) {
-
-	case *parser.IntLiteral:
-		return i.typeEnv["int"], nil
-
-	case *parser.FloatLiteral:
-		return i.typeEnv["float"], nil
-
-	case *parser.StringLiteral, *parser.InterpolatedString:
-		return i.typeEnv["string"], nil
-
-	case *parser.BoolLiteral:
-		return i.typeEnv["bool"], nil
-
-	case *parser.ArrayLiteral:
-		if len(e.Elements) == 0 {
-			// empty array has no element type yet
-			return &TypeInfo{
-				Kind: TypeArray,
-			}, nil
-		}
-
-		firstType, err := i.resolveType(e.Elements[0])
-		if err != nil {
-			return nil, err
-		}
-
-		for _, el := range e.Elements[1:] {
-			t, err := i.resolveType(el)
-			if err != nil {
-				return nil, err
-			}
-			if !typesAssignable(t, firstType) {
-				return nil, NewRuntimeError(
-					e,
-					"array elements must have the same type",
-				)
-			}
-		}
-
-		return &TypeInfo{
-			Kind: TypeArray,
-			Elem: firstType,
-		}, nil
-
-	case *parser.NilLiteral:
-		return i.typeEnv["nil"], nil
-
-	case *parser.Identifier:
-		v, ok := i.env.Get(e.Value)
-		if !ok {
-			return nil, NewRuntimeError(e, "unknown identifier "+e.Value)
-		}
-		return i.typeInfoFromValue(v), nil
-
-	case *parser.StructLiteral:
-		ti, ok := i.typeEnv[e.TypeName.Value]
-		if !ok {
-			return nil, NewRuntimeError(e, "unknown struct "+e.TypeName.Value)
-		}
-		return ti, nil
-
-	case *parser.MemberExpression:
-		leftTI, err := i.resolveType(e.Left)
-		if err != nil {
-			return nil, err
-		}
-
-		if leftTI.Kind != TypeStruct {
-			return nil, NewRuntimeError(e, "not a struct")
-		}
-
-		ft, ok := leftTI.Fields[e.Field.Value]
-		if !ok {
-			return nil, NewRuntimeError(e, "unknown field "+e.Field.Value)
-		}
-
-		return ft, nil
-
-	default:
-		return nil, NewRuntimeError(expr, "cannot resolve type")
-	}
 }
 
 func (i *Interpreter) resolveTypeNode(t parser.TypeNode) (*TypeInfo, error) {
@@ -411,33 +365,6 @@ func (i *Interpreter) resolveTypeNode(t parser.TypeNode) (*TypeInfo, error) {
 	}
 }
 
-func (i Interpreter) resolveTypeFromName(node parser.Statement, name string) (ValueType, error) {
-	switch name {
-	case "int":
-		return INT, nil
-	case "float":
-		return FLOAT, nil
-	case "string":
-		return STRING, nil
-	case "bool":
-		return BOOL, nil
-	case "arr":
-		return ARR, nil
-	case "struct":
-		return STRUCT, nil
-
-	}
-
-	// user-defined struct type
-	val, ok := i.env.Get(name)
-	if ok {
-		if _, ok := val.(StructType); ok {
-			return STRUCT_TYPE, nil
-		}
-	}
-
-	return "", NewRuntimeError(node, fmt.Sprintf("unknown type: %s", name))
-}
 func valuesEqual(a, b Value) bool {
 	if a.Type() != b.Type() {
 		return false
@@ -459,43 +386,6 @@ func valuesEqual(a, b Value) bool {
 	}
 }
 
-func defaultValueFromType(node parser.Statement, typ ValueType) (Value, error) {
-	switch typ {
-	case INT:
-		return IntValue{V: 0}, nil
-	case FLOAT:
-		return FloatValue{V: 0}, nil
-	case STRING:
-		return StringValue{V: ""}, nil
-	case BOOL:
-		return BoolValue{V: false}, nil
-	case ARR:
-		return ArrayValue{Elements: make([]Value, 0)}, nil
-	default:
-		return NilValue{}, NewRuntimeError(
-			node,
-			fmt.Sprintf("unknown type: %s", string(typ)),
-		)
-	}
-}
-
-func defaultValueFromString(node parser.Statement, name string) (Value, error) {
-	switch name {
-	case "int":
-		return IntValue{V: 0}, nil
-	case "float":
-		return FloatValue{V: 0}, nil
-	case "string":
-		return StringValue{V: ""}, nil
-	case "bool":
-		return BoolValue{V: false}, nil
-	case "arr":
-		return ArrayValue{Elements: make([]Value, 0)}, nil
-	default:
-		return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unknown type: %s", name))
-	}
-}
-
 func valueTypeOf(ti *TypeInfo) ValueType {
 	for ti.Kind == TypeNamed {
 		ti = ti.Underlying
@@ -514,27 +404,12 @@ func valueTypeOf(ti *TypeInfo) ValueType {
 		return STRUCT
 	case TypeArray:
 		return ARR
+	case TypeEnum:
+		return ENUM
+	case TypeMap:
+		return MAP
 	default:
 		return NIL
-	}
-}
-
-func typeKindOf(vt ValueType) TypeKind {
-	switch vt {
-	case INT:
-		return TypeInt
-	case FLOAT:
-		return TypeFloat
-	case STRING:
-		return TypeString
-	case BOOL:
-		return TypeBool
-	case STRUCT:
-		return TypeStruct
-	case ARR:
-		return TypeArray
-	default:
-		return TypeNil
 	}
 }
 
@@ -573,33 +448,13 @@ func (i *Interpreter) typeInfoFromValue(v Value) *TypeInfo {
 
 	case *StructValue:
 		return v.TypeName
+	case EnumValue:
+		return v.Enum
 	case NamedValue:
 		return v.TypeName
 	default:
 		return i.typeEnv["nil"]
 	}
-}
-
-func (i *Interpreter) typeInfoFromIdent(name string) (*TypeInfo, bool) {
-	// builtins
-	switch name {
-	case "int":
-		return i.typeEnv["int"], true
-	case "float":
-		return i.typeEnv["float"], true
-	case "string":
-		return i.typeEnv["string"], true
-	case "bool":
-		return i.typeEnv["bool"], true
-	}
-
-	// user-defined
-	ti, ok := i.typeEnv[name]
-	if ok {
-		return ti, true
-	}
-
-	return nil, false
 }
 
 func defaultValueFromTypeInfo(node parser.Statement, ti *TypeInfo) (Value, error) {

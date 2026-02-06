@@ -1,0 +1,5 @@
+egg (
+    a, b = 12, 5
+)
+
+explodeln(a)
