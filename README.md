@@ -16,7 +16,7 @@ https://marketplace.visualstudio.com/items?itemName=z-sk1.ayla
 
 this will add syntax highlighting
 
-## zed extemsopm
+## zed extension
 
 # Installation and Usage
 See [INSTRUCTIONS.md](./INSTRUCTIONS.md) for full step-by-step instructions for macOS and Windows and Linux.
@@ -515,7 +515,7 @@ decide yes {
 ```
 
 ## with statement
-the `with` statement evaluates a value and makes it available inside a block as `it`
+the `with` statement evaluates an expression and makes it available inside a block as `it`
 
 ```ayla
 with x {
@@ -696,6 +696,43 @@ egg p = struct {
 explode(p.Name + "is " + string(p.Age))
 ```
 for more about structs, check out [docs/structs.md](docs/structs.md)
+
+## enums
+Enums define a set of named variants under a single type
+
+declare them like this
+```ayla
+enum Color {
+  Red
+  Blue
+  Green
+}
+```
+here each variant belongs to the `Color` type
+
+you can use enum variants as values using member expressions like this
+```ayla
+egg c = Color.Red
+```
+
+since enums define a new type you can use them in type annotation
+```ayla
+egg c Color = Color.Blue
+```
+
+since Enums are first-class types you can use them in things like function parameters too
+```ayla
+fun foo(c Color) {
+  // ...
+}
+
+foo(Color.Blue)
+```
+
+some notes:
+- Enum variant names must be unique within the enum
+- Enums cannot be redeclared
+- Accessing an unknown variant is a `runtime error`
 
 ## user defined types and aliases 
 ayla supports creating your own **named types** and **aliases**

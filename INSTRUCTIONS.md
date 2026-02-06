@@ -1,6 +1,7 @@
 # Installation & Usage
 
 ## Language Server
+*If you are using the VSCode extension the lsp comes prebundled so you do not need to do this*
 
 Ayla uses `elen` as it's lsp.
 
