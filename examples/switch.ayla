@@ -2,15 +2,15 @@ egg x = 2
 
 decide yes {
     when x == 2 {
-        explode("x is 2")
+        put("x is 2")
     }
 
     when x == 3 {
-        explode("x is 3")
+        put("x is 3")
     }
 
 
     otherwise {
-        explode("x is neither 2 or 3")
+        put("x is neither 2 or 3")
     }
 }

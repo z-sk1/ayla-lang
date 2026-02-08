@@ -8,10 +8,10 @@ egg p = Person{
     Age: 13
 }
 
-explodeln("${p.Name} is ${p.Age} years old")
+putln("${p.Name} is ${p.Age} years old")
 
 egg lol = struct{
     Lol: "lel",
 }
 
-explodeln(lol.Lol)
+putln(lol.Lol)

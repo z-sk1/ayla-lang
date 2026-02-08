@@ -1,7 +1,7 @@
 egg x thing = 2
 
-explodeln(x.(int) + 3)
+putln(x.(int) + 3)
 
 egg a []thing = [1, [1]]
 
-explodeln(a[1].([]thing)[0].(int) + 1)
+putln(a[1].([]thing)[0].(int) + 1)

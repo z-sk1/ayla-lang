@@ -18,21 +18,21 @@ egg firstNum;
 egg oper;
 egg secondNum;
 
-explodeln("Firstnum");
+putln("Firstnum");
 scanln(firstNum);
 
-explodeln("Operator");
+putln("Operator");
 scanln(oper);
  
-explodeln("Secondnum");
+putln("Secondnum");
 scanln(secondNum);
 
 ayla oper == "+" {
-    explodeln(firstNum + oper + secondNum + "=" + toString(add(toFloat(firstNum), toFloat(secondNum))));
+    putln(firstNum + oper + secondNum + "=" + toString(add(toFloat(firstNum), toFloat(secondNum))));
 } elen ayla oper == "-" {
-    explodeln(firstNum + oper + secondNum + "=" + toString(subtract(toFloat(firstNum), toFloat(secondNum))));
+    putln(firstNum + oper + secondNum + "=" + toString(subtract(toFloat(firstNum), toFloat(secondNum))));
 } elen ayla oper == "*" {
-    explodeln(firstNum + oper + secondNum + "=" + toString(multiply(toFloat(firstNum), toFloat(secondNum))));
+    putln(firstNum + oper + secondNum + "=" + toString(multiply(toFloat(firstNum), toFloat(secondNum))));
 } elen ayla oper == "/" {
-    explodeln(firstNum + oper + secondNum + "=" + toString(divide(toFloat(firstNum), toFloat(secondNum))));
+    putln(firstNum + oper + secondNum + "=" + toString(divide(toFloat(firstNum), toFloat(secondNum))));
 }

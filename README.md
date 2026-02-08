@@ -23,9 +23,9 @@ See [INSTRUCTIONS.md](./INSTRUCTIONS.md) for full step-by-step instructions for 
 
 ---
 
-## built in functions!
-- `explode(...)` – prints values to stdout
-- `explodeln(...)` — prints values to stdout and adds '\n' at the end
+## built in functions!`
+- `put(...)` – prints values to stdout
+- `putln(...)` — prints values to stdout and adds '\n' at the end
 - `scanln(x)` – scans console input after clicking enter and stores it in variable
 - `scankey(x)` – scans key press in console and stores it in variable  
 - `toBool(x)` – parses a value to boolean
@@ -89,7 +89,7 @@ the available types are:
 ```ayla 
 egg x int = 3
 
-explodeln(x)
+putln(x)
 ```
 > output: 3
 
@@ -105,7 +105,7 @@ you can also assign and declare multiple variables to a `tuple`
 ```ayla
 rock a, b = 4, 2
 
-explodeln("${a} ${b}")
+putln("${a} ${b}")
 ```
 > output: 4 2
 
@@ -118,9 +118,9 @@ you can do type annotation, but not for every variable, the type at the end dict
 ```ayla
 egg a, b, c int
 
-explodeln(typeof(a), typeof(b), typeof(c))
+putln(typeof(a), typeof(b), typeof(c))
 
-explodeln(a)
+putln(a)
 ```
 > output:
 ```
@@ -142,7 +142,7 @@ egg a, b
 
 a, b = 4, 2
 
-explodeln("${a} ${b}")
+putln("${a} ${b}")
 ```
 > output: 4 2
 
@@ -154,7 +154,7 @@ fun operation(x int, y int) (int, int) {
 
 egg a, b int = operation(5, 3)
 
-explodeln(a, b)
+putln(a, b)
 ```
 > output:
 ```
@@ -167,17 +167,31 @@ you can also annotate slice types like this
 ```ayla
 egg a []int = [1, 2, 3]
 
-explode(a[0])
+put(a[0])
 ```
 > output: 1
 
 ```ayla
 egg a [][]int = [[1], [2], [3]]
 
-explode(a[0][0])
+put(a[0][0])
 ```
 > output: 1
 
+## declaration blocks
+you can also do `declaration blocks` like in Go
+
+```ayla
+egg (
+  a = 1
+  b = no
+)
+
+rock (
+  x int = 4
+  y bool = yes
+)
+```
 
 ## the thing type
 the `thing` type is equivalent to `interface{}` or `any` from go
@@ -187,7 +201,7 @@ you can assign any value to it
 ```ayla
 egg x thing = 2
 
-explode(x)
+put(x)
 ```
 > output: 2
 
@@ -195,7 +209,7 @@ but, you must use type assertion to do operations with it
 ```ayla
 egg x thing = 2
 
-explode(x.(int) + 1)
+put(x.(int) + 1)
 ```
 > output: 3
 
@@ -203,7 +217,7 @@ otherwise you will come across a `Runtime error`
 ```ayla
 egg x thing = 2
 
-explode(x + 1)
+put(x + 1)
 ```
 > output: runtime error at 3:11: cannot use 'thing' in operations, assert a type first
 
@@ -245,9 +259,9 @@ for booleans, use the constants `yes` and `no`
 egg foo = yes
 
 ayla foo {
-    explode("foo is yes")
+    put("foo is yes")
 } elen {
-    explode("foo is no")
+    put("foo is no")
 }
 ```
 > output: foo is yes
@@ -259,13 +273,13 @@ you can concatenate strings using the `+` operator.
 egg a = "hello "
 egg b = "world"
 
-explode(a + b)
+put(a + b)
 ```
 > output: hello world
 
 you can also concatenate strings with other types by parsing.
 ```ayla 
-explode(toString(4) + toString(2))
+put(toString(4) + toString(2))
 ```
 > output: 42
 
@@ -277,7 +291,7 @@ you can also interpolate strings using `${}`
 ```ayla
 egg rand = randi(10)
 
-explode("Random number: ${rand}")
+put("Random number: ${rand}")
 ```
 > output: 0 - 10
 
@@ -287,7 +301,7 @@ you can index into strings almost like arrays
 ```ayla 
 egg text = "Hello"
 
-explodeln(text[0])
+putln(text[0])
 ```
 > output: H
 
@@ -300,9 +314,9 @@ in ayla-lang, if has been renamed to `ayla`, and else renamed to `elen`. therefo
 egg x = 5
 
 ayla x <= 9 {
-    explode("number is single digits")
+    put("number is single digits")
 } elen ayla x >= 10 {
-    explode("number is double digits")
+    put("number is double digits")
 }
 
 ```
@@ -319,7 +333,7 @@ oh yea also no brackets
 this is a classic c-style for loop
 ```ayla
 four egg i = 0; i < 5; i = i + 1 {
-    explode(i) 
+    put(i) 
 }
 ```
 > output: 1 2 3 4 5
@@ -331,7 +345,7 @@ arrays:
 x := [1, 2, 3]
 
 four i, v := range x {
-    explodeln(v)
+    putln(v)
 }
 ```
 > output:
@@ -346,7 +360,7 @@ maps:
 x := {"a": 1, "b": 2}
 
 four k, v := range x {
-    explodeln(k)
+    putln(k)
 }
 ```
 
@@ -361,7 +375,7 @@ strings:
 x := "hiya"
 
 four i, v := range x {
-    explodeln(v)
+    putln(v)
 }
 ```
 > output:
@@ -376,7 +390,7 @@ ints:
 this is used as a repeat
 ```ayla
 four i := range 5 {
-    explodeln(i)
+    putln(i)
 }
 ```
 > output:
@@ -393,7 +407,7 @@ you can also use `_` to discard a variable like this
 x := [1, 2, 3]
 
 four _, v := range x {
-    explodeln(v)
+    putln(v)
 }
 ```
 > output:
@@ -416,7 +430,7 @@ egg i = 0
 why i < 7 {
     i = i + 1
 
-    explode(i)
+    put(i)
 }
 ```
 > output: 1 2 3 4 5 6 7
@@ -438,7 +452,7 @@ why i < 7 {
         kitkat
     }
 
-    explode(i)
+    put(i)
 }
 ```
 > output: 1 2 3
@@ -453,7 +467,7 @@ why i < 7 {
         next
     }
 
-    explode(i)
+    put(i)
 }
 ```
 > output: 1 2 3 5 6 7
@@ -468,15 +482,15 @@ egg x = 2
 
 decide x {
     when 2 {
-        explode("x is 2")
+        put("x is 2")
     }
 
     when 3 {
-        explode("x is 3")
+        put("x is 3")
     }
 
     otherwise {
-        explode("x is neither 2 or 3")
+        put("x is neither 2 or 3")
     }
 }
 ```
@@ -489,11 +503,11 @@ egg x = 5
 
 decide x < 10 {
     when yes {
-        explode("x is less than 10")
+        put("x is less than 10")
     }
 
     otherwise {
-        explode("x is more than 10")
+        put("x is more than 10")
     }
 }
 ```
@@ -505,11 +519,11 @@ egg x = 5
 
 decide yes {
     when x < 10 {
-        explode("x is less than 10")
+        put("x is less than 10")
     }
 
     otherwise {
-        explode("x is more than 10")
+        put("x is more than 10")
     }
 }
 ```
@@ -519,7 +533,7 @@ the `with` statement evaluates an expression and makes it available inside a blo
 
 ```ayla
 with x {
-    explodeln(it)
+    putln(it)
 }
 ```
 
@@ -530,7 +544,7 @@ with x {
 egg x int = 5
 
 with x {
-    explodeln(it) // 5
+    putln(it) // 5
 }
 ```
 
@@ -539,7 +553,7 @@ Nested `with` blocks shadow `it`
 ```ayla
 with a {
     with b {
-        explodeln(it) // b
+        putln(it) // b
     }
 }
 ```
@@ -555,7 +569,7 @@ fun add(x, y) {
     back x + y
 }
 
-explode(add(5, 7))
+put(add(5, 7))
 ```
 output: 12
 
@@ -565,7 +579,7 @@ fun add(x, y) (int) {
     back x + y
 }
 
-explodeln(add(4, 2))
+putln(add(4, 2))
 ```
 > output: 6
 
@@ -577,7 +591,7 @@ to initialise an array use square brackets: `[]`
 ```ayla
 egg arr = [0, 1, 2, 3]
 
-explode(arr)
+put(arr)
 ```
 > output: [0, 1, 2, 3]
 
@@ -586,7 +600,7 @@ you can also index into an array, like normal
 ```ayla
 egg arr = [1, 2, 5]
 
-explode(arr[2])
+put(arr[2])
 ```
 > output: 5
 
@@ -600,7 +614,7 @@ like `thing` you must use type assertion to do operations
 ```ayla
 egg arr []thing = [1, 2, "3"]
 
-explode(arr[1].(int) + 1)
+put(arr[1].(int) + 1)
 ```
 > output: 3
 
@@ -638,7 +652,7 @@ for maps it checks whether a key exists
 egg x = {"a": 1, "b": 1}
 
 ayla "a" in x {
-    explodeln("exists")
+    putln("exists")
 }
 ```
 > output: exists
@@ -650,7 +664,7 @@ for arrays it checks a value exists
 egg x = [1, 2, 3]
 
 ayla 2 in x {
-    explodeln("exists")
+    putln("exists")
 }
 ```
 > output: exists
@@ -662,7 +676,7 @@ for strings it checks for the substring's existence
 egg x = "hello"
 
 ayla "he" in x {
-    explodeln("exists")
+    putln("exists")
 }
 ```
 > output: exists
@@ -682,7 +696,7 @@ egg p = Person {
     Age: 13
 }
 
-explode(p.Name + "is " + string(p.Age))
+put(p.Name + "is " + string(p.Age))
 ```
 
 for anonymous structs, since there is no struct type, just use the `struct` keyword to denote an anonymous struct
@@ -693,7 +707,7 @@ egg p = struct {
     Age: 13
 }
 
-explode(p.Name + "is " + string(p.Age))
+put(p.Name + "is " + string(p.Age))
 ```
 for more about structs, check out [docs/structs.md](docs/structs.md)
 
@@ -771,7 +785,7 @@ ayla yes {
     egg x = 2 // define inside if statement
 }
 
-explode(x) // error
+put(x) // error
 ```
 > output: runtime error at 5:10: undefined variable: x
 
@@ -783,7 +797,7 @@ ayla yes {
     x = 2
 }
 
-explode(x)
+put(x)
 ```
 > output: 2
 
@@ -793,18 +807,18 @@ but you can also define a variable with the same name in the child environment, 
 egg x = 5
 
 ayla yes {
-    explodeln(x) // 5
+    putln(x) // 5
 
     x = 3
 
-    explodeln(x) // 3
+    putln(x) // 3
 
     egg x = 7
 
-    explodeln(x) // 7
+    putln(x) // 7
 }
 
-explodeln(x) // 3, because was assigned 3 in child
+putln(x) // 3, because was assigned 3 in child
 ```
 > output:
 ```
@@ -821,12 +835,12 @@ ayla supports basic concurrency using the `spawn` keyword.
 ```ayla
 spawn {
     why yes {
-        explodeln("tick")
+        putln("tick")
         wait(1000)
     }
 }
 
-explodeln("running at the same time")
+putln("running at the same time")
 Both blocks execute concurrently.
 ```
 
@@ -845,7 +859,7 @@ spawn {
 }
 
 why counter < 5 {
-    explodeln(counter)
+    putln(counter)
     wait(500)
 }
 ```

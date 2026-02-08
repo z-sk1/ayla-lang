@@ -1,6 +1,7 @@
 package interpreter
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
@@ -22,6 +23,7 @@ const (
 	TypeMap
 	TypeEnum
 	TypeNamed
+	TypeError
 	TypeAny
 )
 
@@ -64,6 +66,7 @@ const (
 	TUPLE       ValueType = "tuple"
 	MAP         ValueType = "map"
 	ENUM        ValueType = "enum"
+	ERROR       ValueType = "error"
 	NIL         ValueType = "nil"
 )
 
@@ -160,6 +163,18 @@ func (b BoolValue) String() string {
 	}
 
 	return "no"
+}
+
+type ErrorValue struct {
+	V error
+}
+
+func (e ErrorValue) Type() ValueType {
+	return ERROR
+}
+
+func (e ErrorValue) String() string {
+	return e.V.Error()
 }
 
 type ArrayValue struct {
@@ -413,6 +428,23 @@ func valueTypeOf(ti *TypeInfo) ValueType {
 	}
 }
 
+func (i *Interpreter) typeInfoFromIdent(id *parser.Identifier) *TypeInfo {
+	name := id.Value
+
+	switch name {
+	case
+		"int",
+		"float",
+		"string",
+		"bool",
+		"error",
+		"nil":
+		return i.typeEnv[name]
+	default:
+		return i.typeEnv["nil"]
+	}
+}
+
 func (i *Interpreter) typeInfoFromValue(v Value) *TypeInfo {
 	switch v := v.(type) {
 	case IntValue:
@@ -423,6 +455,8 @@ func (i *Interpreter) typeInfoFromValue(v Value) *TypeInfo {
 		return i.typeEnv["string"]
 	case BoolValue:
 		return i.typeEnv["bool"]
+	case ErrorValue:
+		return i.typeEnv["error"]
 	case ArrayValue:
 		if v.ElemType == nil {
 			panic("ArrayValue ElemType is nil")
@@ -469,6 +503,8 @@ func defaultValueFromTypeInfo(node parser.Statement, ti *TypeInfo) (Value, error
 		return StringValue{V: ""}, nil
 	case TypeBool:
 		return BoolValue{V: false}, nil
+	case TypeError:
+		return ErrorValue{V: errors.New("")}, nil
 	case TypeArray:
 		if ti.Elem == nil {
 			return NilValue{}, NewRuntimeError(node, "array type missing element type")
@@ -479,6 +515,16 @@ func defaultValueFromTypeInfo(node parser.Statement, ti *TypeInfo) (Value, error
 		return &StructValue{
 			TypeName: ti,
 			Fields:   map[string]Value{},
+		}, nil
+	case TypeMap:
+		if ti.Key == nil || ti.Value == nil {
+			return NilValue{}, NewRuntimeError(node, "map type missing key type or value type")
+		}
+
+		return MapValue{
+			Entries:   make(map[Value]Value),
+			KeyType:   ti.Key,
+			ValueType: ti.Value,
 		}, nil
 	default:
 		return NilValue{}, NewRuntimeError(node, "cannot create default value for "+ti.Name)

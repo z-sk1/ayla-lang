@@ -3,7 +3,7 @@ egg timer int
 egg running bool
 egg quit bool
 
-explodeln("Press [ENTER] to start and stop stopwatch and q to quit")
+putln("Press [ENTER] to start and stop stopwatch and q to quit")
 
 spawn {
     why yes {
@@ -12,7 +12,7 @@ spawn {
             running = !running
         } elen ayla key == "q" {
             running = no
-            explodeln("Final: ${timer}s")
+            putln("Final: ${timer}s")
             quit = yes
             kitkat
         }
@@ -22,7 +22,7 @@ spawn {
 why yes {
     ayla running {
         timer = timer + 1
-        explodeln("Elapsed: ${timer}s")
+        putln("Elapsed: ${timer}s")
         wait(1000)
     } elen ayla quit {
         kitkat

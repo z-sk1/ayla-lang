@@ -103,10 +103,16 @@ func run() {
 	}
 
 	interp := interpreter.New()
-	if sig, err := interp.EvalStatements(program); err != nil {
+
+	sig, err := interp.EvalStatements(program)
+
+	if err != nil {
 		fmt.Printf("\n%s: %v\n", filename, err)
-	} else {
-		_ = sig
+		return
+	}
+
+	if ev, ok := sig.(interpreter.ErrorValue); ok {
+		fmt.Printf("\n%s: runtime error: %v\n", filename, ev.V)
 	}
 
 	var elapsed time.Duration

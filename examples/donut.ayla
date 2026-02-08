@@ -60,9 +60,9 @@ why yes {
     i = 0
     why i < 1760 {
         ayla i % 80 == 0 {
-            explodeln("")
+            putln("")
         } elen {
-            explode(chr(b[i]))
+            put(chr(b[i]))
         }
         i = i + 1
     }

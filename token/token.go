@@ -82,6 +82,7 @@ const (
 	STRING_TYPE = "STRING_TYPE"
 	BOOL_TYPE   = "BOOL_TYPE"
 	ANY_TYPE    = "ANY_TYPE"
+	ERROR_TYPE  = "ERROR_TYPE"
 )
 
 var keywords = map[string]TokenType{
@@ -106,6 +107,7 @@ var keywords = map[string]TokenType{
 	"string":    STRING_TYPE,
 	"bool":      BOOL_TYPE,
 	"thing":     ANY_TYPE,
+	"error":     ERROR_TYPE,
 	"four":      FOR,
 	"range":     RANGE,
 	"why":       WHILE,

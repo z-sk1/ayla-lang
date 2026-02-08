@@ -4,4 +4,4 @@ enum Color {
     Blue
 }
 
-explodeln(Color)
+putln(Color)

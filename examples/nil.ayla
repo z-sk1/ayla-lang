@@ -1,5 +1,5 @@
 egg foo = nil
 
 ayla foo == nil {
-    explode("wow")
+    put("wow")
 }

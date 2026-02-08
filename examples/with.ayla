@@ -1,5 +1,5 @@
 egg x = 2
 
 with x {
-    explodeln(it + 1)
+    putln(it + 1)
 }

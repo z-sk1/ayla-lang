@@ -110,6 +110,7 @@ func (p *Parser) isTypeToken(t token.TokenType) bool {
 		token.BOOL_TYPE,
 		token.FLOAT_TYPE,
 		token.ANY_TYPE,
+		token.ERROR_TYPE,
 		token.LBRACKET,
 		token.MAP:
 		return true
@@ -775,6 +776,7 @@ func (p *Parser) parseType() TypeNode {
 		token.FLOAT_TYPE,
 		token.BOOL_TYPE,
 		token.ANY_TYPE,
+		token.ERROR_TYPE,
 		token.IDENT:
 		return &IdentType{
 			NodeBase: NodeBase{Token: p.curTok},
@@ -1402,6 +1404,8 @@ func (p *Parser) parseFuncStatement() *FuncStatement {
 			Value:    p.curTok.Literal,
 		}
 
+		p.nextToken()
+
 		var paramType TypeNode
 		if p.isTypeToken(p.peekTok.Type) || p.isTypeName(p.peekTok.Literal) {
 			paramType = p.parseType()
@@ -1428,11 +1432,7 @@ func (p *Parser) parseFuncStatement() *FuncStatement {
 		p.nextToken()
 
 		for p.curTok.Type != token.RPAREN {
-			if p.curTok.Type != token.INT_TYPE &&
-				p.curTok.Type != token.FLOAT_TYPE &&
-				p.curTok.Type != token.STRING_TYPE &&
-				p.curTok.Type != token.BOOL_TYPE {
-
+			if !(p.isTypeName(p.curTok.Literal) || p.isTypeToken(p.curTok.Type)) {
 				p.addError("expected return type")
 				return nil
 			}
@@ -2003,6 +2003,12 @@ func (p *Parser) parsePrimary() Expression {
 		return &NilLiteral{NodeBase: NodeBase{Token: p.curTok}}
 
 	case token.BOOL_TYPE:
+		if p.peekTok.Type == token.LPAREN {
+			return p.parseFuncCall()
+		}
+		return nil
+
+	case token.ERROR_TYPE:
 		if p.peekTok.Type == token.LPAREN {
 			return p.parseFuncCall()
 		}

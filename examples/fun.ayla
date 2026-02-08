@@ -4,4 +4,4 @@ fun operation(x int, y int) (int, int) {
 
 egg a, b = operation(5, 10)
 
-explodeln(a, b)
+putln(a, b)

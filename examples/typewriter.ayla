@@ -2,7 +2,7 @@ egg text = "Yara's the worst person ever "
 
 why yes {
     four _, s := range text {
-        explode(s)
+        put(s)
         wait(25)
     }
 }
