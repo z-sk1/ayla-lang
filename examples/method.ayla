@@ -1,0 +1,15 @@
+type Person struct {
+    Name string
+    Age int
+}
+
+fun (p Person) inc() (thing) {
+    back 1
+}
+
+x := Person{
+    Name: "Ziad",
+    Age: 13,
+}
+
+putln(x.inc() + 1)

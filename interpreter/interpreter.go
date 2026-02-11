@@ -19,7 +19,7 @@ import (
 type Func struct {
 	Params      []*parser.ParametersClause
 	Body        []parser.Statement
-	ReturnTypes []*parser.Identifier
+	ReturnTypes []parser.TypeNode
 	Env         *Environment
 }
 
@@ -38,9 +38,12 @@ type RuntimeError struct {
 type Environment struct {
 	store    map[string]Value
 	funcs    map[string]*Func
+	methods  map[*TypeInfo]map[string]*Func
 	builtins map[string]*BuiltinFunc
-	mu       sync.RWMutex
-	parent   *Environment
+	defers   []*parser.FuncCall
+
+	mu     sync.RWMutex
+	parent *Environment
 }
 
 type Interpreter struct {
@@ -52,7 +55,9 @@ func New() *Interpreter {
 	env := &Environment{
 		store:    make(map[string]Value),
 		funcs:    make(map[string]*Func),
+		methods:  make(map[*TypeInfo]map[string]*Func),
 		builtins: make(map[string]*BuiltinFunc),
+		defers:   make([]*parser.FuncCall, 0),
 	}
 
 	typeEnv := make(map[string]*TypeInfo)
@@ -73,6 +78,7 @@ func NewEnvironment(parent *Environment) *Environment {
 	return &Environment{
 		store:    make(map[string]Value),
 		funcs:    make(map[string]*Func),
+		defers:   make([]*parser.FuncCall, 0),
 		builtins: parent.builtins,
 		parent:   parent,
 	}
@@ -127,6 +133,13 @@ func (e *Environment) Set(name string, val Value) Value {
 	return nil
 }
 
+func (e *Environment) SetFunc(name string, f *Func) *Func {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.funcs[name] = f
+	return f
+}
+
 func (e *Environment) GetFunc(name string) (*Func, bool) {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
@@ -141,11 +154,41 @@ func (e *Environment) GetFunc(name string) (*Func, bool) {
 	return nil, false
 }
 
-func (e *Environment) SetFunc(name string, f *Func) *Func {
+func (e *Environment) SetMethod(typ *TypeInfo, name string, fn *Func) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	e.funcs[name] = f
-	return f
+	if e.methods[typ] == nil {
+		e.methods[typ] = map[string]*Func{}
+	}
+	e.methods[typ][name] = fn
+}
+
+func (e *Environment) GetMethod(typ *TypeInfo, name string) (*Func, bool) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	for env := e; env != nil; env = env.parent {
+		if m := env.methods[typ]; m != nil {
+			if fn, ok := m[name]; ok {
+				return fn, true
+			}
+		}
+	}
+	return nil, false
+}
+
+func (e *Environment) AddDefer(call *parser.FuncCall) {
+	e.defers = append(e.defers, call)
+}
+
+func (i *Interpreter) runDefers(env *Environment) error {
+	for j := len(env.defers) - 1; j >= 0; j-- {
+		_, err := i.evalFuncCall(env.defers[j])
+		if err != nil {
+			return err
+		}
+	}
+	env.defers = nil
+	return nil
 }
 
 func toFloat(v Value) (float64, bool) {
@@ -1462,6 +1505,33 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		i.env.SetFunc(stmt.Name.Value, &Func{Params: stmt.Params, Body: stmt.Body, ReturnTypes: stmt.ReturnTypes, Env: i.env})
 		return SignalNone{}, nil
 
+	case *parser.MethodStatement:
+		recvType, err := i.resolveTypeNode(stmt.Receiver.Type)
+		if err != nil {
+			return ErrorValue{
+				V: NewRuntimeError(stmt, err.Error()),
+			}, nil
+		}
+
+		params := append(
+			[]*parser.ParametersClause{
+				{
+					Name: stmt.Receiver.Name,
+					Type: stmt.Receiver.Type,
+				},
+			},
+			stmt.Params...,
+		)
+
+		i.env.SetMethod(recvType, stmt.Name.Value, &Func{
+			Params:      params,
+			Body:        stmt.Body,
+			ReturnTypes: stmt.ReturnTypes,
+			Env:         i.env,
+		})
+
+		return SignalNone{}, nil
+
 	case *parser.ReturnStatement:
 		values := []Value{}
 
@@ -1788,6 +1858,10 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		}
 		return SignalNone{}, nil
 
+	case *parser.DeferStatement:
+		i.env.AddDefer(stmt.Call)
+		return SignalNone{}, nil
+
 	case *parser.BreakStatement:
 		return SignalBreak{}, nil
 
@@ -1871,6 +1945,9 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 
 	case *parser.FuncCall:
 		return i.evalCall(expr)
+
+	case *parser.MethodCall:
+		return i.evalMethodCall(expr)
 
 	case *parser.IndexExpression:
 		left, err := i.EvalExpression(expr.Left)
@@ -2569,28 +2646,33 @@ func (i *Interpreter) evalTypeCast(target *TypeInfo, arg parser.Expression, node
 	}
 }
 
+func (i *Interpreter) evalArgs(exprs []parser.Expression) ([]Value, error) {
+	args := []Value{}
+	for _, a := range exprs {
+		v, err := i.EvalExpression(a)
+		if err != nil {
+			return nil, err
+		}
+		if t, ok := v.(TupleValue); ok {
+			args = append(args, t.Values...)
+		} else {
+			args = append(args, v)
+		}
+	}
+	return args, nil
+}
+
 func (i *Interpreter) evalFuncCall(expr *parser.FuncCall) (Value, error) {
-	// built in?
+	// builtin
 	if b, ok := i.env.builtins[expr.Name.Value]; ok {
-		args := []Value{}
-
-		for _, a := range expr.Args {
-			v, err := i.EvalExpression(a)
-			if err != nil {
-				return NilValue{}, err
-			}
-
-			if t, ok := v.(TupleValue); ok {
-				args = append(args, t.Values...) // flatten
-			} else {
-				args = append(args, v)
-			}
+		args, err := i.evalArgs(expr.Args)
+		if err != nil {
+			return NilValue{}, err
 		}
-
 		if b.Arity >= 0 && len(args) != b.Arity {
-			return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("expected %d args, got %d", b.Arity, len(args)))
+			return NilValue{}, NewRuntimeError(expr,
+				fmt.Sprintf("expected %d args, got %d", b.Arity, len(args)))
 		}
-
 		return b.Fn(i, expr, args)
 	}
 
@@ -2598,27 +2680,65 @@ func (i *Interpreter) evalFuncCall(expr *parser.FuncCall) (Value, error) {
 	fn, ok := i.env.GetFunc(expr.Name.Value)
 	if !ok {
 		return ErrorValue{
-			V: NewRuntimeError(expr, fmt.Sprintf("unknown function: %s", expr.Name.Value)),
+			V: NewRuntimeError(expr,
+				fmt.Sprintf("unknown function: %s", expr.Name.Value)),
 		}, nil
 	}
 
-	if len(fn.Params) != len(expr.Args) {
+	args, err := i.evalArgs(expr.Args)
+	if err != nil {
+		return NilValue{}, err
+	}
+
+	return i.callFunction(fn, args, expr)
+}
+
+func (i *Interpreter) evalMethodCall(expr *parser.MethodCall) (Value, error) {
+	fmt.Println(">>> evalMethodCall HIT")
+
+	recv, err := i.EvalExpression(expr.Receiver)
+	if err != nil {
+		return NilValue{}, err
+	}
+
+	recvType := unwrapAlias(i.typeInfoFromValue(recv))
+
+	fn, ok := i.env.GetMethod(recvType, expr.Name.Value)
+	if !ok {
 		return ErrorValue{
-			V: NewRuntimeError(expr, fmt.Sprintf("expected %d args, got %d", len(fn.Params), len(expr.Args))),
+			V: NewRuntimeError(expr,
+				fmt.Sprintf("type %s has no method %s",
+					recvType.Name, expr.Name.Value)),
 		}, nil
 	}
 
-	// create new env for func call
+	args, err := i.evalArgs(expr.Args)
+	if err != nil {
+		return NilValue{}, err
+	}
+
+	// inject receiver as first argument
+	args = append([]Value{recv}, args...)
+
+	return i.callFunction(fn, args, expr)
+}
+
+func (i *Interpreter) callFunction(fn *Func, args []Value, callNode parser.Node) (Value, error) {
+	if len(fn.Params) != len(args) {
+		return ErrorValue{
+			V: NewRuntimeError(callNode,
+				fmt.Sprintf("expected %d args, got %d",
+					len(fn.Params), len(args))),
+		}, nil
+	}
+
+	// new env
 	newEnv := NewEnvironment(fn.Env)
 
-	// set params
+	// bind params
 	for idx, param := range fn.Params {
-		val, err := i.EvalExpression(expr.Args[idx])
-		if err != nil {
-			return NilValue{}, err
-		}
+		val := args[idx]
 
-		// enforce type if parameter has one
 		if param.Type != nil {
 			actual := i.typeInfoFromValue(unwrapNamed(val))
 			expected, err := i.resolveTypeNode(param.Type)
@@ -2630,7 +2750,11 @@ func (i *Interpreter) evalFuncCall(expr *parser.FuncCall) (Value, error) {
 				val = FloatValue{V: float64(val.(IntValue).V)}
 			} else if !typesAssignable(actual, expected) {
 				return ErrorValue{
-					V: NewRuntimeError(expr, fmt.Sprintf("parameter '%s' expected %s, got %s", param.Name.Value, expected.Name, actual.Name)),
+					V: NewRuntimeError(callNode,
+						fmt.Sprintf("parameter '%s' expected %s, got %s",
+							param.Name.Value,
+							expected.Name,
+							actual.Name)),
 				}, nil
 			}
 		}
@@ -2638,22 +2762,29 @@ func (i *Interpreter) evalFuncCall(expr *parser.FuncCall) (Value, error) {
 		newEnv.Define(param.Name.Value, val)
 	}
 
-	// execute body
+	// execute
 	prevEnv := i.env
 	i.env = newEnv
 
 	sig, err := i.EvalBlock(fn.Body, false)
+	fmt.Println("executing")
+
+	deferErr := i.runDefers(newEnv)
 
 	i.env = prevEnv
 
 	if err != nil {
 		return NilValue{}, err
 	}
+	if deferErr != nil {
+		return NilValue{}, deferErr
+	}
 
+	// handle return
 	if ret, ok := sig.(SignalReturn); ok {
 		if len(fn.ReturnTypes) > 0 && len(fn.ReturnTypes) != len(ret.Values) {
 			return ErrorValue{
-				V: NewRuntimeError(expr,
+				V: NewRuntimeError(callNode,
 					fmt.Sprintf("expected %d return values, got %d",
 						len(fn.ReturnTypes), len(ret.Values))),
 			}, nil
@@ -2661,9 +2792,15 @@ func (i *Interpreter) evalFuncCall(expr *parser.FuncCall) (Value, error) {
 
 		for idx, expectedType := range fn.ReturnTypes {
 			actual := ret.Values[idx]
-
 			actualTI := unwrapAlias(i.typeInfoFromValue(actual))
-			expectedTI := unwrapAlias(i.typeInfoFromIdent(expectedType))
+
+			expectedTI, err := i.resolveTypeNode(expectedType)
+			if err != nil {
+				return ErrorValue{
+					V: NewRuntimeError(callNode, err.Error()),
+				}, nil
+			}
+			expectedTI = unwrapAlias(expectedTI)
 
 			if expectedTI.Name == "error" {
 				if _, isNil := actual.(NilValue); isNil {
@@ -2673,12 +2810,11 @@ func (i *Interpreter) evalFuncCall(expr *parser.FuncCall) (Value, error) {
 
 			if !typesAssignable(actualTI, expectedTI) {
 				return ErrorValue{
-					V: NewRuntimeError(expr,
+					V: NewRuntimeError(callNode,
 						fmt.Sprintf("return %d, expected %s, got %s",
 							idx+1,
 							expectedTI.Name,
-							actualTI.Name,
-						)),
+							actualTI.Name)),
 				}, nil
 			}
 		}
@@ -2688,6 +2824,7 @@ func (i *Interpreter) evalFuncCall(expr *parser.FuncCall) (Value, error) {
 		}
 		return ret.Values[0], nil
 	}
+
 	return NilValue{}, nil
 }
 

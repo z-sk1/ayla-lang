@@ -196,13 +196,35 @@ type FuncStatement struct {
 	Name        *Identifier
 	Params      []*ParametersClause
 	Body        []Statement
-	ReturnTypes []*Identifier
+	ReturnTypes []TypeNode
 }
 
 type FuncCall struct {
 	NodeBase
 	Name *Identifier
 	Args []Expression
+}
+
+type Receiver struct {
+	NodeBase
+	Type TypeNode
+	Name *Identifier
+}
+
+type MethodStatement struct {
+	NodeBase
+	Name        *Identifier
+	Receiver    *Receiver
+	Params      []*ParametersClause
+	Body        []Statement
+	ReturnTypes []TypeNode
+}
+
+type MethodCall struct {
+	NodeBase
+	Name     *Identifier
+	Receiver Expression
+	Args     []Expression
 }
 
 type ForStatement struct {
@@ -301,6 +323,11 @@ type TypeAssertExpression struct {
 	NodeBase
 	Expr Expression
 	Type TypeNode
+}
+
+type DeferStatement struct {
+	NodeBase
+	Call *FuncCall
 }
 
 type IntLiteral struct {

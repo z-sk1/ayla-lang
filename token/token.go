@@ -68,6 +68,7 @@ const (
 	FUNC     = "FUNC"
 	RETURN   = "RETURN"
 	CONTINUE = "CONTINUE"
+	DEFER    = "DEFER"
 	SPAWN    = "SPAWN"
 	FOR      = "FOR"
 	RANGE    = "RANGE"
@@ -101,6 +102,7 @@ var keywords = map[string]TokenType{
 	"in":        IN,
 	"fun":       FUNC,
 	"back":      RETURN,
+	"defer":     DEFER,
 	"spawn":     SPAWN,
 	"int":       INT_TYPE,
 	"float":     FLOAT_TYPE,

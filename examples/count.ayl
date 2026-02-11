@@ -1,7 +1,0 @@
-fun add(a, b) {
-    back a + b
-}
-
-four egg i int; i < 1000000; i = i + 1 {
-    add(1, 2)
-}
