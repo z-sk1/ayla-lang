@@ -1494,7 +1494,7 @@ func (p *Parser) parseFuncParams() []*ParametersClause {
 		p.nextToken()
 
 		var paramType TypeNode
-		if p.isTypeToken(p.peekTok.Type) || p.isTypeName(p.peekTok.Literal) {
+		if p.isTypeToken(p.curTok.Type) || p.isTypeName(p.curTok.Literal) || p.curTok.Type == token.IDENT {
 			paramType = p.parseType()
 		}
 
@@ -1569,6 +1569,7 @@ func (p *Parser) parseFuncStatement() *FuncStatement {
 		p.nextToken()
 		stmt.ReturnTypes = p.parseFuncReturnTypes()
 	} else {
+		p.nextToken()
 		stmt.ReturnTypes = nil
 	}
 

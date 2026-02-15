@@ -211,8 +211,7 @@ func typesAssignable(from, to *TypeInfo) bool {
 		return true
 	}
 
-	// any absorbs everything
-	if from.Kind == TypeAny || to.Kind == TypeAny {
+	if to.Kind == TypeAny {
 		return true
 	}
 
@@ -1214,6 +1213,11 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			return SignalNone{}, NewRuntimeError(s, fmt.Sprintf("cant redeclare const: %s", stmt.Name.Value))
 		}
 
+		val, err = i.assignWithType(stmt, val, expectedTI)
+		if err != nil {
+			return SignalNone{}, err
+		}
+
 		// store const val
 		i.env.Define(stmt.Name.Value, ConstValue{Value: val})
 		return SignalNone{}, nil
@@ -1264,6 +1268,11 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 				return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("cannot redeclare const: %s", name.Value))
 			}
 			v, err := i.assignWithType(stmt, tuple.Values[idx], expectedTI)
+			if err != nil {
+				return SignalNone{}, err
+			}
+
+			v, err = i.assignWithType(stmt, val, expectedTI)
 			if err != nil {
 				return SignalNone{}, err
 			}
@@ -2740,22 +2749,16 @@ func (i *Interpreter) callFunction(fn *Func, args []Value, callNode parser.Node)
 		val := args[idx]
 
 		if param.Type != nil {
-			actual := i.typeInfoFromValue(unwrapNamed(val))
 			expected, err := i.resolveTypeNode(param.Type)
 			if err != nil {
 				return NilValue{}, err
 			}
 
-			if expected.Kind == TypeFloat && actual.Kind == TypeInt {
-				val = FloatValue{V: float64(val.(IntValue).V)}
-			} else if !typesAssignable(actual, expected) {
-				return ErrorValue{
-					V: NewRuntimeError(callNode,
-						fmt.Sprintf("parameter '%s' expected %s, got %s",
-							param.Name.Value,
-							expected.Name,
-							actual.Name)),
-				}, nil
+			actual := unwrapAlias(i.typeInfoFromValue(val))
+
+			val, err = i.assignWithType(callNode, val, expected)
+			if err != nil {
+				return NilValue{}, NewRuntimeError(callNode, fmt.Sprintf("param %d expected '%s' but got '%s'", idx+1, expected.Name, actual.Name))
 			}
 		}
 
@@ -2767,7 +2770,6 @@ func (i *Interpreter) callFunction(fn *Func, args []Value, callNode parser.Node)
 	i.env = newEnv
 
 	sig, err := i.EvalBlock(fn.Body, false)
-	fmt.Println("executing")
 
 	deferErr := i.runDefers(newEnv)
 
@@ -2792,7 +2794,6 @@ func (i *Interpreter) callFunction(fn *Func, args []Value, callNode parser.Node)
 
 		for idx, expectedType := range fn.ReturnTypes {
 			actual := ret.Values[idx]
-			actualTI := unwrapAlias(i.typeInfoFromValue(actual))
 
 			expectedTI, err := i.resolveTypeNode(expectedType)
 			if err != nil {
@@ -2808,15 +2809,16 @@ func (i *Interpreter) callFunction(fn *Func, args []Value, callNode parser.Node)
 				}
 			}
 
-			if !typesAssignable(actualTI, expectedTI) {
-				return ErrorValue{
-					V: NewRuntimeError(callNode,
-						fmt.Sprintf("return %d, expected %s, got %s",
-							idx+1,
-							expectedTI.Name,
-							actualTI.Name)),
-				}, nil
+			if unwrapAlias(i.typeInfoFromValue(actual)).Kind == TypeError {
+				return actual, nil
 			}
+
+			actual, err = i.assignWithType(callNode, actual, expectedTI)
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			ret.Values[idx] = actual
 		}
 
 		if len(fn.ReturnTypes) > 1 {
@@ -2831,7 +2833,7 @@ func (i *Interpreter) callFunction(fn *Func, args []Value, callNode parser.Node)
 func (i *Interpreter) evalIndexExpression(node parser.Expression, left, idx Value) (Value, error) {
 	if nv, ok := left.(NamedValue); ok && nv.TypeName.Kind == TypeAny {
 		return ErrorValue{
-			V: NewRuntimeError(node, "cannot index value of type thing without type assertion"),
+			V: NewRuntimeError(node, "cannot index value of type 'thing' without type assertion"),
 		}, nil
 	}
 
@@ -2960,7 +2962,7 @@ func (i *Interpreter) evalIndexExpression(node parser.Expression, left, idx Valu
 
 		if typeStr != "" {
 			return ErrorValue{
-				V: NewRuntimeError(node, fmt.Sprintf("indexing is not allowed with type: %s", typeStr)),
+				V: NewRuntimeError(node, fmt.Sprintf("indexing is not allowed with type: '%s'", typeStr)),
 			}, nil
 		}
 
@@ -2985,7 +2987,7 @@ func evalMemberExpression(node parser.Expression, left Value, field string) (Val
 
 		if val.Type() != valueTypeOf(expectedType) {
 			return ErrorValue{
-				V: NewRuntimeError(node, fmt.Sprintf("field '%s' type %v should be %v", field, val.Type(), expectedType)),
+				V: NewRuntimeError(node, fmt.Sprintf("field '%s' type '%v' should be '%v'", field, val.Type(), expectedType)),
 			}, nil
 		}
 
@@ -2993,14 +2995,14 @@ func evalMemberExpression(node parser.Expression, left Value, field string) (Val
 	case TypeValue:
 		if obj.TypeName.Kind != TypeEnum {
 			return ErrorValue{
-				V: NewRuntimeError(node, fmt.Sprintf("type %s has no members", obj.TypeName.Name)),
+				V: NewRuntimeError(node, fmt.Sprintf("type '%s' has no members", obj.TypeName.Name)),
 			}, nil
 		}
 
 		idx, ok := obj.TypeName.Variants[field]
 		if !ok {
 			return ErrorValue{
-				V: NewRuntimeError(node, fmt.Sprintf("unknown enum variant %s.%s", obj.TypeName.Name, field)),
+				V: NewRuntimeError(node, fmt.Sprintf("unknown enum variant '%s.%s'", obj.TypeName.Name, field)),
 			}, nil
 		}
 
@@ -3012,11 +3014,18 @@ func evalMemberExpression(node parser.Expression, left Value, field string) (Val
 	}
 
 	return ErrorValue{
-		V: NewRuntimeError(node, fmt.Sprintf("member expression expects enums or structs, but got %s", string(left.Type()))),
+		V: NewRuntimeError(node, fmt.Sprintf("member expression expects enums or structs, but got '%s'", string(left.Type()))),
 	}, nil
 }
 
 func (i *Interpreter) evalInfix(node *parser.InfixExpression, left Value, op string, right Value) (Value, error) {
+	if _, ok := left.(ErrorValue); ok {
+		return left, nil
+	}
+	if _, ok := right.(ErrorValue); ok {
+		return right, nil
+	}
+
 	if left.Type() == ERROR {
 		return evalErrorInfix(node, left.(ErrorValue), op, right)
 	}
@@ -3089,7 +3098,7 @@ func (i *Interpreter) evalInfix(node *parser.InfixExpression, left Value, op str
 	// type mismatch check
 	if left.Type() != right.Type() {
 		return ErrorValue{
-			V: NewRuntimeError(node, fmt.Sprintf("type mismatch: %s %s %s", left.Type(), op, right.Type())),
+			V: NewRuntimeError(node, fmt.Sprintf("type mismatch: '%s' %s '%s'", left.Type(), op, right.Type())),
 		}, nil
 	}
 

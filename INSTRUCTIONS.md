@@ -11,9 +11,14 @@ Install it with:
 go install github.com/z-sk1/ayla-lang/elen@latest
 ```
 
-Make sure `$GOPATH/bin` is in your PATH.
+please download go [here](https://go.dev) and make sure `$GOPATH/bin` is in your PATH.
 
-if go isnt in your path, please download go [here](https://go.dev).
+to put it in your **PATH**:
+
+1. press `Win + R`, type `sysdm.cpl`, and press enter  
+2. go to **Advanced** → **Environment Variables**  
+3. under **System variables**, find `Path` → `Edit`  
+4. add: C:\Users\<your-username>\go\bin
 
 ## Windows
 

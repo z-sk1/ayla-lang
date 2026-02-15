@@ -1,5 +1,5 @@
-fun cool (string) {
-    back "hi"
+fun add(x int, y int) (int) {
+    back x + y
 }
 
-put(cool())
+putln(add(3, 2))

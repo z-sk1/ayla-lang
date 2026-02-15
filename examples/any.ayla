@@ -2,6 +2,6 @@ egg x thing = 2
 
 putln(x.(int) + 3)
 
-egg a []thing = [1, [1]]
+rock a []thing = [1, [1]]
 
 putln(a[1].([]thing)[0].(int) + 1)
