@@ -71,9 +71,10 @@ var precedences = map[token.TokenType]int{
 
 type VarStatement struct {
 	NodeBase
-	Name  *Identifier
-	Type  TypeNode // if no type defaults to nil, and then automatically chooses type
-	Value Expression
+	Name     *Identifier
+	Type     TypeNode // if no type defaults to nil, and then automatically chooses type
+	Value    Expression
+	Lifetime Expression
 }
 
 type VarStatementBlock struct {
@@ -83,28 +84,32 @@ type VarStatementBlock struct {
 
 type VarStatementNoKeyword struct {
 	NodeBase
-	Name  *Identifier
-	Value Expression
+	Name     *Identifier
+	Value    Expression
+	Lifetime Expression
 }
 
 type MultiVarStatement struct {
 	NodeBase
-	Names []*Identifier
-	Type  TypeNode
-	Value Expression
+	Names    []*Identifier
+	Type     TypeNode
+	Values    []Expression
+	Lifetime Expression
 }
 
 type MultiVarStatementNoKeyword struct {
 	NodeBase
-	Names []*Identifier
-	Value Expression
+	Names    []*Identifier
+	Values   []Expression
+	Lifetime Expression
 }
 
 type ConstStatement struct {
 	NodeBase
-	Name  *Identifier
-	Type  TypeNode // if no type defaults to nil, and then automatically chooses type
-	Value Expression
+	Name     *Identifier
+	Type     TypeNode // if no type defaults to nil, and then automatically chooses type
+	Value    Expression
+	Lifetime Expression
 }
 
 type ConstStatementBlock struct {
@@ -114,9 +119,10 @@ type ConstStatementBlock struct {
 
 type MultiConstStatement struct {
 	NodeBase
-	Names []*Identifier
-	Type  TypeNode
-	Value Expression
+	Names    []*Identifier
+	Type     TypeNode
+	Values    []Expression
+	Lifetime Expression
 }
 
 type AssignmentStatement struct {
@@ -128,7 +134,7 @@ type AssignmentStatement struct {
 type MultiAssignmentStatement struct {
 	NodeBase
 	Names []*Identifier
-	Value Expression
+	Values []Expression
 }
 
 type EnumStatement struct {

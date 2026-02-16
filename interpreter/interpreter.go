@@ -35,8 +35,13 @@ type RuntimeError struct {
 	Column  int
 }
 
+type Variable struct {
+	Value    Value
+	Lifetime int
+}
+
 type Environment struct {
-	store    map[string]Value
+	store    map[string]Variable
 	funcs    map[string]*Func
 	methods  map[*TypeInfo]map[string]*Func
 	builtins map[string]*BuiltinFunc
@@ -53,7 +58,7 @@ type Interpreter struct {
 
 func New() *Interpreter {
 	env := &Environment{
-		store:    make(map[string]Value),
+		store:    make(map[string]Variable),
 		funcs:    make(map[string]*Func),
 		methods:  make(map[*TypeInfo]map[string]*Func),
 		builtins: make(map[string]*BuiltinFunc),
@@ -76,7 +81,7 @@ func New() *Interpreter {
 
 func NewEnvironment(parent *Environment) *Environment {
 	return &Environment{
-		store:    make(map[string]Value),
+		store:    make(map[string]Variable),
 		funcs:    make(map[string]*Func),
 		defers:   make([]*parser.FuncCall, 0),
 		builtins: parent.builtins,
@@ -85,7 +90,7 @@ func NewEnvironment(parent *Environment) *Environment {
 }
 
 func (e RuntimeError) Error() string {
-	return fmt.Sprintf("runtime error at %d:%d: %s", e.Line, e.Column, e.Message)
+	return fmt.Sprintf("runtime error at %d:%d: %s\n", e.Line, e.Column, e.Message)
 }
 
 func NewRuntimeError(node parser.Node, msg string) RuntimeError {
@@ -101,7 +106,7 @@ func (e *Environment) Get(name string) (Value, bool) {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	if v, ok := e.store[name]; ok {
-		return v, true
+		return v.Value, true
 	}
 
 	if e.parent != nil {
@@ -114,7 +119,14 @@ func (e *Environment) Get(name string) (Value, bool) {
 func (e *Environment) Define(name string, val Value) Value {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	e.store[name] = val
+	e.store[name] = Variable{Value: val, Lifetime: -1}
+	return val
+}
+
+func (e *Environment) DefineWithLifetime(name string, val Value, lifetime int) Value {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.store[name] = Variable{Value: val, Lifetime: lifetime}
 	return val
 }
 
@@ -122,7 +134,7 @@ func (e *Environment) Set(name string, val Value) Value {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if _, ok := e.store[name]; ok {
-		e.store[name] = val
+		e.store[name] = Variable{Value: val, Lifetime: -1}
 		return val
 	}
 
@@ -977,6 +989,21 @@ func unwrapStructType(t *TypeInfo) (*TypeInfo, error) {
 	}
 }
 
+func (i *Interpreter) tickLifetimes() {
+	for name, v := range i.env.store {
+		if v.Lifetime > 0 {
+			v.Lifetime--
+		}
+
+		if v.Lifetime == 0 {
+			delete(i.env.store, name)
+			continue
+		}
+
+		i.env.store[name] = v
+	}
+}
+
 func (i *Interpreter) EvalStatements(stmts []parser.Statement) (ControlSignal, error) {
 	for _, s := range stmts {
 		sig, err := i.EvalStatement(s)
@@ -988,6 +1015,8 @@ func (i *Interpreter) EvalStatements(stmts []parser.Statement) (ControlSignal, e
 		case SignalReturn, SignalBreak, SignalContinue, ErrorValue:
 			return sig, nil
 		}
+
+		i.tickLifetimes()
 	}
 	return SignalNone{}, nil
 }
@@ -1045,6 +1074,18 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			return SignalNone{}, err
 		}
 
+		if stmt.Lifetime != nil {
+			lifetime, err := i.EvalExpression(stmt.Lifetime)
+			if err != nil {
+				return SignalNone{}, err
+			}
+
+			if lifetime.(IntValue).V > 0 {
+				i.env.DefineWithLifetime(stmt.Name.Value, val, lifetime.(IntValue).V+1) // +1 because the var statement itself also decrements it
+				return SignalNone{}, nil
+			}
+		}
+
 		i.env.Define(stmt.Name.Value, val)
 		return SignalNone{}, nil
 
@@ -1066,11 +1107,23 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("cant redeclare var: %s", stmt.Name.Value))
 		}
 
+		if stmt.Lifetime != nil {
+			lifetime, err := i.EvalExpression(stmt.Lifetime)
+			if err != nil {
+				return SignalNone{}, err
+			}
+
+			if lifetime.(IntValue).V > 0 {
+				i.env.DefineWithLifetime(stmt.Name.Value, val, lifetime.(IntValue).V+1) // +1 because the var statement itself also decrements it
+				return SignalNone{}, nil
+			}
+		}
+
 		i.env.Define(stmt.Name.Value, val)
 		return SignalNone{}, nil
 
 	case *parser.MultiVarStatement:
-		if stmt.Value == nil {
+		if stmt.Values == nil {
 			var expectedTI *TypeInfo
 			var err error
 
@@ -1097,32 +1150,31 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 					v = UninitializedValue{}
 				}
 
-				i.env.Define(name.Value, v)
+				if stmt.Lifetime != nil {
+					lifetime, err := i.EvalExpression(stmt.Lifetime)
+					if err != nil {
+						return SignalNone{}, err
+					}
+
+					if lifetime.(IntValue).V > 0 {
+						i.env.DefineWithLifetime(name.Value, v, lifetime.(IntValue).V+1) // +1 because the var statement itself also decrements it
+					}
+				} else {
+					i.env.Define(name.Value, v)
+				}
 			}
 
 			return SignalNone{}, nil
 		}
 
-		val, err := i.EvalExpression(stmt.Value)
-		if err != nil {
-			return SignalNone{}, err
-		}
-		if v, ok := val.(ErrorValue); ok {
-			return v, nil
-		}
-
-		tuple, ok := val.(TupleValue)
-		if !ok {
-			return SignalNone{}, NewRuntimeError(stmt, "multi var assignment expects tuple value")
-		}
-
-		if len(tuple.Values) != len(stmt.Names) {
+		if len(stmt.Values) != len(stmt.Names) {
 			return SignalNone{}, NewRuntimeError(stmt,
 				fmt.Sprintf("expected %d values, got %d",
-					len(stmt.Names), len(tuple.Values)))
+					len(stmt.Names), len(stmt.Values)))
 		}
 
 		var expectedTI *TypeInfo
+		var err error
 		if stmt.Type != nil {
 			expectedTI, err = i.resolveTypeNode(stmt.Type)
 			if err != nil {
@@ -1136,44 +1188,77 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 					fmt.Sprintf("cannot redeclare var: %s", name.Value))
 			}
 
-			v, err := i.assignWithType(stmt, tuple.Values[idx], expectedTI)
+			val, err := i.EvalExpression(stmt.Values[idx])
 			if err != nil {
 				return SignalNone{}, err
 			}
 
-			i.env.Define(name.Value, v)
-		}
+			if v, ok := val.(ErrorValue); ok {
+				return v, nil
+			}
 
-		return SignalNone{}, nil
+			v, err := i.assignWithType(stmt, val, expectedTI)
+			if err != nil {
+				return SignalNone{}, err
+			}
+
+			if stmt.Lifetime != nil {
+				lifetimeVal, err := i.EvalExpression(stmt.Lifetime)
+				if err != nil {
+					return SignalNone{}, err
+				}
+
+				lifetime := lifetimeVal.(IntValue).V
+				if lifetime > 0 {
+					i.env.DefineWithLifetime(name.Value, v, lifetime+1)
+				}
+			} else {
+				i.env.Define(name.Value, v)
+			}
+		}
 
 	case *parser.MultiVarStatementNoKeyword:
-		var values []Value
-
-		val, err := i.EvalExpression(stmt.Value)
-		if err != nil {
-			return SignalNone{}, err
-		}
-		if v, ok := val.(ErrorValue); ok {
-			return v, nil
+		if len(stmt.Values) != len(stmt.Names) {
+			return SignalNone{}, NewRuntimeError(stmt,
+				fmt.Sprintf("expected %d values, got %d",
+					len(stmt.Names), len(stmt.Values)))
 		}
 
-		tuple, ok := val.(TupleValue)
-		if !ok {
-			return SignalNone{}, NewRuntimeError(stmt, "multi var assignment expects tuple value")
-		}
-
-		if len(tuple.Values) != len(stmt.Names) {
-			return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("expected %d values, got %d", len(stmt.Names), len(tuple.Values)))
-		}
-
-		values = tuple.Values
+		var expectedTI *TypeInfo
 
 		for idx, name := range stmt.Names {
 			if _, ok := i.env.Get(name.Value); ok {
-				return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("cannot redeclare var: %s", name.Value))
+				return SignalNone{}, NewRuntimeError(stmt,
+					fmt.Sprintf("cannot redeclare var: %s", name.Value))
 			}
 
-			i.env.Define(name.Value, values[idx])
+			val, err := i.EvalExpression(stmt.Values[idx])
+			if err != nil {
+				return SignalNone{}, err
+			}
+
+			if v, ok := val.(ErrorValue); ok {
+				return v, nil
+			}
+
+			v, err := i.assignWithType(stmt, val, expectedTI)
+			if err != nil {
+				return SignalNone{}, err
+			}
+
+			if stmt.Lifetime != nil {
+				lifetimeVal, err := i.EvalExpression(stmt.Lifetime)
+				if err != nil {
+					return SignalNone{}, err
+				}
+
+				lifetime := lifetimeVal.(IntValue).V
+				if lifetime > 0 {
+					i.env.DefineWithLifetime(name.Value, v, lifetime+1)
+				}
+			} else {
+				i.env.Define(name.Value, v)
+			}
 		}
 
 		return SignalNone{}, nil
@@ -1218,12 +1303,24 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			return SignalNone{}, err
 		}
 
+		if stmt.Lifetime != nil {
+			lifetime, err := i.EvalExpression(stmt.Lifetime)
+			if err != nil {
+				return SignalNone{}, err
+			}
+
+			if lifetime.(IntValue).V > 0 {
+				i.env.DefineWithLifetime(stmt.Name.Value, ConstValue{Value: val}, lifetime.(IntValue).V+1) // +1 because the var statement itself also decrements it
+				return SignalNone{}, nil
+			}
+		}
+
 		// store const val
 		i.env.Define(stmt.Name.Value, ConstValue{Value: val})
 		return SignalNone{}, nil
 
 	case *parser.MultiConstStatement:
-		if stmt.Value == nil {
+		if stmt.Values == nil {
 			var names string
 
 			for _, name := range stmt.Names {
@@ -1237,49 +1334,49 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("constants, %s, must be initialised", names))
 		}
 
-		var err error
-		val, err := i.EvalExpression(stmt.Value)
-		if err != nil {
-			return SignalNone{}, err
-		}
-		if v, ok := val.(ErrorValue); ok {
-			return v, nil
-		}
-
-		tuple, ok := val.(TupleValue)
-		if !ok {
-			return SignalNone{}, NewRuntimeError(stmt, "multi const statement expects tuple value")
-		}
-
-		if len(tuple.Values) != len(stmt.Names) {
-			return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("expected %d values, got %d", len(tuple.Values), len(stmt.Names)))
+		if len(stmt.Values) != len(stmt.Names) {
+			return SignalNone{}, NewRuntimeError(stmt,
+				fmt.Sprintf("expected %d values, got %d",
+					len(stmt.Names), len(stmt.Values)))
 		}
 
 		var expectedTI *TypeInfo
-		if stmt.Type != nil {
-			expectedTI, err = i.resolveTypeNode(stmt.Type)
-			if err != nil {
-				return SignalNone{}, err
-			}
-		}
 
 		for idx, name := range stmt.Names {
-			if _, ok := i.env.store[name.Value]; ok {
-				return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("cannot redeclare const: %s", name.Value))
+			if _, ok := i.env.Get(name.Value); ok {
+				return SignalNone{}, NewRuntimeError(stmt,
+					fmt.Sprintf("cannot redeclare var: %s", name.Value))
 			}
-			v, err := i.assignWithType(stmt, tuple.Values[idx], expectedTI)
+
+			val, err := i.EvalExpression(stmt.Values[idx])
 			if err != nil {
 				return SignalNone{}, err
 			}
 
-			v, err = i.assignWithType(stmt, val, expectedTI)
+			if v, ok := val.(ErrorValue); ok {
+				return v, nil
+			}
+
+			v, err := i.assignWithType(stmt, val, expectedTI)
 			if err != nil {
 				return SignalNone{}, err
 			}
 
 			v = ConstValue{Value: v}
 
-			i.env.Define(name.Value, v)
+			if stmt.Lifetime != nil {
+				lifetimeVal, err := i.EvalExpression(stmt.Lifetime)
+				if err != nil {
+					return SignalNone{}, err
+				}
+
+				lifetime := lifetimeVal.(IntValue).V
+				if lifetime > 0 {
+					i.env.DefineWithLifetime(name.Value, v, lifetime+1)
+				}
+			} else {
+				i.env.Define(name.Value, v)
+			}
 		}
 
 		return SignalNone{}, nil
@@ -1369,41 +1466,42 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		return SignalNone{}, nil
 
 	case *parser.MultiAssignmentStatement:
-		val, err := i.EvalExpression(stmt.Value)
-		if err != nil {
-			return SignalNone{}, err
-		}
-		if v, ok := val.(ErrorValue); ok {
-			return v, nil
+		if len(stmt.Values) != len(stmt.Names) {
+			return SignalNone{}, NewRuntimeError(stmt,
+				fmt.Sprintf("multi assign expected %d values, got %d",
+					len(stmt.Names), len(stmt.Values)))
 		}
 
 		for idx, name := range stmt.Names {
+
 			existingVal, ok := i.env.Get(name.Value)
 			if !ok {
-				return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("assignment to undefined variable: %s", name.Value))
+				return SignalNone{}, NewRuntimeError(stmt,
+					fmt.Sprintf("assignment to undefined variable: %s", name.Value))
 			}
 
 			if _, isConst := existingVal.(ConstValue); isConst {
-				return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("cannot reassign to const: %s", name.Value))
+				return SignalNone{}, NewRuntimeError(stmt,
+					fmt.Sprintf("cannot reassign to const: %s", name.Value))
 			}
 
-			tuple, ok := val.(TupleValue)
-			if !ok {
-				return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("multi assign expects tuple value, got %s", string(val.Type())))
+			val, err := i.EvalExpression(stmt.Values[idx])
+			if err != nil {
+				return SignalNone{}, err
 			}
 
-			if len(tuple.Values) != len(stmt.Names) {
-				return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("multi assign expected %d values, got %d", len(stmt.Names), len(tuple.Values)))
+			if v, ok := val.(ErrorValue); ok {
+				return v, nil
 			}
 
 			if _, ok := existingVal.(UninitializedValue); ok {
-				i.env.Set(name.Value, tuple.Values[idx])
+				i.env.Set(name.Value, val)
 				continue
 			}
 
 			expectedTI := unwrapAlias(i.typeInfoFromValue(existingVal))
 
-			v, err := i.assignWithType(stmt, tuple.Values[idx], expectedTI)
+			v, err := i.assignWithType(stmt, val, expectedTI)
 			if err != nil {
 				return SignalNone{}, err
 			}

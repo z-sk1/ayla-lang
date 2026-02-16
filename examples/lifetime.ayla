@@ -1,0 +1,5 @@
+egg a<2> = 5
+
+putln(a)
+putln(a)
+putln(a)

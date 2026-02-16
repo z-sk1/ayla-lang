@@ -25,7 +25,7 @@ func main() {
 	}
 
 	if len(os.Args) == 1 {
-		fmt.Println("Welcome to ayla-lang v1.1.0, do ayla --help to see all commands.")
+		fmt.Println("Welcome to ayla-lang v1.3.0, do ayla --help to see all commands.")
 		return
 	}
 
@@ -107,7 +107,7 @@ func run() {
 	sig, err := interp.EvalStatements(program)
 
 	if err != nil {
-		fmt.Printf("\n%s: %v\n", filename, err)
+		fmt.Printf("\n%s: runtime error: %v\n", filename, err)
 		return
 	}
 

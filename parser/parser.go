@@ -300,7 +300,7 @@ func (p *Parser) parseStatement() Statement {
 		}
 
 		// single inferred
-		if p.peekTok.Type == token.WALRUS {
+		if p.peekUntilAssign() == token.WALRUS {
 			return p.parseVarStatementNoKeyword()
 		}
 
@@ -391,14 +391,7 @@ func (p *Parser) parseVarBlockDecl() Statement {
 
 			values := p.parseTupleList()
 
-			if len(values) == 1 {
-				stmt.Value = values[0]
-			} else {
-				stmt.Value = &TupleLiteral{
-					NodeBase: NodeBase{Token: p.curTok},
-					Values:   values,
-				}
-			}
+			stmt.Values = values
 		}
 
 		return stmt
@@ -417,6 +410,21 @@ func (p *Parser) parseVarStatement() *VarStatement {
 	stmt.Name = &Identifier{
 		NodeBase: NodeBase{Token: p.curTok},
 		Value:    p.curTok.Literal,
+	}
+
+	// optional lifetime
+	if p.peekTok.Type == token.LT {
+		p.nextToken() // move to '<'
+		p.nextToken() // move to first token of lifetime expression
+
+		stmt.Lifetime = p.parseExpressionUntil(token.GT)
+
+		if p.peekTok.Type != token.GT {
+			p.addError("expected '>' after lifetime expression")
+			return nil
+		}
+
+		p.nextToken() // move to '>'
 	}
 
 	// optional type
@@ -445,6 +453,21 @@ func (p *Parser) parseVarStatementNoKeyword() *VarStatementNoKeyword {
 		Value:    p.curTok.Literal,
 	}
 
+	// optional lifetime
+	if p.peekTok.Type == token.LT {
+		p.nextToken() // move to '<'
+		p.nextToken() // move to first token of lifetime expression
+
+		stmt.Lifetime = p.parseExpressionUntil(token.GT)
+
+		if p.peekTok.Type != token.GT {
+			p.addError("expected '>' after lifetime expression")
+			return nil
+		}
+
+		p.nextToken() // move to '>'
+	}
+
 	p.nextToken() // :=
 	p.nextToken() // expr
 	stmt.Value = p.parseExpression(LOWEST)
@@ -460,6 +483,21 @@ func (p *Parser) parseMultiVarStatement() *MultiVarStatement {
 	p.nextToken() // ident
 	stmt.Names = p.parseIdentList()
 
+	// optional lifetime
+	if p.peekTok.Type == token.LT {
+		p.nextToken() // move to '<'
+		p.nextToken() // move to first token of lifetime expression
+
+		stmt.Lifetime = p.parseExpressionUntil(token.GT)
+
+		if p.peekTok.Type != token.GT {
+			p.addError("expected '>' after lifetime expression")
+			return nil
+		}
+
+		p.nextToken() // move to '>'
+	}
+
 	// optional type
 	if p.isTypeToken(p.peekTok.Type) || p.isTypeName(p.peekTok.Literal) {
 		p.nextToken()
@@ -473,14 +511,7 @@ func (p *Parser) parseMultiVarStatement() *MultiVarStatement {
 
 		values := p.parseTupleList()
 
-		if len(values) == 1 {
-			stmt.Value = values[0]
-		} else {
-			stmt.Value = &TupleLiteral{
-				NodeBase: NodeBase{Token: p.curTok},
-				Values:   values,
-			}
-		}
+		stmt.Values = values
 	}
 
 	return stmt
@@ -493,19 +524,27 @@ func (p *Parser) parseMultiVarStatementNoKeyword() *MultiVarStatementNoKeyword {
 
 	stmt.Names = p.parseIdentList()
 
+	// optional lifetime
+	if p.peekTok.Type == token.LT {
+		p.nextToken() // move to '<'
+		p.nextToken() // move to first token of lifetime expression
+
+		stmt.Lifetime = p.parseExpressionUntil(token.GT)
+
+		if p.peekTok.Type != token.GT {
+			p.addError("expected '>' after lifetime expression")
+			return nil
+		}
+
+		p.nextToken() // move to '>'
+	}
+
 	p.nextToken() // :=
 	p.nextToken() // move to expr start
 
 	values := p.parseTupleList()
 
-	if len(values) == 1 {
-		stmt.Value = values[0]
-	} else {
-		stmt.Value = &TupleLiteral{
-			NodeBase: NodeBase{Token: p.curTok},
-			Values:   values,
-		}
-	}
+	stmt.Values = values
 
 	return stmt
 }
@@ -581,6 +620,21 @@ func (p *Parser) parseConstBlockDecl() Statement {
 			Value:    p.curTok.Literal,
 		}
 
+		// optional lifetime
+		if p.peekTok.Type == token.LT {
+			p.nextToken() // move to '<'
+			p.nextToken() // move to first token of lifetime expression
+
+			stmt.Lifetime = p.parseExpressionUntil(token.GT)
+
+			if p.peekTok.Type != token.GT {
+				p.addError("expected '>' after lifetime expression")
+				return nil
+			}
+
+			p.nextToken() // move to '>'
+		}
+
 		if p.isTypeToken(p.peekTok.Type) || p.isTypeName(p.peekTok.Literal) {
 			p.nextToken()
 			stmt.Type = p.parseType()
@@ -597,6 +651,21 @@ func (p *Parser) parseConstBlockDecl() Statement {
 	case *MultiConstStatement:
 		stmt.Names = p.parseIdentList()
 
+		// optional lifetime
+		if p.peekTok.Type == token.LT {
+			p.nextToken() // move to '<'
+			p.nextToken() // move to first token of lifetime expression
+
+			stmt.Lifetime = p.parseExpressionUntil(token.GT)
+
+			if p.peekTok.Type != token.GT {
+				p.addError("expected '>' after lifetime expression")
+				return nil
+			}
+
+			p.nextToken() // move to '>'
+		}
+
 		if p.isTypeToken(p.peekTok.Type) || p.isTypeName(p.peekTok.Literal) {
 			p.nextToken()
 			stmt.Type = p.parseType()
@@ -609,17 +678,8 @@ func (p *Parser) parseConstBlockDecl() Statement {
 
 			values := p.parseTupleList()
 
-			if len(values) == 1 {
-				stmt.Value = values[0]
-			} else {
-				stmt.Value = &TupleLiteral{
-					NodeBase: NodeBase{Token: p.curTok},
-					Values:   values,
-				}
-			}
+			stmt.Values = values
 		}
-
-		stmt.Value = p.parseExpression(LOWEST)
 
 		return stmt
 	}
@@ -640,6 +700,21 @@ func (p *Parser) parseConstStatement() *ConstStatement {
 	stmt.Name = &Identifier{
 		NodeBase: NodeBase{Token: p.curTok},
 		Value:    p.curTok.Literal,
+	}
+
+	// optional lifetime
+	if p.peekTok.Type == token.LT {
+		p.nextToken() // move to '<'
+		p.nextToken() // move to first token of lifetime expression
+
+		stmt.Lifetime = p.parseExpressionUntil(token.GT)
+
+		if p.peekTok.Type != token.GT {
+			p.addError("expected '>' after lifetime expression")
+			return nil
+		}
+
+		p.nextToken() // move to '>'
 	}
 
 	// type
@@ -666,6 +741,21 @@ func (p *Parser) parseMultiConstStatement() *MultiConstStatement {
 	p.nextToken() // ident
 	stmt.Names = p.parseIdentList()
 
+	// optional lifetime
+	if p.peekTok.Type == token.LT {
+		p.nextToken() // move to '<'
+		p.nextToken() // move to first token of lifetime expression
+
+		stmt.Lifetime = p.parseExpressionUntil(token.GT)
+
+		if p.peekTok.Type != token.GT {
+			p.addError("expected '>' after lifetime expression")
+			return nil
+		}
+
+		p.nextToken() // move to '>'
+	}
+
 	// optional type
 	if p.isTypeToken(p.peekTok.Type) || p.isTypeName(p.peekTok.Literal) {
 		p.nextToken()
@@ -679,14 +769,7 @@ func (p *Parser) parseMultiConstStatement() *MultiConstStatement {
 
 		values := p.parseTupleList()
 
-		if len(values) == 1 {
-			stmt.Value = values[0]
-		} else {
-			stmt.Value = &TupleLiteral{
-				NodeBase: NodeBase{Token: p.curTok},
-				Values:   values,
-			}
-		}
+		stmt.Values = values
 	}
 
 	return stmt
@@ -736,14 +819,7 @@ func (p *Parser) parseMultiAssignStatement() *MultiAssignmentStatement {
 
 	values := p.parseTupleList()
 
-	if len(values) == 1 {
-		stmt.Value = values[0]
-	} else {
-		stmt.Value = &TupleLiteral{
-			NodeBase: NodeBase{Token: p.curTok},
-			Values:   values,
-		}
-	}
+	stmt.Values = values
 
 	return stmt
 }
@@ -1931,6 +2007,21 @@ func (p *Parser) parseCallExpression(callee Expression) Expression {
 		Name:     callee.(*Identifier),
 		Args:     args,
 	}
+}
+
+func (p *Parser) parseExpressionUntil(stop token.TokenType) Expression {
+	expr := p.parsePrimary()
+
+	for p.peekTok.Type != stop &&
+		p.peekTok.Type != token.SEMICOLON &&
+		p.peekTok.Type != token.NEWLINE &&
+		p.peekPrecedence() > LOWEST {
+
+		p.nextToken()
+		expr = p.parseInfixExpression(expr)
+	}
+
+	return expr
 }
 
 func (p *Parser) parseExpression(precedence int) Expression {
