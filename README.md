@@ -197,7 +197,7 @@ rock (
 )
 ```
 
-## the thing type
+## thing type
 the `thing` type is equivalent to `interface{}` or `any` from go
 
 you can assign any value to it
@@ -587,7 +587,25 @@ putln(add(4, 2))
 ```
 > output: 6
 
+ayla also supports multiple return values
+```ayla
+fun operation(x, y) (int, int) {
+    back x + y, x - y
+}
+
+putln(operation(4, 5))
+```
+> output: 9 -1
+
 to see more about functions see [docs/functions.md](docs/functions.md)
+
+## errors as values
+you can use errors as values similarily to go
+
+there is a type called `error` which you can use for both return types and type annotation
+```ayla
+egg err error = error("This is an error")
+```
 
 ## arrays
 to initialise an array use square brackets: `[]`

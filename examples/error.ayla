@@ -12,7 +12,7 @@ egg err error
 x, err = parse(6)
 
 ayla err != nil {
-    explode(err)
+    putln(err)
 }
 
 putln(x)

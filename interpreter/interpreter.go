@@ -1167,6 +1167,38 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			return SignalNone{}, nil
 		}
 
+		var values []Value
+
+		if len(stmt.Values) == 1 {
+			val, err := i.EvalExpression(stmt.Values[0])
+			if err != nil {
+				return SignalNone{}, err
+			}
+			if v, ok := val.(ErrorValue); ok {
+				return v, nil
+			}
+
+			if tup, ok := val.(TupleValue); ok {
+				values = tup.Values
+			} else {
+				return SignalNone{}, NewRuntimeError(stmt, "multi assign expected multiple values")
+			}
+		} else {
+			values = make([]Value, 0, len(stmt.Values))
+
+			for idx, expr := range stmt.Values {
+				v, err := i.EvalExpression(expr)
+				if err != nil {
+					return SignalNone{}, err
+				}
+				if v, ok := v.(ErrorValue); ok {
+					return v, nil
+				}
+
+				values[idx] = v
+			}
+		}
+
 		if len(stmt.Values) != len(stmt.Names) {
 			return SignalNone{}, NewRuntimeError(stmt,
 				fmt.Sprintf("expected %d values, got %d",
@@ -1188,16 +1220,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 					fmt.Sprintf("cannot redeclare var: %s", name.Value))
 			}
 
-			val, err := i.EvalExpression(stmt.Values[idx])
-			if err != nil {
-				return SignalNone{}, err
-			}
-
-			if v, ok := val.(ErrorValue); ok {
-				return v, nil
-			}
-
-			v, err := i.assignWithType(stmt, val, expectedTI)
+			v, err := i.assignWithType(stmt, values[idx], expectedTI)
 			if err != nil {
 				return SignalNone{}, err
 			}
@@ -1224,6 +1247,44 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 					len(stmt.Names), len(stmt.Values)))
 		}
 
+		var values []Value
+
+		if len(stmt.Values) == 1 {
+			val, err := i.EvalExpression(stmt.Values[0])
+			if err != nil {
+				return SignalNone{}, err
+			}
+			if v, ok := val.(ErrorValue); ok {
+				return v, nil
+			}
+
+			if tup, ok := val.(TupleValue); ok {
+				values = tup.Values
+			} else {
+				return SignalNone{}, NewRuntimeError(stmt, "multi assign expected multiple values")
+			}
+		} else {
+			values = make([]Value, 0, len(stmt.Values))
+
+			for idx, expr := range stmt.Values {
+				v, err := i.EvalExpression(expr)
+				if err != nil {
+					return SignalNone{}, err
+				}
+				if v, ok := v.(ErrorValue); ok {
+					return v, nil
+				}
+
+				values[idx] = v
+			}
+		}
+
+		if len(stmt.Values) != len(stmt.Names) {
+			return SignalNone{}, NewRuntimeError(stmt,
+				fmt.Sprintf("expected %d values, got %d",
+					len(stmt.Names), len(stmt.Values)))
+		}
+
 		var expectedTI *TypeInfo
 
 		for idx, name := range stmt.Names {
@@ -1232,16 +1293,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 					fmt.Sprintf("cannot redeclare var: %s", name.Value))
 			}
 
-			val, err := i.EvalExpression(stmt.Values[idx])
-			if err != nil {
-				return SignalNone{}, err
-			}
-
-			if v, ok := val.(ErrorValue); ok {
-				return v, nil
-			}
-
-			v, err := i.assignWithType(stmt, val, expectedTI)
+			v, err := i.assignWithType(stmt, values[idx], expectedTI)
 			if err != nil {
 				return SignalNone{}, err
 			}
@@ -1334,6 +1386,38 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("constants, %s, must be initialised", names))
 		}
 
+		var values []Value
+
+		if len(stmt.Values) == 1 {
+			val, err := i.EvalExpression(stmt.Values[0])
+			if err != nil {
+				return SignalNone{}, err
+			}
+			if v, ok := val.(ErrorValue); ok {
+				return v, nil
+			}
+
+			if tup, ok := val.(TupleValue); ok {
+				values = tup.Values
+			} else {
+				return SignalNone{}, NewRuntimeError(stmt, "multi assign expected multiple values")
+			}
+		} else {
+			values = make([]Value, 0, len(stmt.Values))
+
+			for idx, expr := range stmt.Values {
+				v, err := i.EvalExpression(expr)
+				if err != nil {
+					return SignalNone{}, err
+				}
+				if v, ok := v.(ErrorValue); ok {
+					return v, nil
+				}
+
+				values[idx] = v
+			}
+		}
+
 		if len(stmt.Values) != len(stmt.Names) {
 			return SignalNone{}, NewRuntimeError(stmt,
 				fmt.Sprintf("expected %d values, got %d",
@@ -1341,6 +1425,13 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		}
 
 		var expectedTI *TypeInfo
+		var err error
+		if stmt.Type != nil {
+			expectedTI, err = i.resolveTypeNode(stmt.Type)
+			if err != nil {
+				return SignalNone{}, err
+			}
+		}
 
 		for idx, name := range stmt.Names {
 			if _, ok := i.env.Get(name.Value); ok {
@@ -1348,21 +1439,10 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 					fmt.Sprintf("cannot redeclare var: %s", name.Value))
 			}
 
-			val, err := i.EvalExpression(stmt.Values[idx])
+			v, err := i.assignWithType(stmt, values[idx], expectedTI)
 			if err != nil {
 				return SignalNone{}, err
 			}
-
-			if v, ok := val.(ErrorValue); ok {
-				return v, nil
-			}
-
-			v, err := i.assignWithType(stmt, val, expectedTI)
-			if err != nil {
-				return SignalNone{}, err
-			}
-
-			v = ConstValue{Value: v}
 
 			if stmt.Lifetime != nil {
 				lifetimeVal, err := i.EvalExpression(stmt.Lifetime)
@@ -1466,50 +1546,60 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		return SignalNone{}, nil
 
 	case *parser.MultiAssignmentStatement:
-		if len(stmt.Values) != len(stmt.Names) {
-			return SignalNone{}, NewRuntimeError(stmt,
-				fmt.Sprintf("multi assign expected %d values, got %d",
-					len(stmt.Names), len(stmt.Values)))
-		}
 
-		for idx, name := range stmt.Names {
+		var values []Value
 
-			existingVal, ok := i.env.Get(name.Value)
-			if !ok {
-				return SignalNone{}, NewRuntimeError(stmt,
-					fmt.Sprintf("assignment to undefined variable: %s", name.Value))
-			}
-
-			if _, isConst := existingVal.(ConstValue); isConst {
-				return SignalNone{}, NewRuntimeError(stmt,
-					fmt.Sprintf("cannot reassign to const: %s", name.Value))
-			}
-
-			val, err := i.EvalExpression(stmt.Values[idx])
+		if len(stmt.Values) == 1 {
+			val, err := i.EvalExpression(stmt.Values[0])
 			if err != nil {
 				return SignalNone{}, err
 			}
-
 			if v, ok := val.(ErrorValue); ok {
 				return v, nil
 			}
 
-			if _, ok := existingVal.(UninitializedValue); ok {
-				i.env.Set(name.Value, val)
-				continue
+			if tup, ok := val.(TupleValue); ok {
+				values = tup.Values
+			} else {
+				return SignalNone{}, NewRuntimeError(stmt, "multi assign expected multiple values")
+			}
+		} else {
+			values = make([]Value, 0, len(stmt.Values))
+
+			for idx, expr := range stmt.Values {
+				v, err := i.EvalExpression(expr)
+				if err != nil {
+					return SignalNone{}, err
+				}
+				if v, ok := v.(ErrorValue); ok {
+					return v, nil
+				}
+
+				values[idx] = v
+			}
+		}
+
+		if len(stmt.Values) != len(stmt.Names) {
+			return SignalNone{}, NewRuntimeError(stmt,
+				fmt.Sprintf("expected %d values, got %d",
+					len(stmt.Names), len(stmt.Values)))
+		}
+
+		var expectedTI *TypeInfo
+
+		for idx, name := range stmt.Names {
+			if _, ok := i.env.Get(name.Value); ok {
+				return SignalNone{}, NewRuntimeError(stmt,
+					fmt.Sprintf("cannot redeclare var: %s", name.Value))
 			}
 
-			expectedTI := unwrapAlias(i.typeInfoFromValue(existingVal))
-
-			v, err := i.assignWithType(stmt, val, expectedTI)
+			v, err := i.assignWithType(stmt, values[idx], expectedTI)
 			if err != nil {
 				return SignalNone{}, err
 			}
 
 			i.env.Set(name.Value, v)
 		}
-
-		return SignalNone{}, nil
 
 	case *parser.IndexAssignmentStatement:
 		leftVal, err := i.EvalExpression(stmt.Left)
