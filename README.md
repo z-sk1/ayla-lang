@@ -605,7 +605,28 @@ you can use errors as values similarily to go
 there is a type called `error` which you can use for both return types and type annotation
 ```ayla
 egg err error = error("This is an error")
+
+putln(err)
 ```
+> output: runtime error: This is an error
+
+```ayla
+fun parse(x int) (string, error) {
+    ayla x <= 5 {
+        back toString(x), nil
+    }
+    
+    back 0, error("Failed to parse")
+}
+
+x, err := parse(7)
+ayla err != nil {
+    putln(err)
+}
+
+putln(x)
+```
+> output: runtime error: Failed to parse
 
 ## arrays
 to initialise an array use square brackets: `[]`

@@ -2946,7 +2946,7 @@ func (i *Interpreter) callFunction(fn *Func, args []Value, callNode parser.Node)
 
 			val, err = i.assignWithType(callNode, val, expected)
 			if err != nil {
-				return NilValue{}, NewRuntimeError(callNode, fmt.Sprintf("param %d expected '%s' but got '%s'", idx+1, expected.Name, actual.Name))
+				return NilValue{}, NewRuntimeError(callNode, fmt.Sprintf("param '%s' expected '%s' but got '%s'", param.Name.Value, expected.Name, actual.Name))
 			}
 		}
 

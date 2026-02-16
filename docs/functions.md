@@ -48,4 +48,6 @@ fun add(x int, y int) (int) {
 
 egg sum = add("4", 2)
 ```
-> output: runtime error at 5:14: paramteter 'x' expected int, got string
+> output: runtime error at 5:14: paramteter 'x' expected 'int', got 'string'
+
+# functions
