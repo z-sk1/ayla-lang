@@ -1,5 +1,2 @@
-fun add(x int, y int) (int) {
-    back x + y
+fun add (x int, y int) (int) {
 }
-
-putln(add(3, "2"))

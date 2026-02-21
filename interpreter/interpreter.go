@@ -16,19 +16,6 @@ import (
 	"golang.org/x/term"
 )
 
-type Func struct {
-	Params      []*parser.ParametersClause
-	Body        []parser.Statement
-	ReturnTypes []parser.TypeNode
-	Env         *Environment
-}
-
-type BuiltinFunc struct {
-	Name  string
-	Arity int
-	Fn    func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error)
-}
-
 type RuntimeError struct {
 	Message string
 	Line    int
@@ -42,7 +29,6 @@ type Variable struct {
 
 type Environment struct {
 	store    map[string]Variable
-	funcs    map[string]*Func
 	methods  map[*TypeInfo]map[string]*Func
 	builtins map[string]*BuiltinFunc
 	defers   []*parser.FuncCall
@@ -59,7 +45,6 @@ type Interpreter struct {
 func New() *Interpreter {
 	env := &Environment{
 		store:    make(map[string]Variable),
-		funcs:    make(map[string]*Func),
 		methods:  make(map[*TypeInfo]map[string]*Func),
 		builtins: make(map[string]*BuiltinFunc),
 		defers:   make([]*parser.FuncCall, 0),
@@ -82,7 +67,6 @@ func New() *Interpreter {
 func NewEnvironment(parent *Environment) *Environment {
 	return &Environment{
 		store:    make(map[string]Variable),
-		funcs:    make(map[string]*Func),
 		defers:   make([]*parser.FuncCall, 0),
 		builtins: parent.builtins,
 		parent:   parent,
@@ -143,27 +127,6 @@ func (e *Environment) Set(name string, val Value) Value {
 	}
 
 	return nil
-}
-
-func (e *Environment) SetFunc(name string, f *Func) *Func {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.funcs[name] = f
-	return f
-}
-
-func (e *Environment) GetFunc(name string) (*Func, bool) {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-	if v, ok := e.funcs[name]; ok {
-		return v, true
-	}
-
-	if e.parent != nil {
-		return e.parent.GetFunc(name)
-	}
-
-	return nil, false
 }
 
 func (e *Environment) SetMethod(typ *TypeInfo, name string, fn *Func) {
@@ -248,6 +211,30 @@ func typesAssignable(from, to *TypeInfo) bool {
 
 	if from.Kind == TypeEnum && to.Kind == TypeEnum {
 		return from == to
+	}
+
+	if from.Kind == TypeFunc && to.Kind == TypeFunc {
+		if len(from.Params) != len(to.Params) {
+			return false
+		}
+
+		if len(from.Returns) != len(to.Returns) {
+			return false
+		}
+
+		for i := range from.Params {
+			if !typesAssignable(from.Params[i], to.Params[i]) {
+				return false
+			}
+		}
+
+		for i := range from.Returns {
+			if !typesAssignable(from.Returns[i], to.Returns[i]) {
+				return false
+			}
+		}
+
+		return true
 	}
 
 	// named types: nominal typing
@@ -1004,6 +991,64 @@ func (i *Interpreter) tickLifetimes() {
 	}
 }
 
+func (i *Interpreter) checkFuncStatement(fn *parser.FuncStatement) error {
+	hasValueReturn := false
+	hasEmptyReturn := false
+
+	for _, stmt := range fn.Body {
+		if r, ok := stmt.(*parser.ReturnStatement); ok {
+			if len(r.Values) > 0 {
+				hasValueReturn = true
+			} else {
+				hasEmptyReturn = true
+			}
+		}
+	}
+
+	if hasValueReturn && len(fn.ReturnTypes) == 0 {
+		return NewRuntimeError(fn, "function returns a value but has no return type")
+	}
+
+	if hasEmptyReturn && len(fn.ReturnTypes) > 0 {
+		return NewRuntimeError(fn, "missing return value")
+	}
+
+	if len(fn.ReturnTypes) > 0 && !hasValueReturn {
+		return NewRuntimeError(fn, "function must return a value")
+	}
+
+	return nil
+}
+
+func (i *Interpreter) checkFuncLiteral(fn *parser.FuncLiteral) error {
+	hasValueReturn := false
+	hasEmptyReturn := false
+
+	for _, stmt := range fn.Body {
+		if r, ok := stmt.(*parser.ReturnStatement); ok {
+			if len(r.Values) > 0 {
+				hasValueReturn = true
+			} else {
+				hasEmptyReturn = true
+			}
+		}
+	}
+
+	if hasValueReturn && len(fn.ReturnTypes) == 0 {
+		return NewRuntimeError(fn, "function returns a value but has no return type")
+	}
+
+	if hasEmptyReturn && len(fn.ReturnTypes) > 0 {
+		return NewRuntimeError(fn, "missing return value")
+	}
+
+	if len(fn.ReturnTypes) > 0 && !hasValueReturn {
+		return NewRuntimeError(fn, "function must return a value")
+	}
+
+	return nil
+}
+
 func (i *Interpreter) EvalStatements(stmts []parser.Statement) (ControlSignal, error) {
 	for _, s := range stmts {
 		sig, err := i.EvalStatement(s)
@@ -1057,7 +1102,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		if stmt.Value != nil {
 			val, err = i.evalExprWithExpectedType(stmt.Value, expectedTI)
 		} else if expectedTI != nil {
-			val, err = defaultValueFromTypeInfo(stmt, expectedTI)
+			val, err = i.defaultValueFromTypeInfo(stmt, expectedTI)
 			if err != nil {
 				return SignalNone{}, err
 			}
@@ -1067,6 +1112,9 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 
 		if err != nil {
 			return SignalNone{}, err
+		}
+		if v, ok := val.(ErrorValue); ok {
+			return v, nil
 		}
 
 		val, err = i.assignWithType(stmt, val, expectedTI)
@@ -1142,7 +1190,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 
 				var v Value
 				if expectedTI != nil {
-					v, err = defaultValueFromTypeInfo(stmt, expectedTI)
+					v, err = i.defaultValueFromTypeInfo(stmt, expectedTI)
 					if err != nil {
 						return SignalNone{}, err
 					}
@@ -1337,7 +1385,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		if stmt.Value != nil {
 			val, err = i.evalExprWithExpectedType(stmt.Value, expectedTI)
 		} else if expectedTI != nil {
-			val, err = defaultValueFromTypeInfo(stmt, expectedTI)
+			val, err = i.defaultValueFromTypeInfo(stmt, expectedTI)
 			if err != nil {
 				return SignalNone{}, err
 			}
@@ -1699,7 +1747,49 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		return SignalNone{}, nil
 
 	case *parser.FuncStatement:
-		i.env.SetFunc(stmt.Name.Value, &Func{Params: stmt.Params, Body: stmt.Body, ReturnTypes: stmt.ReturnTypes, Env: i.env})
+		paramTypes := make([]*TypeInfo, 0)
+		paramNames := make([]string, 0)
+
+		returnTypes := make([]*TypeInfo, 0)
+		returnNames := make([]string, 0)
+
+		err := i.checkFuncStatement(stmt)
+		if err != nil {
+			return SignalNone{}, err
+		}
+
+		for _, typ := range stmt.ReturnTypes {
+			ti, err := i.resolveTypeNode(typ)
+			if err != nil {
+				return SignalNone{}, err
+			}
+
+			ti = unwrapAlias(ti)
+
+			returnTypes = append(returnTypes, ti)
+			paramNames = append(paramNames, ti.Name)
+		}
+
+		for _, param := range stmt.Params {
+			ti, err := i.resolveTypeNode(param.Type)
+			if err != nil {
+				return SignalNone{}, err
+			}
+
+			ti = unwrapAlias(ti)
+
+			paramTypes = append(paramTypes, ti)
+			paramNames = append(paramNames, ti.Name)
+		}
+
+		typeInfo := &TypeInfo{
+			Name:    fmt.Sprintf("fun(%s) (%s)", strings.Join(paramNames, ", "), strings.Join(returnNames, ", ")),
+			Kind:    TypeFunc,
+			Returns: returnTypes,
+			Params:  paramTypes,
+		}
+
+		i.env.Define(stmt.Name.Value, &Func{Params: stmt.Params, Body: stmt.Body, TypeName: typeInfo, Env: i.env})
 		return SignalNone{}, nil
 
 	case *parser.MethodStatement:
@@ -1721,10 +1811,9 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		)
 
 		i.env.SetMethod(recvType, stmt.Name.Value, &Func{
-			Params:      params,
-			Body:        stmt.Body,
-			ReturnTypes: stmt.ReturnTypes,
-			Env:         i.env,
+			Params: params,
+			Body:   stmt.Body,
+			Env:    i.env,
 		})
 
 		return SignalNone{}, nil
@@ -2140,6 +2229,58 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 	case *parser.MapLiteral:
 		return i.evalMapLiteral(expr, nil)
 
+	case *parser.FuncLiteral:
+		paramTypes := make([]*TypeInfo, 0)
+		paramNames := make([]string, 0)
+
+		returnTypes := make([]*TypeInfo, 0)
+		returnNames := make([]string, 0)
+
+		err := i.checkFuncLiteral(expr)
+		if err != nil {
+			return ErrorValue{
+				V: err,
+			}, nil
+		}
+
+		for _, typ := range expr.ReturnTypes {
+			ti, err := i.resolveTypeNode(typ)
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			ti = unwrapAlias(ti)
+
+			returnTypes = append(returnTypes, ti)
+			paramNames = append(paramNames, ti.Name)
+		}
+
+		for _, param := range expr.Params {
+			ti, err := i.resolveTypeNode(param.Type)
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			ti = unwrapAlias(ti)
+
+			paramTypes = append(paramTypes, ti)
+			returnNames = append(returnNames, ti.Name)
+		}
+
+		typeInfo := &TypeInfo{
+			Name:    fmt.Sprintf("fun(%s) (%s)", strings.Join(paramNames, ", "), strings.Join(returnNames, ", ")),
+			Kind:    TypeFunc,
+			Returns: returnTypes,
+			Params:  paramTypes,
+		}
+
+		return &Func{
+			Params:   expr.Params,
+			Body:     expr.Body,
+			TypeName: typeInfo,
+			Env:      i.env,
+		}, nil
+
 	case *parser.FuncCall:
 		return i.evalCall(expr)
 
@@ -2471,9 +2612,9 @@ func (i *Interpreter) assignWithType(node parser.Node, v Value, expected *TypeIn
 		return NilValue{}, NewRuntimeError(
 			node,
 			fmt.Sprintf(
-				"type mismatch: '%s' assigned to '%s'",
-				actual.Name,
+				"type mismatch: expected '%s' but got '%s'",
 				expected.Name,
+				actual.Name,
 			),
 		)
 	}
@@ -2491,8 +2632,6 @@ func (i *Interpreter) assignWithType(node parser.Node, v Value, expected *TypeIn
 }
 
 func (i *Interpreter) evalExprWithExpectedType(expr parser.Expression, expected *TypeInfo) (Value, error) {
-
-	// unwrap aliases early
 	if expected != nil {
 		expected = unwrapAlias(expected)
 	}
@@ -2509,7 +2648,7 @@ func (i *Interpreter) evalExprWithExpectedType(expr parser.Expression, expected 
 		if expected != nil &&
 			expected.Kind == TypeArray &&
 			expected.Elem.Kind == TypeAny &&
-			e.Name.Value == "toArr" {
+			e.Callee.(*parser.Identifier).Value == "toArr" {
 
 			return i.evalToArrWithExpectedElem(e, expected.Elem)
 		}
@@ -2726,13 +2865,15 @@ func (i *Interpreter) evalMapLiteral(expr *parser.MapLiteral, expected *TypeInfo
 }
 
 func (i *Interpreter) evalCall(e *parser.FuncCall) (Value, error) {
-	if ti, ok := i.typeEnv[e.Name.Value]; ok {
-		if len(e.Args) != 1 {
-			return ErrorValue{
-				V: NewRuntimeError(e, "type cast expects 1 arg"),
-			}, nil
+	if ident, ok := e.Callee.(*parser.Identifier); ok {
+		if ti, ok := i.typeEnv[ident.Value]; ok {
+			if len(e.Args) != 1 {
+				return ErrorValue{
+					V: NewRuntimeError(e, "type cast expects 1 arg"),
+				}, nil
+			}
+			return i.evalTypeCast(ti, e.Args[0], e)
 		}
-		return i.evalTypeCast(ti, e.Args[0], e)
 	}
 
 	return i.evalFuncCall(e)
@@ -2861,24 +3002,33 @@ func (i *Interpreter) evalArgs(exprs []parser.Expression) ([]Value, error) {
 
 func (i *Interpreter) evalFuncCall(expr *parser.FuncCall) (Value, error) {
 	// builtin
-	if b, ok := i.env.builtins[expr.Name.Value]; ok {
-		args, err := i.evalArgs(expr.Args)
-		if err != nil {
-			return NilValue{}, err
+	if ident, ok := expr.Callee.(*parser.Identifier); ok {
+		if b, ok := i.env.builtins[ident.Value]; ok {
+			args, err := i.evalArgs(expr.Args)
+			if err != nil {
+				return NilValue{}, err
+			}
+			if b.Arity >= 0 && len(args) != b.Arity {
+				return NilValue{}, NewRuntimeError(expr,
+					fmt.Sprintf("expected %d args, got %d", b.Arity, len(args)))
+			}
+			return b.Fn(i, expr, args)
 		}
-		if b.Arity >= 0 && len(args) != b.Arity {
-			return NilValue{}, NewRuntimeError(expr,
-				fmt.Sprintf("expected %d args, got %d", b.Arity, len(args)))
-		}
-		return b.Fn(i, expr, args)
 	}
 
 	// user-defined
-	fn, ok := i.env.GetFunc(expr.Name.Value)
+	val, err := i.EvalExpression(expr.Callee)
+	if err != nil {
+		return NilValue{}, err
+	}
+	if v, ok := val.(ErrorValue); ok {
+		return v, nil
+	}
+
+	fn, ok := val.(*Func)
 	if !ok {
 		return ErrorValue{
-			V: NewRuntimeError(expr,
-				fmt.Sprintf("unknown function: %s", expr.Name.Value)),
+			V: NewRuntimeError(expr, fmt.Sprintf("expected 'function' but got '%s'", unwrapAlias(i.typeInfoFromValue(val)).Name)),
 		}, nil
 	}
 
@@ -2891,8 +3041,6 @@ func (i *Interpreter) evalFuncCall(expr *parser.FuncCall) (Value, error) {
 }
 
 func (i *Interpreter) evalMethodCall(expr *parser.MethodCall) (Value, error) {
-	fmt.Println(">>> evalMethodCall HIT")
-
 	recv, err := i.EvalExpression(expr.Receiver)
 	if err != nil {
 		return NilValue{}, err
@@ -2972,24 +3120,23 @@ func (i *Interpreter) callFunction(fn *Func, args []Value, callNode parser.Node)
 
 	// handle return
 	if ret, ok := sig.(SignalReturn); ok {
-		if len(fn.ReturnTypes) > 0 && len(fn.ReturnTypes) != len(ret.Values) {
+		if len(fn.TypeName.Returns) > 0 && len(fn.TypeName.Returns) != len(ret.Values) {
 			return ErrorValue{
 				V: NewRuntimeError(callNode,
 					fmt.Sprintf("expected %d return values, got %d",
-						len(fn.ReturnTypes), len(ret.Values))),
+						len(fn.TypeName.Returns), len(ret.Values))),
 			}, nil
 		}
 
-		for idx, expectedType := range fn.ReturnTypes {
+		for idx, expectedType := range fn.TypeName.Returns {
 			actual := ret.Values[idx]
 
-			expectedTI, err := i.resolveTypeNode(expectedType)
 			if err != nil {
 				return ErrorValue{
 					V: NewRuntimeError(callNode, err.Error()),
 				}, nil
 			}
-			expectedTI = unwrapAlias(expectedTI)
+			expectedTI := unwrapAlias(expectedType)
 
 			if expectedTI.Name == "error" {
 				if _, isNil := actual.(NilValue); isNil {
@@ -3009,7 +3156,7 @@ func (i *Interpreter) callFunction(fn *Func, args []Value, callNode parser.Node)
 			ret.Values[idx] = actual
 		}
 
-		if len(fn.ReturnTypes) > 1 {
+		if len(fn.TypeName.Returns) > 1 {
 			return TupleValue{Values: ret.Values}, nil
 		}
 		return ret.Values[0], nil

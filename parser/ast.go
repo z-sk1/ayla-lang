@@ -93,7 +93,7 @@ type MultiVarStatement struct {
 	NodeBase
 	Names    []*Identifier
 	Type     TypeNode
-	Values    []Expression
+	Values   []Expression
 	Lifetime Expression
 }
 
@@ -121,7 +121,7 @@ type MultiConstStatement struct {
 	NodeBase
 	Names    []*Identifier
 	Type     TypeNode
-	Values    []Expression
+	Values   []Expression
 	Lifetime Expression
 }
 
@@ -133,7 +133,7 @@ type AssignmentStatement struct {
 
 type MultiAssignmentStatement struct {
 	NodeBase
-	Names []*Identifier
+	Names  []*Identifier
 	Values []Expression
 }
 
@@ -179,6 +179,15 @@ type MapType struct {
 
 func (*MapType) typeNode() {}
 
+type FuncType struct {
+	NodeBase
+	Params  []TypeNode
+	Returns []TypeNode
+}
+
+
+func (*FuncType) typeNode() {}
+
 type SpawnStatement struct {
 	NodeBase
 	Body []Statement
@@ -207,8 +216,15 @@ type FuncStatement struct {
 
 type FuncCall struct {
 	NodeBase
-	Name *Identifier
-	Args []Expression
+	Callee Expression
+	Args   []Expression
+}
+
+type FuncLiteral struct {
+	NodeBase
+	Params      []*ParametersClause
+	Body        []Statement
+	ReturnTypes []TypeNode
 }
 
 type Receiver struct {

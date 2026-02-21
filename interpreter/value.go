@@ -18,6 +18,7 @@ const (
 	TypeString
 	TypeBool
 	TypeArray
+	TypeFunc
 	TypeNil
 	TypeStruct
 	TypeMap
@@ -28,16 +29,28 @@ const (
 )
 
 type TypeInfo struct {
-	Name         string
-	Kind         TypeKind
-	Underlying   *TypeInfo
-	Alias        bool
-	Fields       map[string]*TypeInfo // for structs
-	Elem         *TypeInfo            // arrays / slices
-	Key          *TypeInfo            // maps
-	Value        *TypeInfo            // maps
-	Variants     map[string]int       // enums
+	Name       string
+	Kind       TypeKind
+	Underlying *TypeInfo
+	Alias      bool
+
+	// structs
+	Fields map[string]*TypeInfo
+
+	// arrays
+	Elem *TypeInfo
+
+	// maps
+	Key          *TypeInfo
+	Value        *TypeInfo
 	IsComparable bool
+
+	// enums
+	Variants map[string]int
+
+	// funcs
+	Params  []*TypeInfo
+	Returns []*TypeInfo
 }
 
 type NamedValue struct {
@@ -65,6 +78,7 @@ const (
 	STRUCT      ValueType = "struct"
 	TUPLE       ValueType = "tuple"
 	MAP         ValueType = "map"
+	FUNCTION    ValueType = "function"
 	ENUM        ValueType = "enum"
 	ERROR       ValueType = "error"
 	NIL         ValueType = "nil"
@@ -111,6 +125,27 @@ func (t TupleValue) String() string {
 		parts = append(parts, v.String())
 	}
 	return fmt.Sprintf("(%s)", strings.Join(parts, ", "))
+}
+
+type Func struct {
+	Params   []*parser.ParametersClause
+	Body     []parser.Statement
+	Env      *Environment
+	TypeName *TypeInfo
+}
+
+func (f Func) Type() ValueType {
+	return FUNCTION
+}
+
+func (f Func) String() string {
+	return "fun()"
+}
+
+type BuiltinFunc struct {
+	Name  string
+	Arity int
+	Fn    func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error)
 }
 
 type IntValue struct {
@@ -293,7 +328,7 @@ func (t TypeValue) String() string {
 }
 
 func (t TypeValue) Type() ValueType {
-	return valueTypeOf(t.TypeName) // or whatever you use
+	return valueTypeOf(t.TypeName)
 }
 
 type NilValue struct{}
@@ -373,6 +408,42 @@ func (i *Interpreter) resolveTypeNode(t parser.TypeNode) (*TypeInfo, error) {
 			Kind:  TypeMap,
 			Key:   keyTI,
 			Value: valTI,
+		}, nil
+
+	case *parser.FuncType:
+		paramsTI := make([]*TypeInfo, 0)
+		paramsName := make([]string, 0)
+		
+		returnsTI := make([]*TypeInfo, 0)
+		returnsName := make([]string, 0)
+
+		for _, typ := range tn.Params {
+			ti, err := i.resolveTypeNode(typ)
+			if err != nil {
+				return nil, err
+			}
+
+			ti = unwrapAlias(ti)
+			paramsTI = append(paramsTI, ti)
+			paramsName = append(paramsName, ti.Name)
+		}
+
+		for _, typ := range tn.Returns {
+			ti, err := i.resolveTypeNode(typ)
+			if err != nil {
+				return nil, err
+			}
+
+			ti = unwrapAlias(ti)
+			returnsTI = append(returnsTI, ti)
+			returnsName = append(returnsName, ti.Name)
+		}
+		
+		return &TypeInfo{
+			Name: fmt.Sprintf("fun(%s) (%s)", strings.Join(paramsName, ", "), strings.Join(returnsName, ", ")),
+			Kind: TypeFunc,
+			Params: paramsTI,
+			Returns: returnsTI,
 		}, nil
 
 	default:
@@ -482,6 +553,8 @@ func (i *Interpreter) typeInfoFromValue(v Value) *TypeInfo {
 
 	case *StructValue:
 		return v.TypeName
+	case *Func:
+		return v.TypeName
 	case EnumValue:
 		return v.Enum
 	case NamedValue:
@@ -491,7 +564,7 @@ func (i *Interpreter) typeInfoFromValue(v Value) *TypeInfo {
 	}
 }
 
-func defaultValueFromTypeInfo(node parser.Statement, ti *TypeInfo) (Value, error) {
+func (i *Interpreter) defaultValueFromTypeInfo(node parser.Statement, ti *TypeInfo) (Value, error) {
 	ti = unwrapAlias(ti)
 
 	switch ti.Kind {
@@ -525,6 +598,13 @@ func defaultValueFromTypeInfo(node parser.Statement, ti *TypeInfo) (Value, error
 			Entries:   make(map[Value]Value),
 			KeyType:   ti.Key,
 			ValueType: ti.Value,
+		}, nil
+	case TypeFunc:
+		return &Func{
+			Params:   make([]*parser.ParametersClause, 0),
+			Body:     make([]parser.Statement, 0),
+			Env:      i.env,
+			TypeName: ti,
 		}, nil
 	default:
 		return NilValue{}, NewRuntimeError(node, "cannot create default value for "+ti.Name)
