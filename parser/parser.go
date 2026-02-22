@@ -1613,6 +1613,7 @@ func (p *Parser) parseMethodStatement() *MethodStatement {
 
 	} else {
 		stmt.ReturnTypes = nil
+		p.nextToken()
 	}
 
 	p.consumeTerminators()
@@ -2171,18 +2172,6 @@ func (p *Parser) parseDotExpression(left Expression) Expression {
 
 func (p *Parser) parseCallExpression(callee Expression) Expression {
 	args := p.parseExpressionList(token.RPAREN)
-
-	// method call
-	if m, ok := callee.(*MemberExpression); ok {
-		return &MethodCall{
-			NodeBase: NodeBase{Token: p.curTok},
-			Receiver: m.Left,
-			Name:     m.Field,
-			Args:     args,
-		}
-	}
-
-	// generic function call
 	return &FuncCall{
 		NodeBase: NodeBase{Token: p.curTok},
 		Callee:   callee,

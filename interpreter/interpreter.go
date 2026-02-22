@@ -182,7 +182,7 @@ func typesAssignable(from, to *TypeInfo) bool {
 		return false
 	}
 
-	if from == to {
+	if typesIdentical(from, to) {
 		return true
 	}
 
@@ -190,7 +190,6 @@ func typesAssignable(from, to *TypeInfo) bool {
 		return true
 	}
 
-	// aliases are transparent
 	if from.Alias {
 		return typesAssignable(from.Underlying, to)
 	}
@@ -198,51 +197,42 @@ func typesAssignable(from, to *TypeInfo) bool {
 		return typesAssignable(from, to.Underlying)
 	}
 
-	// arrays: element types must be assignable
-	if from.Kind == TypeArray && to.Kind == TypeArray {
-		return typesAssignable(from.Elem, to.Elem)
+	if from.Kind == TypeNamed || to.Kind == TypeNamed {
+		if sameUnderlying(from, to) &&
+			(from.Kind != TypeNamed || to.Kind != TypeNamed) {
+			return true
+		}
+
+		return false
 	}
 
-	// maps: keys and values must be assignable
-	if from.Kind == TypeMap && to.Kind == TypeMap {
+	switch {
+
+	case from.Kind == TypeArray && to.Kind == TypeArray:
+		return typesAssignable(from.Elem, to.Elem)
+
+	case from.Kind == TypeMap && to.Kind == TypeMap:
 		return typesAssignable(from.Key, to.Key) &&
 			typesAssignable(from.Value, to.Value)
-	}
 
-	if from.Kind == TypeEnum && to.Kind == TypeEnum {
-		return from == to
-	}
-
-	if from.Kind == TypeFunc && to.Kind == TypeFunc {
-		if len(from.Params) != len(to.Params) {
+	case from.Kind == TypeFunc && to.Kind == TypeFunc:
+		if len(from.Params) != len(to.Params) ||
+			len(from.Returns) != len(to.Returns) {
 			return false
 		}
-
-		if len(from.Returns) != len(to.Returns) {
-			return false
-		}
-
 		for i := range from.Params {
 			if !typesAssignable(from.Params[i], to.Params[i]) {
 				return false
 			}
 		}
-
 		for i := range from.Returns {
 			if !typesAssignable(from.Returns[i], to.Returns[i]) {
 				return false
 			}
 		}
-
 		return true
 	}
 
-	// named types: nominal typing
-	if from.Kind == TypeNamed || to.Kind == TypeNamed {
-		return from == to
-	}
-
-	// numeric widening
 	if from.Kind == TypeInt && to.Kind == TypeFloat {
 		return true
 	}
@@ -250,24 +240,116 @@ func typesAssignable(from, to *TypeInfo) bool {
 	return false
 }
 
-func promoteValueToType(v Value, ti *TypeInfo) Value {
-	ti = unwrapAlias(ti)
+func sameUnderlying(a, b *TypeInfo) bool {
+	if a == nil || b == nil {
+		return false
+	}
 
-	switch v := v.(type) {
+	ua := a
+	ub := b
 
-	case ArrayValue:
-		if ti.Kind != TypeArray {
-			return v
+	if a.Kind == TypeNamed {
+		ua = a.Underlying
+	}
+	if b.Kind == TypeNamed {
+		ub = b.Underlying
+	}
+
+	return typesIdentical(ua, ub)
+}
+
+func typesIdentical(a, b *TypeInfo) bool {
+	if a == nil || b == nil {
+		return false
+	}
+
+	if a == b {
+		return true
+	}
+
+	if a.Kind != b.Kind {
+		return false
+	}
+
+	switch a.Kind {
+
+	case TypeInt, TypeFloat, TypeString, TypeBool, TypeAny:
+		return true
+
+	case TypeArray:
+		return typesIdentical(a.Elem, b.Elem)
+
+	case TypeMap:
+		return typesIdentical(a.Key, b.Key) &&
+			typesIdentical(a.Value, b.Value)
+
+	case TypeStruct:
+		if len(a.Fields) != len(b.Fields) {
+			return false
 		}
-
-		return ArrayValue{
-			Elements: v.Elements,
-			ElemType: ti.Elem, // attach declared element type
+		for name, af := range a.Fields {
+			bf, ok := b.Fields[name]
+			if !ok || !typesIdentical(af, bf) {
+				return false
+			}
 		}
+		return true
+
+	case TypeFunc:
+		if len(a.Params) != len(b.Params) ||
+			len(a.Returns) != len(b.Returns) {
+			return false
+		}
+		for i := range a.Params {
+			if !typesIdentical(a.Params[i], b.Params[i]) {
+				return false
+			}
+		}
+		for i := range a.Returns {
+			if !typesIdentical(a.Returns[i], b.Returns[i]) {
+				return false
+			}
+		}
+		return true
+
+	case TypeEnum:
+		return a == b // enums are nominal
+
+	case TypeNamed:
+		return a == b // named types are nominal
 
 	default:
+		return false
+	}
+}
+
+func (i *Interpreter) promoteValueToType(v Value, ti *TypeInfo) Value {
+	ti = unwrapAlias(ti)
+
+	actual := i.typeInfoFromValue(v)
+
+	if actual == ti {
 		return v
 	}
+
+	if ti.Kind == TypeNamed {
+		return NamedValue{
+			TypeName: ti,
+			Value:    v,
+		}
+	}
+
+	switch v := v.(type) {
+	case ArrayValue:
+		if ti.Kind == TypeArray {
+			return ArrayValue{
+				Elements: v.Elements,
+				ElemType: ti.Elem,
+			}
+		}
+	}
+
+	return v
 }
 
 func unwrapNamed(v Value) Value {
@@ -555,6 +637,8 @@ func (i *Interpreter) registerBuiltins() {
 			switch v := v.(type) {
 			case ArrayValue:
 				return StringValue{V: "[]" + v.ElemType.Name}, nil
+			case NamedValue:
+				return StringValue{V: v.TypeName.Name}, nil
 			}
 
 			return StringValue{V: string(v.Type())}, nil
@@ -1510,55 +1594,25 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		return SignalNone{}, nil
 
 	case *parser.TypeStatement:
-		switch t := stmt.Type.(type) {
-		case *parser.IdentType:
-			underlying, ok := i.typeEnv[t.Name]
-			if !ok {
-				return SignalNone{}, NewRuntimeError(t, fmt.Sprintf("unknown type: %s", t.Name))
-			}
-
-			if stmt.Alias {
-				i.typeEnv[stmt.Name.Value] = &TypeInfo{
-					Name:       stmt.Name.Value,
-					Kind:       underlying.Kind,
-					Underlying: underlying,
-					Alias:      true,
-				}
-			} else {
-				i.typeEnv[stmt.Name.Value] = &TypeInfo{
-					Name:       stmt.Name.Value,
-					Kind:       TypeNamed,
-					Underlying: underlying,
-				}
-			}
-
-			return SignalNone{}, nil
-
-		case *parser.StructType:
-			fields := make(map[string]*TypeInfo)
-
-			for _, f := range t.Fields {
-				fieldTI, err := i.resolveTypeNode(f.Type)
-				if err != nil {
-					return SignalNone{}, NewRuntimeError(t, err.Error())
-				}
-				fields[f.Name.Value] = fieldTI
-			}
-
-			ti := &TypeInfo{
-				Name:   stmt.Name.Value,
-				Kind:   TypeStruct,
-				Fields: fields,
-			}
-
-			if stmt.Alias {
-				ti.Alias = true
-			}
-
-			i.typeEnv[stmt.Name.Value] = ti
-			return SignalNone{}, nil
+		underlying, err := i.resolveTypeNode(stmt.Type)
+		if err != nil {
+			return SignalNone{}, NewRuntimeError(stmt, err.Error())
 		}
 
+		ti := &TypeInfo{
+			Name:       stmt.Name.Value,
+			Kind:       TypeNamed,
+			Underlying: underlying,
+		}
+
+		if stmt.Alias {
+			ti.Alias = true
+			ti.Kind = underlying.Kind
+		}
+
+		i.typeEnv[stmt.Name.Value] = ti
+
+		return SignalNone{}, nil
 	case *parser.AssignmentStatement:
 		val, err := i.EvalExpression(stmt.Value)
 		if err != nil {
@@ -2201,7 +2255,7 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 			return v, nil
 		}
 
-		return evalMemberExpression(expr, leftVal, expr.Field.Value)
+		return i.evalMemberExpression(expr, leftVal, expr.Field.Value)
 
 	case *parser.Identifier:
 		if expr.Value == "_" {
@@ -2283,9 +2337,6 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 
 	case *parser.FuncCall:
 		return i.evalCall(expr)
-
-	case *parser.MethodCall:
-		return i.evalMethodCall(expr)
 
 	case *parser.IndexExpression:
 		left, err := i.EvalExpression(expr.Left)
@@ -2448,7 +2499,7 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 			}, nil
 		}
 
-		return promoteValueToType(inner, targetTI), nil
+		return i.promoteValueToType(inner, targetTI), nil
 
 	case *parser.InfixExpression:
 		if expr.Operator == "&&" {
@@ -2619,7 +2670,7 @@ func (i *Interpreter) assignWithType(node parser.Node, v Value, expected *TypeIn
 		)
 	}
 
-	v = promoteValueToType(v, expected)
+	v = i.promoteValueToType(v, expected)
 
 	if expected.Kind == TypeAny {
 		v = NamedValue{
@@ -2702,7 +2753,7 @@ func (i *Interpreter) evalArrayLiteral(expr *parser.ArrayLiteral, expected *Type
 			}
 		}
 
-		val = promoteValueToType(val, elemType)
+		val = i.promoteValueToType(val, elemType)
 
 		elements = append(elements, val)
 	}
@@ -2752,7 +2803,7 @@ func (i *Interpreter) evalToArrWithExpectedElem(
 			}, nil
 		}
 
-		elements = append(elements, promoteValueToType(v, expectedElem))
+		elements = append(elements, i.promoteValueToType(v, expectedElem))
 	}
 
 	return ArrayValue{
@@ -2891,6 +2942,10 @@ func (i *Interpreter) evalTypeCast(target *TypeInfo, arg parser.Expression, node
 	case TypeInt:
 		var val int
 
+		if v, ok := v.(ErrorValue); ok {
+			return v, nil
+		}
+
 		switch v := v.(type) {
 		case IntValue:
 			val = v.V
@@ -2905,6 +2960,10 @@ func (i *Interpreter) evalTypeCast(target *TypeInfo, arg parser.Expression, node
 		return IntValue{V: val}, nil
 	case TypeFloat:
 		var val float64
+
+		if v, ok := v.(ErrorValue); ok {
+			return v, nil
+		}
 
 		switch v := v.(type) {
 		case IntValue:
@@ -2922,12 +2981,19 @@ func (i *Interpreter) evalTypeCast(target *TypeInfo, arg parser.Expression, node
 		if s, ok := v.(StringValue); ok {
 			return s, nil
 		}
+		if v, ok := v.(ErrorValue); ok {
+			return v, nil
+		}
 
 		return ErrorValue{
 			V: NewRuntimeError(node, fmt.Sprintf("string cast does not support %s, try the function toString to parse other types", string(v.Type()))),
 		}, nil
 	case TypeBool:
 		var val bool
+
+		if v, ok := v.(ErrorValue); ok {
+			return v, nil
+		}
 
 		switch v := v.(type) {
 		case BoolValue:
@@ -2944,12 +3010,19 @@ func (i *Interpreter) evalTypeCast(target *TypeInfo, arg parser.Expression, node
 		if a, ok := v.(ArrayValue); ok {
 			return a, nil
 		}
+		if v, ok := v.(ErrorValue); ok {
+			return v, nil
+		}
 
 		return ErrorValue{
 			NewRuntimeError(node, fmt.Sprintf("array cast does not support %s, try the function toArr to construct arrays", string(v.Type()))),
 		}, nil
 	case TypeNamed:
 		base := target.Underlying
+
+		if v, ok := v.(ErrorValue); ok {
+			return v, nil
+		}
 
 		casted, err := i.evalTypeCast(base, arg, node)
 		if err != nil {
@@ -3025,47 +3098,22 @@ func (i *Interpreter) evalFuncCall(expr *parser.FuncCall) (Value, error) {
 		return v, nil
 	}
 
-	fn, ok := val.(*Func)
-	if !ok {
+	args, err := i.evalArgs(expr.Args)
+	if err != nil {
+		return NilValue{}, err
+	}
+
+	switch fn := val.(type) {
+	case *Func:
+		return i.callFunction(fn, args, expr)
+	case BoundMethodValue:
+		args = append([]Value{fn.Receiver}, args...)
+		return i.callFunction(fn.Func, args, expr)
+	default:
 		return ErrorValue{
 			V: NewRuntimeError(expr, fmt.Sprintf("expected 'function' but got '%s'", unwrapAlias(i.typeInfoFromValue(val)).Name)),
 		}, nil
 	}
-
-	args, err := i.evalArgs(expr.Args)
-	if err != nil {
-		return NilValue{}, err
-	}
-
-	return i.callFunction(fn, args, expr)
-}
-
-func (i *Interpreter) evalMethodCall(expr *parser.MethodCall) (Value, error) {
-	recv, err := i.EvalExpression(expr.Receiver)
-	if err != nil {
-		return NilValue{}, err
-	}
-
-	recvType := unwrapAlias(i.typeInfoFromValue(recv))
-
-	fn, ok := i.env.GetMethod(recvType, expr.Name.Value)
-	if !ok {
-		return ErrorValue{
-			V: NewRuntimeError(expr,
-				fmt.Sprintf("type %s has no method %s",
-					recvType.Name, expr.Name.Value)),
-		}, nil
-	}
-
-	args, err := i.evalArgs(expr.Args)
-	if err != nil {
-		return NilValue{}, err
-	}
-
-	// inject receiver as first argument
-	args = append([]Value{recv}, args...)
-
-	return i.callFunction(fn, args, expr)
 }
 
 func (i *Interpreter) callFunction(fn *Func, args []Value, callNode parser.Node) (Value, error) {
@@ -3307,7 +3355,15 @@ func (i *Interpreter) evalIndexExpression(node parser.Expression, left, idx Valu
 	}
 }
 
-func evalMemberExpression(node parser.Expression, left Value, field string) (Value, error) {
+func (i *Interpreter) evalMemberExpression(node parser.Expression, left Value, field string) (Value, error) {
+	recvType := unwrapAlias(i.typeInfoFromValue(left))
+	if fn, ok := i.env.GetMethod(recvType, field); ok {
+		return BoundMethodValue{
+			Receiver: left,
+			Func:     fn,
+		}, nil
+	}
+
 	switch obj := left.(type) {
 	case *StructValue:
 
@@ -3322,7 +3378,7 @@ func evalMemberExpression(node parser.Expression, left Value, field string) (Val
 
 		if val.Type() != valueTypeOf(expectedType) {
 			return ErrorValue{
-				V: NewRuntimeError(node, fmt.Sprintf("field '%s' type '%v' should be '%v'", field, val.Type(), expectedType)),
+				V: NewRuntimeError(node, fmt.Sprintf("field '%s' type '%s' should be '%s'", field, string(val.Type()), expectedType.Name)),
 			}, nil
 		}
 

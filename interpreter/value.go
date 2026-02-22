@@ -139,7 +139,23 @@ func (f Func) Type() ValueType {
 }
 
 func (f Func) String() string {
-	return "fun()"
+	return f.TypeName.Name
+}
+
+type BoundMethodValue struct {
+	Receiver Value
+	Func     *Func
+}
+
+func (b BoundMethodValue) Type() ValueType {
+	return valueTypeOf(b.Func.TypeName)
+}
+
+func (b BoundMethodValue) String() string {
+	parts := strings.Split(b.Func.TypeName.Name, "(")
+	parts[0] += fmt.Sprintf("(%s)", b.Receiver.String())
+
+	return strings.Join(parts, " ")
 }
 
 type BuiltinFunc struct {
@@ -413,7 +429,7 @@ func (i *Interpreter) resolveTypeNode(t parser.TypeNode) (*TypeInfo, error) {
 	case *parser.FuncType:
 		paramsTI := make([]*TypeInfo, 0)
 		paramsName := make([]string, 0)
-		
+
 		returnsTI := make([]*TypeInfo, 0)
 		returnsName := make([]string, 0)
 
@@ -438,11 +454,11 @@ func (i *Interpreter) resolveTypeNode(t parser.TypeNode) (*TypeInfo, error) {
 			returnsTI = append(returnsTI, ti)
 			returnsName = append(returnsName, ti.Name)
 		}
-		
+
 		return &TypeInfo{
-			Name: fmt.Sprintf("fun(%s) (%s)", strings.Join(paramsName, ", "), strings.Join(returnsName, ", ")),
-			Kind: TypeFunc,
-			Params: paramsTI,
+			Name:    fmt.Sprintf("fun(%s) (%s)", strings.Join(paramsName, ", "), strings.Join(returnsName, ", ")),
+			Kind:    TypeFunc,
+			Params:  paramsTI,
 			Returns: returnsTI,
 		}, nil
 
@@ -494,6 +510,8 @@ func valueTypeOf(ti *TypeInfo) ValueType {
 		return ENUM
 	case TypeMap:
 		return MAP
+	case TypeFunc:
+		return FUNCTION
 	default:
 		return NIL
 	}

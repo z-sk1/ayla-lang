@@ -185,7 +185,6 @@ type FuncType struct {
 	Returns []TypeNode
 }
 
-
 func (*FuncType) typeNode() {}
 
 type SpawnStatement struct {
@@ -240,13 +239,6 @@ type MethodStatement struct {
 	Params      []*ParametersClause
 	Body        []Statement
 	ReturnTypes []TypeNode
-}
-
-type MethodCall struct {
-	NodeBase
-	Name     *Identifier
-	Receiver Expression
-	Args     []Expression
 }
 
 type ForStatement struct {
@@ -315,6 +307,7 @@ type ReturnStatement struct {
 
 type ArrayLiteral struct {
 	NodeBase
+	Type     TypeNode
 	Elements []Expression
 }
 

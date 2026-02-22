@@ -1,2 +1,6 @@
-fun add (x int, y int) (int) {
-}
+type Age int
+
+egg a = Age(1)
+
+putln(a)
+putln(typeof(a))
