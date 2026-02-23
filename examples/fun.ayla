@@ -1,6 +1,3 @@
-type Age int
-
-egg a = Age(1)
-
-putln(a)
-putln(typeof(a))
+fun add (x int, y int) (int) {
+    back x + y
+}

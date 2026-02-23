@@ -211,6 +211,10 @@ func typesAssignable(from, to *TypeInfo) bool {
 	case from.Kind == TypeArray && to.Kind == TypeArray:
 		return typesAssignable(from.Elem, to.Elem)
 
+	case from.Kind == TypeFixedArray && to.Kind == TypeFixedArray:
+		return typesAssignable(from.Elem, to.Elem) &&
+			from.Size == to.Size
+
 	case from.Kind == TypeMap && to.Kind == TypeMap:
 		return typesAssignable(from.Key, to.Key) &&
 			typesAssignable(from.Value, to.Value)
@@ -279,6 +283,10 @@ func typesIdentical(a, b *TypeInfo) bool {
 	case TypeArray:
 		return typesIdentical(a.Elem, b.Elem)
 
+	case TypeFixedArray:
+		return typesIdentical(a.Elem, b.Elem) &&
+			a.Size == b.Size
+
 	case TypeMap:
 		return typesIdentical(a.Key, b.Key) &&
 			typesIdentical(a.Value, b.Value)
@@ -345,6 +353,8 @@ func (i *Interpreter) promoteValueToType(v Value, ti *TypeInfo) Value {
 			return ArrayValue{
 				Elements: v.Elements,
 				ElemType: ti.Elem,
+				Capacity: v.Capacity,
+				Fixed:    v.Fixed,
 			}
 		}
 	}
@@ -367,6 +377,13 @@ func unwrapAlias(t *TypeInfo) *TypeInfo {
 		t = t.Underlying
 	}
 	return t
+}
+
+func capacityFromType(ti *TypeInfo, elems []Value) int {
+	if ti.Kind == TypeFixedArray {
+		return ti.Size
+	}
+	return len(elems)
 }
 
 func readKey() (rune, error) {
@@ -636,7 +653,11 @@ func (i *Interpreter) registerBuiltins() {
 
 			switch v := v.(type) {
 			case ArrayValue:
-				return StringValue{V: "[]" + v.ElemType.Name}, nil
+				if v.Fixed {
+					return StringValue{V: fmt.Sprintf("[%d]%s", v.Capacity, v.ElemType.Name)}, nil
+				}
+
+				return StringValue{V: fmt.Sprintf("[]%s", v.ElemType.Name)}, nil
 			case NamedValue:
 				return StringValue{V: v.TypeName.Name}, nil
 			}
@@ -2278,7 +2299,7 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 		return v, nil
 
 	case *parser.ArrayLiteral:
-		return i.evalArrayLiteral(expr, nil)
+		return i.evalArrayLiteral(expr)
 
 	case *parser.MapLiteral:
 		return i.evalMapLiteral(expr, nil)
@@ -2690,18 +2711,12 @@ func (i *Interpreter) evalExprWithExpectedType(expr parser.Expression, expected 
 	switch e := expr.(type) {
 
 	case *parser.ArrayLiteral:
-		if expected != nil && expected.Kind == TypeArray {
-			return i.evalArrayLiteral(e, expected.Elem)
-		}
-		return i.EvalExpression(e)
-
-	case *parser.FuncCall:
-		if expected != nil &&
-			expected.Kind == TypeArray &&
-			expected.Elem.Kind == TypeAny &&
-			e.Callee.(*parser.Identifier).Value == "toArr" {
-
-			return i.evalToArrWithExpectedElem(e, expected.Elem)
+		if expected != nil && (expected.Kind == TypeArray || expected.Kind == TypeFixedArray) {
+			val, err := i.evalArrayLiteral(e)
+			if err != nil {
+				return NilValue{}, err
+			}
+			return val, nil
 		}
 		return i.EvalExpression(e)
 
@@ -2716,65 +2731,76 @@ func (i *Interpreter) evalExprWithExpectedType(expr parser.Expression, expected 
 	}
 }
 
-func (i *Interpreter) evalArrayLiteral(expr *parser.ArrayLiteral, expected *TypeInfo) (Value, error) {
-	elements := []Value{}
-	var elemType *TypeInfo
-
-	if expected != nil {
-		elemType = unwrapAlias(expected)
+func (i *Interpreter) evalArrayLiteral(expr *parser.ArrayLiteral) (Value, error) {
+	ti, err := i.resolveTypeNode(expr.Type)
+	if err != nil {
+		return NilValue{}, err
 	}
+
+	ti = unwrapAlias(ti)
+
+	if ti.Kind != TypeArray && ti.Kind != TypeFixedArray {
+		return nil, NewRuntimeError(expr, "composite literal is not an array type")
+	}
+
+	elemType := ti.Elem
+
+	elements := make([]Value, 0, len(expr.Elements))
 
 	for idx, el := range expr.Elements {
 		val, err := i.EvalExpression(el)
 		if err != nil {
 			return NilValue{}, err
 		}
-		if v, ok := val.(ErrorValue); ok {
-			return v, nil
-		}
 
 		valType := unwrapAlias(i.typeInfoFromValue(val))
 
-		if elemType == nil {
-			elemType = valType
-		} else {
-			if !typesAssignable(valType, elemType) {
-				return ErrorValue{
-					V: NewRuntimeError(
-						expr,
-						fmt.Sprintf(
-							"array element %d expected %s but got %s (use []thing for mixed arrays)",
-							idx,
-							elemType.Name,
-							valType.Name,
-						),
-					),
-				}, nil
-			}
+		if !typesAssignable(valType, elemType) {
+			return nil, NewRuntimeError(
+				expr,
+				fmt.Sprintf(
+					"array element %d expected %s but got %s",
+					idx,
+					elemType.Name,
+					valType.Name,
+				),
+			)
 		}
 
 		val = i.promoteValueToType(val, elemType)
-
 		elements = append(elements, val)
 	}
 
-	if elemType == nil {
-		return ErrorValue{
-			V: NewRuntimeError(expr, "cannot infer type of empty array"),
-		}, nil
+	if ti.Kind == TypeFixedArray {
+		if len(elements) > ti.Size {
+			return NilValue{}, NewRuntimeError(
+				expr,
+				fmt.Sprintf(
+					"too many elements: capacity is %d but got %d",
+					ti.Size,
+					len(elements),
+				),
+			)
+		}
+
+		for len(elements) < ti.Size {
+			def, err := i.defaultValueFromTypeInfo(expr, elemType)
+			if err != nil {
+				return NilValue{}, err
+			}
+			elements = append(elements, def)
+		}
 	}
 
 	return ArrayValue{
 		Elements: elements,
 		ElemType: elemType,
+		Capacity: capacityFromType(ti, elements),
+		Fixed:    ti.Kind == TypeFixedArray,
 	}, nil
 }
 
-func (i *Interpreter) evalToArrWithExpectedElem(
-	node *parser.FuncCall,
-	expectedElem *TypeInfo,
-) (Value, error) {
-
+func (i *Interpreter) evalToArrWithExpectedElem(node *parser.FuncCall, expectedElem *TypeInfo) (Value, error) {
 	args := make([]Value, len(node.Args))
 	for idx, arg := range node.Args {
 		v, err := i.EvalExpression(arg)
@@ -3225,12 +3251,8 @@ func (i *Interpreter) evalIndexExpression(node parser.Expression, left, idx Valu
 	typ := i.typeInfoFromValue(left)
 
 	switch typ.Kind {
-	case TypeArray:
-		arr, ok := left.(*ArrayValue)
-		if !ok {
-			v := left.(ArrayValue)
-			arr = &v
-		}
+	case TypeArray, TypeFixedArray:
+		arr, ok := left.(ArrayValue)
 
 		idxVal, ok := idx.(IntValue)
 		if !ok {

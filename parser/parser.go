@@ -911,25 +911,31 @@ func (p *Parser) parseTypeList(end token.TokenType) []TypeNode {
 }
 
 func (p *Parser) parseArrayType() TypeNode {
-	// curTok == '['
+	at := &ArrayType{
+		NodeBase: NodeBase{Token: p.curTok}, // '['
+	}
+
+	p.nextToken()
+
+	if p.curTok.Type == token.RBRACKET {
+		p.nextToken()
+		at.Elem = p.parseType()
+		return at
+	}
+
+	at.Size = p.parseExpression(LOWEST)
 
 	if p.peekTok.Type != token.RBRACKET {
-		p.addError("expected ']' in array type")
+		p.addError("expected ']'")
 		return nil
 	}
 
-	p.nextToken() // move to ']'
-	p.nextToken() // move to element type (e.g. 'string')
+	p.nextToken()
+	p.nextToken()
 
-	elem := p.parseType()
-	if elem == nil {
-		return nil
-	}
+	at.Elem = p.parseType()
 
-	return &ArrayType{
-		NodeBase: NodeBase{Token: p.curTok},
-		Elem:     elem,
-	}
+	return at
 }
 
 func (p *Parser) parseStructType() TypeNode {
@@ -1027,35 +1033,33 @@ func (p *Parser) parseFuncType() TypeNode {
 	return typ
 }
 
-func (p *Parser) parseArrayLiteral() Expression {
-	arr := &ArrayLiteral{}
-	arr.NodeBase = NodeBase{Token: p.curTok}
+func (p *Parser) parseArrayLiteral(typ TypeNode) Expression {
+	lit := &ArrayLiteral{
+		NodeBase: NodeBase{Token: p.curTok},
+		Type:     typ,
+	}
 
-	arr.Elements = []Expression{}
-
-	// move to first element or ]
 	p.nextToken()
 
-	if p.curTok.Type == token.RBRACKET {
-		return arr // empty array
+	if p.curTok.Type == token.RBRACE {
+		return lit
 	}
 
-	arr.Elements = append(arr.Elements, p.parseExpression(LOWEST))
+	lit.Elements = append(lit.Elements, p.parseExpression(LOWEST))
 
 	for p.peekTok.Type == token.COMMA {
-		p.nextToken() // ,
-		p.nextToken() // next element
-		arr.Elements = append(arr.Elements, p.parseExpression(LOWEST))
+		p.nextToken()
+		p.nextToken()
+		lit.Elements = append(lit.Elements, p.parseExpression(LOWEST))
 	}
 
-	if p.peekTok.Type != token.RBRACKET {
-		p.addError("expected ']' to close array")
+	if p.peekTok.Type != token.RBRACE {
+		p.addError("expected '}'")
 		return nil
 	}
 
-	p.nextToken() // ]
-
-	return arr
+	p.nextToken() // move to '}'
+	return lit
 }
 
 func (p *Parser) parseIndexAssignment() *IndexAssignmentStatement {
@@ -2396,7 +2400,15 @@ func (p *Parser) parsePrimary() Expression {
 		return &GroupedExpression{NodeBase: NodeBase{Token: p.curTok}, Expression: exp}
 
 	case token.LBRACKET:
-		return p.parseArrayLiteral()
+		typ := p.parseType()
+
+		if p.peekTok.Type != token.LBRACE {
+			p.addError("expected '{'")
+			return nil
+		}
+
+		p.nextToken()
+		return p.parseArrayLiteral(typ)
 
 	case token.LBRACE:
 		return p.parseMapLiteral()

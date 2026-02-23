@@ -167,6 +167,7 @@ func (*IdentType) typeNode() {}
 type ArrayType struct {
 	NodeBase
 	Elem TypeNode
+	Size Expression
 }
 
 func (*ArrayType) typeNode() {}

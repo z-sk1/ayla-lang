@@ -18,6 +18,7 @@ const (
 	TypeString
 	TypeBool
 	TypeArray
+	TypeFixedArray
 	TypeFunc
 	TypeNil
 	TypeStruct
@@ -39,6 +40,7 @@ type TypeInfo struct {
 
 	// arrays
 	Elem *TypeInfo
+	Size int
 
 	// maps
 	Key          *TypeInfo
@@ -231,6 +233,8 @@ func (e ErrorValue) String() string {
 type ArrayValue struct {
 	Elements []Value
 	ElemType *TypeInfo
+	Capacity int
+	Fixed    bool
 }
 
 func (a ArrayValue) Type() ValueType {
@@ -402,10 +406,29 @@ func (i *Interpreter) resolveTypeNode(t parser.TypeNode) (*TypeInfo, error) {
 			return nil, err
 		}
 
+		if tn.Size == nil {
+			return &TypeInfo{
+				Name: "[]" + elemTI.Name,
+				Kind: TypeArray,
+				Elem: elemTI,
+			}, nil
+		}
+
+		sizeVal, err := i.EvalExpression(tn.Size)
+		if err != nil {
+			return nil, err
+		}
+
+		intSize, ok := sizeVal.(IntValue)
+		if !ok {
+			return nil, NewRuntimeError(tn, "array size must be int")
+		}
+
 		return &TypeInfo{
-			Name: "[]" + elemTI.Name,
-			Kind: TypeArray,
+			Name: fmt.Sprintf("[%d]%s", intSize.V, elemTI.Name),
+			Kind: TypeFixedArray,
 			Elem: elemTI,
+			Size: intSize.V,
 		}, nil
 
 	case *parser.MapType:
@@ -547,12 +570,17 @@ func (i *Interpreter) typeInfoFromValue(v Value) *TypeInfo {
 	case ErrorValue:
 		return i.typeEnv["error"]
 	case ArrayValue:
-		if v.ElemType == nil {
-			panic("ArrayValue ElemType is nil")
+		if v.Fixed {
+			return &TypeInfo{
+				Name: fmt.Sprintf("[%d]%s", v.Capacity, v.ElemType.Name),
+				Kind: TypeFixedArray,
+				Elem: v.ElemType,
+				Size: v.Capacity,
+			}
 		}
 
 		return &TypeInfo{
-			Name: "[]" + v.ElemType.Name,
+			Name: fmt.Sprintf("[]%s", v.ElemType.Name),
 			Kind: TypeArray,
 			Elem: v.ElemType,
 		}
@@ -602,6 +630,12 @@ func (i *Interpreter) defaultValueFromTypeInfo(node parser.Statement, ti *TypeIn
 		}
 
 		return ArrayValue{Elements: make([]Value, 0), ElemType: ti.Elem}, nil
+	case TypeFixedArray:
+		if ti.Elem == nil {
+			return NilValue{}, NewRuntimeError(node, "array type missing element type")
+		}
+		
+		return ArrayValue{Elements: make([]Value, ti.Size), ElemType: ti.Elem, Capacity: ti.Size, Fixed: true}, nil
 	case TypeStruct:
 		return &StructValue{
 			TypeName: ti,

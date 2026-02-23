@@ -1,62 +1,59 @@
 egg A float = 0.0
 egg B float = 0.0
 
-egg z []float
-egg b []int
-
-egg i int
-egg j int
-
-four egg i = 0; i < 1760; i = i + 1 {
-    push(z, 0.0)
-    push(b, 32)
-}
+egg z [1760]float
+egg b [1760]int
 
 why yes {
 
-    i = 0
+    // Precompute trig of A and B
+    egg sinA = sin(A)
+    egg cosA = cos(A)
+    egg sinB = sin(B)
+    egg cosB = cos(B)
+
+    // Clear buffers
+    egg i int = 0
     why i < 1760 {
         z[i] = 0.0
         b[i] = 32
         i = i + 1
     }
 
-    egg fj float
-    why fj < 6.28 {
+    egg j int = 0
+    why j < 314 {                 // 6.28 / 0.02 ≈ 314
+        egg fj = float(j) * 0.02
+        egg sinFj = sin(fj)
+        egg cosFj = cos(fj)
 
-        egg fi float
-        why fi < 6.28 {
+        egg k int = 0
+        why k < 90 {              // 6.28 / 0.07 ≈ 90
+            egg fi = float(k) * 0.07
+            egg sinFi = sin(fi)
+            egg cosFi = cos(fi)
 
-            egg c = sin(fi)
-            egg d = cos(fj)
-            egg e = sin(A)
-            egg f = sin(fj)
-            egg g = cos(A)
-            egg h = d + 2.0
+            egg h = cosFj + 2.0
+            egg D = 1 / (sinFi * h * sinA + sinFj * cosA + 3)
 
-            egg D = 1 / (c * h * e + f * g + 3)
+            egg t = sinFi * h * cosA - sinFj * sinA
 
-            egg l = cos(fi)
-            egg m = cos(B)
-            egg n = sin(B)
+            egg x = int(40 + 20 * D * (cosFi * h * cosB - t * sinB))
+            egg y = int(12 + 10 * D * (cosFi * h * sinB + t * cosB))
 
-            egg t = c * h * g - f * e
-
-            egg x = int(40 + 20 * D * (l * h * m - t * n))
-            egg y = int(12 + 10 * D * (l * h * n + t * m))
             egg o int = x + 80 * y
 
-            ayla y > 0 && y < 22 && x > 0 && x < 79 && D > z[o] {
+            ayla (y > 0) && (y < 22) && (x > 0) && (x < 79) && (D > z[o]) {
                 z[o] = D
-                b[o] = ord(".,-~:;=!*#$@1234567890+-=QWERTYUIOPASDFGHJKLZXCVBNMqwertyuiopasdfghjklzxcvbnm[]{}?.,-~:;=!*#$@1234567890+-=QWERTYUIOPASDFGHJKLZXCVBNMqwertyuiopasdfghjklzxcvbnm[]{}?.,-~:;=!*#$@1234567890+-=QWERTYUIOPASDFGHJKLZXCVBNMqwertyuiopasdfghjklzxcvbnm[]{}?.,-~:;=!*#$@1234567890+-=QWERTYUIOPASDFGHJKLZXCVBNMqwertyuiopasdfghjklzxcvbnm[]{}?.,-~:;=!*#$@1234567890+-=QWERTYUIOPASDFGHJKLZXCVBNMqwertyuiopasdfghjklzxcvbnm[]{}?.,-~:;=!*#$@1234567890+-=QWERTYUIOPASDFGHJKLZXCVBNMqwertyuiopasdfghjklzxcvbnm[]{}?.,-~:;=!*#$@1234567890+-=QWERTYUIOPASDFGHJKLZXCVBNMqwertyuiopasdfghjklzxcvbnm[]{}?"[int(8 * D)])
+                b[o] = ord(".,-~:;=!*#$@1234567890+-=QWERTYUIOPASDFGHJKLZXCVBNM.,-~:;=!*#$@1234567890+-=QWERTYUIOPASDFGHJKLZXCVBNM.,-~:;=!*#$@1234567890+-=QWERTYUIOPASDFGHJKLZXCVBNM.,-~:;=!*#$@1234567890+-=QWERTYUIOPASDFGHJKLZXCVBNM.,-~:;=!*#$@1234567890+-=QWERTYUIOPASDFGHJKLZXCVBNM.,-~:;=!*#$@1234567890+-=QWERTYUIOPASDFGHJKLZXCVBNM.,-~:;=!*#$@1234567890+-=QWERTYUIOPASDFGHJKLZXCVBNM.,-~:;=!*#$@1234567890+-=QWERTYUIOPASDFGHJKLZXCVBNM.,-~:;=!*#$@1234567890+-=QWERTYUIOPASDFGHJKLZXCVBNM"[int(8 * D)])
             }
 
-            fi = fi + 0.07
+            k = k + 1
         }
 
-        fj = fj + 0.02
+        j = j + 1
     }
 
+    // Render
     i = 0
     why i < 1760 {
         ayla i % 80 == 0 {
