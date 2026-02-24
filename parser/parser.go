@@ -1253,9 +1253,10 @@ func (p *Parser) parseMemberAssignment() *MemberAssignmentStatement {
 	}
 }
 
-func (p *Parser) parseMapLiteral() Expression {
+func (p *Parser) parseMapLiteral(typ TypeNode) Expression {
 	lit := &MapLiteral{
 		NodeBase: NodeBase{Token: p.curTok}, // {
+		Type:     typ,
 	}
 
 	pairs := []MapPair{}
@@ -2410,8 +2411,16 @@ func (p *Parser) parsePrimary() Expression {
 		p.nextToken()
 		return p.parseArrayLiteral(typ)
 
-	case token.LBRACE:
-		return p.parseMapLiteral()
+	case token.MAP:
+		typ := p.parseType()
+
+		if p.peekTok.Type != token.LBRACE {
+			p.addError("expected '{'")
+			return nil
+		}
+
+		p.nextToken()
+		return p.parseMapLiteral(typ)
 
 	default:
 		return nil

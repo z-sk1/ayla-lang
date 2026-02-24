@@ -314,6 +314,7 @@ type ArrayLiteral struct {
 
 type MapLiteral struct {
 	NodeBase
+	Type  TypeNode
 	Pairs []MapPair
 }
 
