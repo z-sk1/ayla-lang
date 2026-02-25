@@ -1,3 +1,7 @@
-egg x map[string]float = map[string]int{"a": 3}
+egg x = map[string]int{"a": 1, "b": 2}
 
-putln(x["a"])
+putln(x)
+
+delete(x, "b")
+
+putln(x)

@@ -1255,14 +1255,14 @@ func (p *Parser) parseMemberAssignment() *MemberAssignmentStatement {
 
 func (p *Parser) parseMapLiteral(typ TypeNode) Expression {
 	lit := &MapLiteral{
-		NodeBase: NodeBase{Token: p.curTok}, // {
+		NodeBase: NodeBase{Token: p.curTok}, // '{'
 		Type:     typ,
 	}
 
-	pairs := []MapPair{}
+	var pairs []MapPair
 
-	p.nextToken()          // move past '{'
-	p.consumeTerminators() // NOW remove NEWLINE
+	p.nextToken() // move past '{'
+	p.consumeTerminators()
 
 	if p.curTok.Type == token.RBRACE {
 		lit.Pairs = pairs
@@ -1286,7 +1286,8 @@ func (p *Parser) parseMapLiteral(typ TypeNode) Expression {
 		}
 
 		p.nextToken() // :
-		p.nextToken() // value
+		p.nextToken() // move to value
+
 		p.consumeTerminators()
 
 		value := p.parseExpression(LOWEST)
@@ -1295,32 +1296,36 @@ func (p *Parser) parseMapLiteral(typ TypeNode) Expression {
 			return nil
 		}
 
-		pairs = append(pairs, MapPair{Key: key, Value: value})
+		pairs = append(pairs, MapPair{
+			Key:   key,
+			Value: value,
+		})
 
 		p.consumeTerminators()
 
 		if p.peekTok.Type != token.COMMA {
+			p.nextToken()
 			break
 		}
 
 		p.nextToken() // ,
-		p.nextToken() // next key
-		p.consumeTerminators()
-	}
+		p.nextToken() // move to next key or '}'
 
+		p.consumeTerminators()
+
+		if p.curTok.Type == token.RBRACE {
+			break
+		}
+	}
 	p.consumeTerminators()
 
-	if p.curTok.Type == token.RBRACE {
-		lit.Pairs = pairs
-		return lit
+	if p.curTok.Type != token.RBRACE {
+		if p.peekTok.Type != token.RBRACE {
+			p.addError("expected '}' after map literal")
+			return nil
+		}
+		p.nextToken() // move to '}'
 	}
-
-	if p.peekTok.Type != token.RBRACE {
-		p.addError("expected '}' after map literal")
-		return nil
-	}
-
-	p.nextToken() // }
 
 	lit.Pairs = pairs
 	return lit
@@ -1632,8 +1637,8 @@ func (p *Parser) parseMethodStatement() *MethodStatement {
 	return stmt
 }
 
-func (p *Parser) parseFuncParams() []*ParametersClause {
-	params := []*ParametersClause{}
+func (p *Parser) parseFuncParams() []*Param {
+	params := []*Param{}
 
 	if p.peekTok.Type == token.RPAREN {
 		p.nextToken() // consume ')'
@@ -1656,6 +1661,12 @@ func (p *Parser) parseFuncParams() []*ParametersClause {
 		// move to type
 		p.nextToken()
 
+		variadic := false
+		if p.curTok.Type == token.ELLIPSES {
+			variadic = true
+			p.nextToken()
+		}
+
 		if !(p.isTypeToken(p.curTok.Type) || p.isTypeName(p.curTok.Literal)) {
 			p.addError("expected type after parameter name")
 			return nil
@@ -1663,10 +1674,11 @@ func (p *Parser) parseFuncParams() []*ParametersClause {
 
 		paramType := p.parseType()
 
-		params = append(params, &ParametersClause{
+		params = append(params, &Param{
 			NodeBase: NodeBase{Token: paramName.Token},
 			Name:     paramName,
 			Type:     paramType,
+			Variadic: variadic,
 		})
 
 		if p.peekTok.Type == token.COMMA {
@@ -1833,7 +1845,15 @@ func (p *Parser) parseExpressionList(end token.TokenType) []Expression {
 		p.nextToken() // move to next expression
 		p.consumeTerminators()
 
-		list = append(list, p.parseExpression(LOWEST))
+		arg := p.parseExpression(LOWEST)
+
+		if p.peekTok.Type == token.ELLIPSES {
+			arg = &SpreadExpression{
+				Expression: arg,
+			}
+		}
+
+		list = append(list, arg)
 	}
 
 	p.nextToken()          // move forward once
@@ -2177,6 +2197,7 @@ func (p *Parser) parseDotExpression(left Expression) Expression {
 
 func (p *Parser) parseCallExpression(callee Expression) Expression {
 	args := p.parseExpressionList(token.RPAREN)
+
 	return &FuncCall{
 		NodeBase: NodeBase{Token: p.curTok},
 		Callee:   callee,
@@ -2404,8 +2425,7 @@ func (p *Parser) parsePrimary() Expression {
 		typ := p.parseType()
 
 		if p.peekTok.Type != token.LBRACE {
-			p.addError("expected '{'")
-			return nil
+			return typ
 		}
 
 		p.nextToken()

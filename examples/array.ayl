@@ -1,1 +1,5 @@
-egg x [5]int = [5]int{0, 1, 2, 3, 4}
+egg x = make([]int, 0)
+
+x = append(x, []int{1, 2, 3}...)
+
+putln(x)

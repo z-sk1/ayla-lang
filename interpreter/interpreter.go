@@ -353,7 +353,7 @@ func (i *Interpreter) promoteValueToType(v Value, ti *TypeInfo) Value {
 			return ArrayValue{
 				Elements: v.Elements,
 				ElemType: ti.Elem,
-				Size:     v.Size,
+				Capacity: v.Capacity,
 				Fixed:    v.Fixed,
 			}
 		}
@@ -379,7 +379,7 @@ func unwrapAlias(t *TypeInfo) *TypeInfo {
 	return t
 }
 
-func sizeFromType(ti *TypeInfo, elems []Value) int {
+func capacityFromType(ti *TypeInfo, elems []Value) int {
 	if ti.Kind == TypeFixedArray {
 		return ti.Size
 	}
@@ -663,6 +663,115 @@ func (i *Interpreter) registerBuiltins() {
 		},
 	}
 
+	env.builtins["make"] = &BuiltinFunc{
+		Name:  "make",
+		Arity: -1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			if len(args) < 1 {
+				return NilValue{}, NewRuntimeError(node, "make() requires atleast a type arg")
+			}
+
+			typeVal, ok := args[0].(TypeValue)
+			if !ok {
+				return NilValue{}, NewRuntimeError(node, "make([]T, len [, cap]) required")
+			}
+
+			ti := typeVal.TypeName
+
+			switch ti.Kind {
+			case TypeArray:
+				if len(args) < 2 {
+					return NilValue{}, NewRuntimeError(node, "make([]T, len [, cap]) required")
+				}
+
+				length := args[1].(IntValue).V
+				capacity := length
+
+				if len(args) == 3 {
+					capacity = args[2].(IntValue).V
+				}
+
+				if capacity < length {
+					return NilValue{}, NewRuntimeError(node, "capacity must be >= length")
+				}
+
+				elements := make([]Value, length)
+
+				for idx := range length {
+					elem, err := i.defaultValueFromTypeInfo(node, ti.Elem)
+					if err != nil {
+						return NilValue{}, err
+					}
+
+					elements[idx] = elem
+				}
+
+				return ArrayValue{
+					Elements: elements,
+					ElemType: ti.Elem,
+					Capacity: capacity,
+					Fixed:    false,
+				}, nil
+			case TypeMap:
+				m := make(map[Value]Value)
+				return MapValue{
+					Entries:   m,
+					KeyType:   ti.Key,
+					ValueType: ti.Value,
+				}, nil
+			default:
+				return NilValue{}, NewRuntimeError(node, "make() only supports slices and maps")
+			}
+		},
+	}
+
+	env.builtins["append"] = &BuiltinFunc{
+		Name:  "append",
+		Arity: -1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			slice, ok := args[0].(ArrayValue)
+			if !ok {
+				return NilValue{}, NewRuntimeError(node, "append([]T, ...T) required")
+			}
+			elemType := slice.ElemType
+
+			for idx, arg := range args[1:] {
+				argType := i.typeInfoFromValue(arg)
+				if !typesAssignable(argType, elemType) {
+					return NilValue{}, NewRuntimeError(node, fmt.Sprintf("arg %d expected '%s' but got '%s'", idx, elemType.Name, argType.Name))
+				}
+
+				slice.Elements = append(slice.Elements, arg)
+			}
+
+			return slice, nil
+		},
+	}
+
+	env.builtins["delete"] = &BuiltinFunc{
+		Name:  "delete",
+		Arity: 2,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			ident, ok := node.Args[0].(*parser.Identifier)
+
+			val, ok2 := i.env.Get(ident.Value)
+			if !ok2 {
+				return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unknown var: '%s'", ident.Value))
+			}
+
+			if !ok {
+				_, ok = args[0].(MapValue)
+				if !ok {
+					return NilValue{}, NewRuntimeError(node, "delete(map[T]T, key)")
+				}
+			}
+
+			delete(val.(MapValue).Entries, args[1])
+			i.env.Set(ident.Value, val)
+			return NilValue{}, nil
+		},
+	}
+
 	env.builtins["typeof"] = &BuiltinFunc{
 		Name:  "typeof",
 		Arity: 1,
@@ -672,7 +781,7 @@ func (i *Interpreter) registerBuiltins() {
 			switch v := v.(type) {
 			case ArrayValue:
 				if v.Fixed {
-					return StringValue{V: fmt.Sprintf("[%d]%s", v.Size, v.ElemType.Name)}, nil
+					return StringValue{V: fmt.Sprintf("[%d]%s", v.Capacity, v.ElemType.Name)}, nil
 				}
 
 				return StringValue{V: fmt.Sprintf("[]%s", v.ElemType.Name)}, nil
@@ -814,141 +923,6 @@ func (i *Interpreter) registerBuiltins() {
 			}
 
 			i.env.Set(varName, newVal)
-			return NilValue{}, nil
-		},
-	}
-
-	env.builtins["push"] = &BuiltinFunc{
-		Name:  "push",
-		Arity: 2,
-		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			arr, ok := args[0].(ArrayValue)
-			if !ok {
-				return NilValue{}, NewRuntimeError(node, "push expects (arr, val)")
-			}
-
-			val := args[1]
-
-			arr.Elements = append(arr.Elements, val)
-
-			// write back
-			if ident, ok := node.Args[0].(*parser.Identifier); ok {
-				env.Set(ident.Value, arr)
-			}
-
-			return NilValue{}, nil
-		},
-	}
-
-	env.builtins["pop"] = &BuiltinFunc{
-		Name:  "pop",
-		Arity: 1,
-		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			arr, ok := args[0].(ArrayValue)
-			if !ok {
-				return NilValue{}, NewRuntimeError(node, "pop expects array")
-			}
-
-			if len(arr.Elements) == 0 {
-				return NilValue{}, NewRuntimeError(node, "pop from empty array")
-			}
-
-			// get last element
-			lastIdx := len(arr.Elements) - 1
-			val := arr.Elements[lastIdx]
-
-			// shrink array
-			arr.Elements = arr.Elements[:lastIdx]
-
-			// write back
-			if ident, ok := node.Args[0].(*parser.Identifier); ok {
-				env.Set(ident.Value, arr)
-			}
-
-			return val, nil
-		},
-	}
-
-	env.builtins["insert"] = &BuiltinFunc{
-		Name:  "insert",
-		Arity: 3,
-		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			arr, ok := args[0].(ArrayValue)
-			if !ok {
-				return NilValue{}, NewRuntimeError(node, "insert expects (arr, index, val)")
-			}
-
-			idxVal, ok := args[1].(IntValue)
-			if !ok {
-				return NilValue{}, NewRuntimeError(node, "insert expects (arr, index, val)")
-			}
-			idx := idxVal.V
-
-			if idx < 0 || idx > len(arr.Elements) {
-				return NilValue{}, NewRuntimeError(node, fmt.Sprintf("insert index %d out of bounds", idx))
-			}
-
-			val := args[2]
-
-			// actual insert
-			arr.Elements = append(arr.Elements[:idx], append([]Value{val}, arr.Elements[idx:]...)...)
-
-			// write back
-			if ident, ok := node.Args[0].(*parser.Identifier); ok {
-				env.Set(ident.Value, arr)
-			}
-
-			return NilValue{}, nil
-		},
-	}
-
-	env.builtins["remove"] = &BuiltinFunc{
-		Name:  "remove",
-		Arity: 2,
-		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			arr, ok := args[0].(ArrayValue)
-			if !ok {
-				return NilValue{}, NewRuntimeError(node, "remove expects (arr, index)")
-			}
-
-			idxVal, ok := args[1].(IntValue)
-			if !ok {
-				return NilValue{}, NewRuntimeError(node, "remove expects (arr, index)")
-			}
-			idx := idxVal.V
-
-			if idx < 0 || idx > len(arr.Elements) {
-				return NilValue{}, NewRuntimeError(node, fmt.Sprintf("remove index %d is out of bounds", idx))
-			}
-
-			removed := arr.Elements[idx]
-
-			// remove element
-			arr.Elements = append(arr.Elements[:idx], arr.Elements[idx+1:]...)
-
-			if ident, ok := node.Args[0].(*parser.Identifier); ok {
-				env.Set(ident.Value, arr)
-			}
-
-			return removed, nil
-		},
-	}
-
-	env.builtins["clear"] = &BuiltinFunc{
-		Name:  "clear",
-		Arity: 1,
-		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			arr, ok := args[0].(ArrayValue)
-			if !ok {
-				return NilValue{}, NewRuntimeError(node, "clear expects (arr)")
-			}
-
-			arr.Elements = arr.Elements[:0]
-
-			if ident, ok := node.Args[0].(*parser.Identifier); ok {
-				env.Set(ident.Value, arr)
-			}
-
 			return NilValue{}, nil
 		},
 	}
@@ -1894,7 +1868,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		}
 
 		params := append(
-			[]*parser.ParametersClause{
+			[]*parser.Param{
 				{
 					Name: stmt.Receiver.Name,
 					Type: stmt.Receiver.Type,
@@ -2272,18 +2246,15 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 	case *parser.NilLiteral:
 		return NilValue{}, nil
 
-	case *parser.TupleLiteral:
-		values := make([]Value, 0, len(expr.Values))
-
-		for _, e := range expr.Values {
-			v, err := i.EvalExpression(e)
-			if err != nil {
-				return NilValue{}, err
-			}
-			values = append(values, v)
+	case parser.TypeNode:
+		ti, err := i.resolveTypeNode(expr)
+		if err != nil {
+			return NilValue{}, err
 		}
 
-		return TupleValue{Values: values}, nil
+		return TypeValue{
+			TypeName: ti,
+		}, nil
 
 	case *parser.MemberExpression:
 		leftVal, err := i.EvalExpression(expr.Left)
@@ -2813,7 +2784,7 @@ func (i *Interpreter) evalArrayLiteral(expr *parser.ArrayLiteral) (Value, error)
 	return ArrayValue{
 		Elements: elements,
 		ElemType: elemType,
-		Size:     sizeFromType(ti, elements),
+		Capacity: capacityFromType(ti, elements),
 		Fixed:    ti.Kind == TypeFixedArray,
 	}, nil
 }
@@ -3070,17 +3041,33 @@ func (i *Interpreter) evalTypeCast(target *TypeInfo, arg parser.Expression, node
 
 func (i *Interpreter) evalArgs(exprs []parser.Expression) ([]Value, error) {
 	args := []Value{}
-	for _, a := range exprs {
-		v, err := i.EvalExpression(a)
-		if err != nil {
-			return nil, err
-		}
-		if t, ok := v.(TupleValue); ok {
-			args = append(args, t.Values...)
-		} else {
+
+	for _, arg := range exprs {
+		switch arg := arg.(type) {
+		case *parser.SpreadExpression:
+			v, err := i.EvalExpression(arg.Expression)
+			if err != nil {
+				return nil, err
+			}
+
+			slice, ok := v.(ArrayValue)
+			if !ok || slice.Fixed {
+				return nil, NewRuntimeError(arg, fmt.Sprintf("spreading expects slices, but tried to spread '%s'", i.typeInfoFromValue(v).Name))
+			}
+
+			for _, elem := range slice.Elements {
+				args = append(args, elem)
+			}
+		default:
+			v, err := i.EvalExpression(arg)
+			if err != nil {
+				return nil, err
+			}
+
 			args = append(args, v)
 		}
 	}
+
 	return args, nil
 }
 
@@ -3128,19 +3115,38 @@ func (i *Interpreter) evalFuncCall(expr *parser.FuncCall) (Value, error) {
 }
 
 func (i *Interpreter) callFunction(fn *Func, args []Value, callNode parser.Node) (Value, error) {
-	if len(fn.Params) != len(args) {
-		return ErrorValue{
-			V: NewRuntimeError(callNode,
-				fmt.Sprintf("expected %d args, got %d",
-					len(fn.Params), len(args))),
-		}, nil
+	paramCount := len(fn.Params)
+	argCount := len(args)
+
+	isVariadic := false
+	if paramCount > 0 && fn.Params[paramCount-1].Variadic {
+		isVariadic = true
 	}
 
-	// new env
+	if !isVariadic {
+		if argCount != paramCount {
+			return ErrorValue{
+				V: NewRuntimeError(callNode, fmt.Sprintf("expected %d args, got %d", paramCount, argCount)),
+			}, nil
+		}
+	} else {
+		fixedCount := paramCount - 1
+		if argCount < fixedCount {
+			return ErrorValue{
+				V: NewRuntimeError(callNode, fmt.Sprintf("expected atleast %d args, got %d", fixedCount, argCount)),
+			}, nil
+		}
+	}
+
 	newEnv := NewEnvironment(fn.Env)
 
-	// bind params
-	for idx, param := range fn.Params {
+	fixedCount := paramCount
+	if isVariadic {
+		fixedCount = paramCount - 1
+	}
+
+	for idx := 0; idx < fixedCount; idx++ {
+		param := fn.Params[idx]
 		val := args[idx]
 
 		if param.Type != nil {
@@ -3153,11 +3159,52 @@ func (i *Interpreter) callFunction(fn *Func, args []Value, callNode parser.Node)
 
 			val, err = i.assignWithType(callNode, val, expected)
 			if err != nil {
-				return NilValue{}, NewRuntimeError(callNode, fmt.Sprintf("param '%s' expected '%s' but got '%s'", param.Name.Value, expected.Name, actual.Name))
+				return ErrorValue{
+					V: NewRuntimeError(callNode, fmt.Sprintf("param '%s' expected '%s' but got '%s'", param.Name.Value, expected.Name, actual.Name)),
+				}, nil
 			}
 		}
 
 		newEnv.Define(param.Name.Value, val)
+	}
+
+	if isVariadic {
+		variadicParam := fn.Params[paramCount-1]
+
+		expectedSliceType, err := i.resolveTypeNode(variadicParam.Type)
+		if err != nil {
+			return NilValue{}, err
+		}
+
+		// expectedSliceType should already be []T
+		elemType := expectedSliceType.Elem
+
+		var elements []Value
+
+		for idx := fixedCount; idx < argCount; idx++ {
+			v := args[idx]
+
+			actual := unwrapAlias(i.typeInfoFromValue(v))
+			v, err = i.assignWithType(callNode, v, elemType)
+			if err != nil {
+				return NilValue{}, NewRuntimeError(callNode,
+					fmt.Sprintf("variadic param '%s' expected '%s' but got '%s'",
+						variadicParam.Name.Value,
+						elemType.Name,
+						actual.Name))
+			}
+
+			elements = append(elements, v)
+		}
+
+		sliceValue := ArrayValue{
+			Elements: elements,
+			ElemType: elemType,
+			Capacity: len(elements),
+			Fixed:    false,
+		}
+
+		newEnv.Define(variadicParam.Name.Value, sliceValue)
 	}
 
 	// execute

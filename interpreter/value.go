@@ -130,7 +130,7 @@ func (t TupleValue) String() string {
 }
 
 type Func struct {
-	Params   []*parser.ParametersClause
+	Params   []*parser.Param
 	Body     []parser.Statement
 	Env      *Environment
 	TypeName *TypeInfo
@@ -233,7 +233,7 @@ func (e ErrorValue) String() string {
 type ArrayValue struct {
 	Elements []Value
 	ElemType *TypeInfo
-	Size int
+	Capacity int
 	Fixed    bool
 }
 
@@ -312,7 +312,7 @@ func (m MapValue) String() string {
 		parts = append(parts, fmt.Sprintf("%s: %s", k.String(), v.String()))
 	}
 
-	return fmt.Sprintf("map[%s]%s{%s}", m.KeyType.Name, m.ValueType.Name, strings.Join(parts, ", "))
+	return fmt.Sprintf("map{%s}", strings.Join(parts, ", "))
 }
 
 type EnumValue struct {
@@ -572,10 +572,10 @@ func (i *Interpreter) typeInfoFromValue(v Value) *TypeInfo {
 	case ArrayValue:
 		if v.Fixed {
 			return &TypeInfo{
-				Name: fmt.Sprintf("[%d]%s", v.Size, v.ElemType.Name),
+				Name: fmt.Sprintf("[%d]%s", v.Capacity, v.ElemType.Name),
 				Kind: TypeFixedArray,
 				Elem: v.ElemType,
-				Size: v.Size,
+				Size: v.Capacity,
 			}
 		}
 
@@ -634,8 +634,8 @@ func (i *Interpreter) defaultValueFromTypeInfo(node parser.Statement, ti *TypeIn
 		if ti.Elem == nil {
 			return NilValue{}, NewRuntimeError(node, "array type missing element type")
 		}
-		
-		return ArrayValue{Elements: make([]Value, ti.Size), ElemType: ti.Elem, Size: ti.Size, Fixed: true}, nil
+
+		return ArrayValue{Elements: make([]Value, ti.Size), ElemType: ti.Elem, Capacity: ti.Size, Fixed: true}, nil
 	case TypeStruct:
 		return &StructValue{
 			TypeName: ti,
@@ -653,7 +653,7 @@ func (i *Interpreter) defaultValueFromTypeInfo(node parser.Statement, ti *TypeIn
 		}, nil
 	case TypeFunc:
 		return &Func{
-			Params:   make([]*parser.ParametersClause, 0),
+			Params:   make([]*parser.Param, 0),
 			Body:     make([]parser.Statement, 0),
 			Env:      i.env,
 			TypeName: ti,

@@ -200,16 +200,17 @@ type IfStatement struct {
 	Alternative []Statement // optional else block
 }
 
-type ParametersClause struct {
+type Param struct {
 	NodeBase
-	Type TypeNode
-	Name *Identifier
+	Type     TypeNode
+	Name     *Identifier
+	Variadic bool
 }
 
 type FuncStatement struct {
 	NodeBase
 	Name        *Identifier
-	Params      []*ParametersClause
+	Params      []*Param
 	Body        []Statement
 	ReturnTypes []TypeNode
 }
@@ -222,7 +223,7 @@ type FuncCall struct {
 
 type FuncLiteral struct {
 	NodeBase
-	Params      []*ParametersClause
+	Params      []*Param
 	Body        []Statement
 	ReturnTypes []TypeNode
 }
@@ -237,7 +238,7 @@ type MethodStatement struct {
 	NodeBase
 	Name        *Identifier
 	Receiver    *Receiver
-	Params      []*ParametersClause
+	Params      []*Param
 	Body        []Statement
 	ReturnTypes []TypeNode
 }
@@ -376,11 +377,6 @@ type NilLiteral struct {
 	NodeBase
 }
 
-type TupleLiteral struct {
-	NodeBase
-	Values []Expression
-}
-
 type StructLiteral struct {
 	NodeBase
 	TypeName *Identifier
@@ -437,4 +433,9 @@ type InExpression struct {
 	NodeBase
 	Left  Expression
 	Right Expression
+}
+
+type SpreadExpression struct {
+	NodeBase
+	Expression Expression
 }

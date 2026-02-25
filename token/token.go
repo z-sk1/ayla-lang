@@ -27,6 +27,7 @@ const (
 	ASTERISK = "*"
 	MOD      = "%"
 	WALRUS   = "WALRUS"
+	ELLIPSES = "ELLIPSES"
 
 	EQ     = "EQ"
 	NOT_EQ = "NOT_EQ"

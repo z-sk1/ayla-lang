@@ -116,6 +116,13 @@ func (l *Lexer) peekChar() byte {
 	}
 }
 
+func (l *Lexer) peekSecondChar() byte {
+	if l.readPosition+1 >= len(l.input) {
+		return 0
+	}
+	return l.input[l.readPosition+1]
+}
+
 func (l *Lexer) skipWhitespace() {
 	for l.ch == ' ' || l.ch == '\t' || l.ch == '\r' {
 		l.readChar()
@@ -196,7 +203,27 @@ func (l *Lexer) NextToken() token.Token {
 		}
 
 	case '.':
-		tok = token.Token{Type: token.DOT, Literal: ".", Line: l.line, Column: l.column}
+		if l.peekChar() == '.' && l.peekSecondChar() == '.' {
+			line := l.line
+			col := l.column
+
+			l.readChar() // consume second '.'
+			l.readChar() // consume third '.'
+
+			tok = token.Token{
+				Type:    token.ELLIPSES,
+				Literal: "...",
+				Line:    line,
+				Column:  col,
+			}
+		} else {
+			tok = token.Token{
+				Type:    token.DOT,
+				Literal: ".",
+				Line:    l.line,
+				Column:  l.column,
+			}
+		}
 	case '*':
 		tok = token.Token{Type: token.ASTERISK, Literal: "*", Line: l.line, Column: l.column}
 	case '%':
