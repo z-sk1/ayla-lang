@@ -42,6 +42,7 @@ const (
 	MEMBER      // p.x
 	CALL        // ()
 	INDEX       // []
+	POSTFIX     // ...
 )
 
 var precedences = map[token.TokenType]int{
@@ -67,6 +68,7 @@ var precedences = map[token.TokenType]int{
 	token.DOT:      MEMBER,
 	token.LPAREN:   CALL,
 	token.LBRACKET: INDEX,
+	token.ELLIPSES: POSTFIX,
 }
 
 type VarStatement struct {
@@ -307,21 +309,22 @@ type ReturnStatement struct {
 	Values []Expression
 }
 
-type ArrayLiteral struct {
+type CompositeLiteral struct {
 	NodeBase
-	Type     TypeNode
-	Elements []Expression
-}
-
-type MapLiteral struct {
-	NodeBase
-	Type  TypeNode
-	Pairs []MapPair
+	Type     TypeNode              // works for Foo, []int, map[string]int, etc.
+	Elements []Expression          // for slice/array
+	Fields   map[string]Expression // for struct
+	Pairs    []MapPair             // for map
 }
 
 type MapPair struct {
 	Key   Expression
 	Value Expression
+}
+
+type AnonymousStructLiteral struct {
+	NodeBase
+	Fields map[string]Expression
 }
 
 type IndexExpression struct {
@@ -375,17 +378,6 @@ type BoolLiteral struct {
 
 type NilLiteral struct {
 	NodeBase
-}
-
-type StructLiteral struct {
-	NodeBase
-	TypeName *Identifier
-	Fields   map[string]Expression
-}
-
-type AnonymousStructLiteral struct {
-	NodeBase
-	Fields map[string]Expression
 }
 
 type MemberExpression struct {

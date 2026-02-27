@@ -1,7 +1,7 @@
 # ayla lang
 <img width="512" height="512" alt="ayla-512" src="https://github.com/user-attachments/assets/1a266fdd-0d0d-4f95-83fa-1fd5d7bca0f9" />
 
-ayla lang is a small interpreted language written in go, designed to make you forget everything
+ayla lang is a statically typed interpreted language written in go, designed to make you forget everything
 
 *Because f-ck you.* - Linus Torvalds
 
@@ -28,25 +28,24 @@ See [INSTRUCTIONS.md](./INSTRUCTIONS.md) for full step-by-step instructions for 
 ---
 
 ## built in functions!`
-- `put(...)` – prints values to stdout
-- `putln(...)` — prints values to stdout and adds '\n' at the end
-- `scanln(x)` – scans console input after clicking enter and stores it in variable
-- `scankey(x)` – scans key press in console and stores it in variable  
-- `toBool(x)` – parses a value to boolean
-- `toString(x)` – parses a value to string
-- `toInt(x)` – parses a value to integer
-- `toFloat(x)` – parses a value to float
-- `toArr(x)` – parses a value to array
-- `typeof(x)` – returns type of value as string
-- `len(x)` – returns length of arrays or strings
-- `push(arr, val)` – append to array
-- `pop(arr)` – remove and return last element
-- `insert(arr, index, val)` – insert value
-- `remove(arr, index)` – remove element at index
-- `clear(arr)` – remove all elements
+- `put(t ...thing)` – prints values to stdout
+- `putln(t ...thing)` — prints values to stdout and adds '\n' at the end
+- `explode(t ...thing)` — spits out a runtime error containing the message in the parameter 
+- `scanln(t ...thing)` – scans console input after clicking enter 
+- `scankey(t ...thing)` – scans key press in console
+- `toBool(t thing)` – parses a value to boolean
+- `toString(t thing)` – parses a value to string
+- `toInt(t thing)` – parses a value to integer
+- `toFloat(t thing)` – parses a value to float
+- `typeof(t thing)` – returns type of value as string
+- `len(t thing)` – returns length of arrays or slices or strings or maps
+- `cap(t thing)` – returns capacity of arrays or slices
+- `make(t Type, size ...int)` – creates and returns a slice or map
+- `append(slice []Type, t ...thing)` – appends a set of values to a slice then returns the final slice  
+- `delete(m map[Type]Type, key thing)`
 - `wait(ms)` – wait for a duration in milliseconds
-- `randi()` or `randi(max)` or `randi(min, max)`
-- `randf()` or `randf(max)` or `randf(min, max)`
+- `randi(range ...int)` – gives a random integer based off a range 
+- `randf(range ...int)` – gives a random float based off a range 
 
 See [docs/builtins.md](docs/builtins.md) for more about built-in functions.
 
@@ -55,6 +54,7 @@ See [docs/builtins.md](docs/builtins.md) for more about built-in functions.
 - `float()` – converts value to float
 - `string()` – converts value to string
 - `bool()` – converts value to bool
+- `error()` – converts a string to an error 
 
 # the features
 
@@ -561,9 +561,7 @@ with a {
     }
 }
 ```
-
-## functions
-
+# functions
 to declare a function use `fun`
 
 declare them and call them like this
@@ -577,10 +575,13 @@ hi()
 ```
 > output: hi
 
-return has been renamed to `back`, haha
+ayla requires static typing so you need to specify parameter types
+
+
+also return has been renamed to `back`, haha
 
 ```ayla
-fun add(x, y) {
+fun add(x int, y int) (int) {
     back x + y
 }
 
@@ -588,19 +589,10 @@ put(add(5, 7))
 ```
 output: 12
 
-you **can** have a designated return type like this
-```ayla
-fun add(x, y) (int) {
-    back x + y
-}
-
-putln(add(4, 2))
-```
-> output: 6
 
 ayla also supports multiple return values
 ```ayla
-fun operation(x, y) (int, int) {
+fun operation(x int, y int) (int, int) {
     back x + y, x - y
 }
 
@@ -608,7 +600,7 @@ putln(operation(4, 5))
 ```
 > output: 9 -1
 
-## methods
+# methods
 methods are functions that are attached to a type
 
 declare them and call them like this
@@ -645,7 +637,7 @@ x.greet()
 ```
 > output: Hello Ziad
 
-also exactly like functions they allow type annotations and multiple return types
+also exactly like functions they require parameter and return types and allow multiple return types
 ```ayla
 type Person struct {
     Name string

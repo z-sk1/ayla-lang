@@ -32,7 +32,7 @@ func (e ParseError) Error() string {
 		e.Token.Literal = "nothing"
 	}
 
-	return fmt.Sprintf("parse error at %d:%d: %s (got %s)", e.Line, e.Column, e.Message, e.Token.Literal)
+	return fmt.Sprintf("syntax error at %d:%d: %s (got %s)", e.Line, e.Column, e.Message, e.Token.Literal)
 }
 
 func (p *Parser) Errors() []error {
@@ -316,6 +316,17 @@ func (p *Parser) parseStatement() Statement {
 		// function call
 		expr := p.parseExpression(LOWEST)
 		return &ExpressionStatement{NodeBase: NodeBase{Token: p.curTok}, Expression: expr}
+	case token.RPAREN:
+		p.addError("unexpected ')'")
+		return nil
+
+	case token.RBRACE:
+		p.addError("unexpected '}'")
+		return nil
+
+	case token.RBRACKET:
+		p.addError("unexpected ']'")
+		return nil
 	}
 	return nil
 }
@@ -1033,134 +1044,6 @@ func (p *Parser) parseFuncType() TypeNode {
 	return typ
 }
 
-func (p *Parser) parseArrayLiteral(typ TypeNode) Expression {
-	lit := &ArrayLiteral{
-		NodeBase: NodeBase{Token: p.curTok},
-		Type:     typ,
-	}
-
-	p.nextToken()
-
-	if p.curTok.Type == token.RBRACE {
-		return lit
-	}
-
-	lit.Elements = append(lit.Elements, p.parseExpression(LOWEST))
-
-	for p.peekTok.Type == token.COMMA {
-		p.nextToken()
-		p.nextToken()
-		lit.Elements = append(lit.Elements, p.parseExpression(LOWEST))
-	}
-
-	if p.peekTok.Type != token.RBRACE {
-		p.addError("expected '}'")
-		return nil
-	}
-
-	p.nextToken() // move to '}'
-	return lit
-}
-
-func (p *Parser) parseIndexAssignment() *IndexAssignmentStatement {
-	stmt := &IndexAssignmentStatement{}
-	stmt.NodeBase = NodeBase{Token: p.curTok}
-
-	// left ident
-	left := &Identifier{NodeBase: NodeBase{Token: p.curTok}, Value: p.curTok.Literal}
-
-	p.nextToken() // [
-
-	p.nextToken() // index
-	idx := p.parseExpression(LOWEST)
-
-	if p.peekTok.Type != token.RBRACKET {
-		p.addError("expected ']' to close index")
-		return nil
-	}
-	p.nextToken() // ]
-
-	// expect '='
-	if p.peekTok.Type != token.ASSIGN {
-		stmt.Left = left
-		stmt.Index = idx
-		stmt.Value = nil
-		return stmt
-	}
-	p.nextToken() // =
-
-	p.nextToken() // value
-	val := p.parseExpression(LOWEST)
-
-	stmt.Left = left
-	stmt.Index = idx
-	stmt.Value = val
-
-	return stmt
-}
-
-func (p *Parser) parseStructLiteral(left Expression) Expression {
-	ident, ok := left.(*Identifier)
-	if !ok {
-		p.addError("struct literals must start with identifiers")
-		return nil
-	}
-
-	lit := &StructLiteral{
-		NodeBase: NodeBase{Token: p.curTok},
-		TypeName: ident,
-		Fields:   make(map[string]Expression),
-	}
-
-	p.nextToken() // move to '{'
-	p.nextToken() // move inside struct
-	p.consumeTerminators()
-
-	// empty struct {}
-	if p.curTok.Type == token.RBRACE {
-		return lit
-	}
-
-	for {
-		if p.curTok.Type != token.IDENT {
-			p.addError("expected field names in struct literal")
-			return nil
-		}
-
-		fieldName := p.curTok.Literal
-
-		if p.peekTok.Type != token.COLON {
-			p.addError("expected ':' after field name")
-			return nil
-		}
-
-		p.nextToken() // :
-		p.nextToken() // value
-		lit.Fields[fieldName] = p.parseExpression(LOWEST)
-		p.nextToken()
-
-		p.consumeTerminators()
-
-		if p.curTok.Type == token.COMMA {
-			p.nextToken()
-			p.consumeTerminators()
-			if p.curTok.Type == token.RBRACE {
-				break
-			}
-			continue
-		}
-
-		if p.curTok.Type == token.RBRACE {
-			break
-		}
-
-		p.addError("expected ',' or '}' after struct field")
-		return nil
-	}
-
-	return lit
-}
-
 func (p *Parser) parseAnonymousStructLiteral() Expression {
 	lit := &AnonymousStructLiteral{
 		NodeBase: NodeBase{Token: p.curTok},
@@ -1215,6 +1098,115 @@ func (p *Parser) parseAnonymousStructLiteral() Expression {
 	return lit
 }
 
+func (p *Parser) parseCompositeLiteral(typ TypeNode) Expression {
+
+	lit := &CompositeLiteral{
+		NodeBase: NodeBase{Token: p.curTok}, // '{'
+		Type:     typ,
+		Elements: []Expression{},
+		Fields:   make(map[string]Expression),
+		Pairs:    []MapPair{},
+	}
+
+	// move INSIDE the braces
+	p.nextToken()
+
+	p.consumeTerminators()
+
+	if p.curTok.Type == token.RBRACE {
+		return lit
+	}
+
+	for {
+		// ---- Parse one entry ----
+
+		if p.curTok.Type == token.IDENT && p.peekTok.Type == token.COLON {
+			// Struct field
+			fieldName := p.curTok.Literal
+
+			p.nextToken() // move to ':'
+			p.nextToken() // move to value
+
+			lit.Fields[fieldName] = p.parseExpression(LOWEST)
+
+		} else {
+			first := p.parseExpression(LOWEST)
+
+			if p.peekTok.Type == token.COLON {
+				// Map pair
+				p.nextToken() // ':'
+				p.nextToken() // value
+
+				value := p.parseExpression(LOWEST)
+
+				lit.Pairs = append(lit.Pairs, MapPair{
+					Key:   first,
+					Value: value,
+				})
+			} else {
+				// Element
+				lit.Elements = append(lit.Elements, first)
+			}
+		}
+
+		p.consumeTerminators()
+
+		if p.peekTok.Type == token.COMMA {
+			p.nextToken() // ,
+			p.nextToken() // next element
+			p.consumeTerminators()
+			continue
+		}
+
+		if p.peekTok.Type == token.RBRACE {
+			p.nextToken() // move to '}'
+			break
+		}
+
+		p.addError("expected ',' or '}' in composite literal")
+		return nil
+	}
+
+	return lit
+}
+
+func (p *Parser) parseIndexAssignment() *IndexAssignmentStatement {
+	stmt := &IndexAssignmentStatement{}
+	stmt.NodeBase = NodeBase{Token: p.curTok}
+
+	// left ident
+	left := &Identifier{NodeBase: NodeBase{Token: p.curTok}, Value: p.curTok.Literal}
+
+	p.nextToken() // [
+
+	p.nextToken() // index
+	idx := p.parseExpression(LOWEST)
+
+	if p.peekTok.Type != token.RBRACKET {
+		p.addError("expected ']' to close index")
+		return nil
+	}
+	p.nextToken() // ]
+
+	// expect '='
+	if p.peekTok.Type != token.ASSIGN {
+		stmt.Left = left
+		stmt.Index = idx
+		stmt.Value = nil
+		return stmt
+	}
+	p.nextToken() // =
+
+	p.nextToken() // value
+	val := p.parseExpression(LOWEST)
+
+	stmt.Left = left
+	stmt.Index = idx
+	stmt.Value = val
+
+	return stmt
+}
+
 func (p *Parser) parseMemberAssignment() *MemberAssignmentStatement {
 	// p
 	obj := &Identifier{
@@ -1251,84 +1243,6 @@ func (p *Parser) parseMemberAssignment() *MemberAssignmentStatement {
 		Field:    field,
 		Value:    val,
 	}
-}
-
-func (p *Parser) parseMapLiteral(typ TypeNode) Expression {
-	lit := &MapLiteral{
-		NodeBase: NodeBase{Token: p.curTok}, // '{'
-		Type:     typ,
-	}
-
-	var pairs []MapPair
-
-	p.nextToken() // move past '{'
-	p.consumeTerminators()
-
-	if p.curTok.Type == token.RBRACE {
-		lit.Pairs = pairs
-		return lit
-	}
-
-	for {
-		p.consumeTerminators()
-
-		key := p.parseExpression(LOWEST)
-		if key == nil {
-			p.addError("invalid map key expression")
-			return nil
-		}
-
-		p.consumeTerminators()
-
-		if p.peekTok.Type != token.COLON {
-			p.addError("expected ':' after map key")
-			return nil
-		}
-
-		p.nextToken() // :
-		p.nextToken() // move to value
-
-		p.consumeTerminators()
-
-		value := p.parseExpression(LOWEST)
-		if value == nil {
-			p.addError("invalid map value expression")
-			return nil
-		}
-
-		pairs = append(pairs, MapPair{
-			Key:   key,
-			Value: value,
-		})
-
-		p.consumeTerminators()
-
-		if p.peekTok.Type != token.COMMA {
-			p.nextToken()
-			break
-		}
-
-		p.nextToken() // ,
-		p.nextToken() // move to next key or '}'
-
-		p.consumeTerminators()
-
-		if p.curTok.Type == token.RBRACE {
-			break
-		}
-	}
-	p.consumeTerminators()
-
-	if p.curTok.Type != token.RBRACE {
-		if p.peekTok.Type != token.RBRACE {
-			p.addError("expected '}' after map literal")
-			return nil
-		}
-		p.nextToken() // move to '}'
-	}
-
-	lit.Pairs = pairs
-	return lit
 }
 
 func (p *Parser) parseEnumStatement() *EnumStatement {
@@ -2237,6 +2151,13 @@ func (p *Parser) parseExpression(precedence int) Expression {
 			p.nextToken()
 			left = p.parseDotExpression(left)
 
+		case token.ELLIPSES:
+		p.nextToken()
+			left = &SpreadExpression{
+				NodeBase:   NodeBase{Token: p.curTok},
+				Expression: left,
+			}
+
 		case token.IN:
 			p.nextToken()
 			right := p.parseExpression(LOWEST)
@@ -2404,7 +2325,12 @@ func (p *Parser) parsePrimary() Expression {
 		ident := &Identifier{NodeBase: NodeBase{Token: p.curTok}, Value: p.curTok.Literal}
 
 		if p.peekTok.Type == token.LBRACE && p.isTypeName(ident.Value) {
-			return p.parseStructLiteral(ident)
+			typ := &IdentType{
+				NodeBase: NodeBase{Token: p.curTok},
+				Name:     ident.Value,
+			}
+			p.nextToken()
+			return p.parseCompositeLiteral(typ)
 		}
 
 		return ident
@@ -2429,7 +2355,7 @@ func (p *Parser) parsePrimary() Expression {
 		}
 
 		p.nextToken()
-		return p.parseArrayLiteral(typ)
+		return p.parseCompositeLiteral(typ)
 
 	case token.MAP:
 		typ := p.parseType()
@@ -2440,7 +2366,7 @@ func (p *Parser) parsePrimary() Expression {
 		}
 
 		p.nextToken()
-		return p.parseMapLiteral(typ)
+		return p.parseCompositeLiteral(typ)
 
 	default:
 		return nil

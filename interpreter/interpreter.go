@@ -1197,7 +1197,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		}
 
 		if stmt.Value != nil {
-			val, err = i.evalExprWithExpectedType(stmt.Value, expectedTI)
+			val, err = i.EvalExpression(stmt.Value)
 		} else if expectedTI != nil {
 			val, err = i.defaultValueFromTypeInfo(stmt, expectedTI)
 			if err != nil {
@@ -1480,7 +1480,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		}
 
 		if stmt.Value != nil {
-			val, err = i.evalExprWithExpectedType(stmt.Value, expectedTI)
+			val, err = i.EvalExpression(stmt.Value)
 		} else if expectedTI != nil {
 			val, err = i.defaultValueFromTypeInfo(stmt, expectedTI)
 			if err != nil {
@@ -2287,11 +2287,54 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 
 		return v, nil
 
-	case *parser.ArrayLiteral:
-		return i.evalArrayLiteral(expr)
+	case *parser.CompositeLiteral:
+		ti, err := i.resolveTypeNode(expr.Type)
+		if err != nil {
+			return ErrorValue{
+				V: err,
+			}, nil
+		}
+		return i.evalCompositeLiteral(expr, ti)
+	case *parser.AnonymousStructLiteral:
+		fields := make(map[string]Value)
+		fieldTypes := make(map[string]*TypeInfo)
 
-	case *parser.MapLiteral:
-		return i.evalMapLiteral(expr)
+		for name, e := range expr.Fields {
+			v, err := i.EvalExpression(e)
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			if expected, ok := fieldTypes[name]; ok {
+				actualTI := unwrapAlias(i.typeInfoFromValue(v))
+				expectedTI := unwrapAlias(expected)
+
+				if !(typesAssignable(actualTI, expectedTI)) {
+					return ErrorValue{
+						V: NewRuntimeError(
+							expr,
+							fmt.Sprintf(
+								"field '%s' expects %v but got %v",
+								name,
+								expected.Name,
+								string(v.Type()),
+							),
+						),
+					}, nil
+				}
+			}
+
+			fields[name] = v
+			fieldTypes[name] = i.typeInfoFromValue(v)
+		}
+
+		return &StructValue{
+			TypeName: &TypeInfo{
+				Name:   "<anon>",
+				Fields: fieldTypes,
+			},
+			Fields: fields,
+		}, nil
 
 	case *parser.FuncLiteral:
 		paramTypes := make([]*TypeInfo, 0)
@@ -2374,115 +2417,6 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 		}
 
 		return val, nil
-
-	case *parser.StructLiteral:
-		val, ok := i.typeEnv[expr.TypeName.Value]
-		if !ok {
-			return ErrorValue{
-				V: NewRuntimeError(expr, fmt.Sprintf("unknown struct type %s", expr.TypeName.Value)),
-			}, nil
-		}
-
-		structTI, err := unwrapStructType(val)
-		if err != nil {
-			return ErrorValue{
-				V: NewRuntimeError(expr, err.Error()),
-			}, nil
-		}
-
-		if structTI.Kind != TypeStruct {
-			return ErrorValue{
-				V: NewRuntimeError(expr, fmt.Sprintf("%s is not a struct type", structTI.Name)),
-			}, nil
-		}
-
-		fields := make(map[string]Value)
-
-		for name, e := range expr.Fields {
-			expectedType, ok := structTI.Fields[name]
-			if !ok {
-				return ErrorValue{
-					V: NewRuntimeError(
-						expr,
-						fmt.Sprintf(
-							"unknown field '%s' in struct %s",
-							name,
-							structTI.Name,
-						),
-					),
-				}, nil
-			}
-
-			v, err := i.EvalExpression(e)
-			if err != nil {
-				return NilValue{}, err
-			}
-
-			actualTI := unwrapAlias(i.typeInfoFromValue(v))
-			expectedTI := unwrapAlias(expectedType)
-
-			if !(typesAssignable(actualTI, expectedTI)) {
-				return ErrorValue{
-					V: NewRuntimeError(
-						expr,
-						fmt.Sprintf(
-							"field '%s' expects %v but got %v",
-							name,
-							expectedType.Name,
-							v.Type(),
-						),
-					),
-				}, nil
-			}
-
-			fields[name] = v
-		}
-
-		return &StructValue{
-			TypeName: structTI,
-			Fields:   fields,
-		}, nil
-
-	case *parser.AnonymousStructLiteral:
-		fields := make(map[string]Value)
-		fieldTypes := make(map[string]*TypeInfo)
-
-		for name, e := range expr.Fields {
-			v, err := i.EvalExpression(e)
-			if err != nil {
-				return NilValue{}, err
-			}
-
-			if expected, ok := fieldTypes[name]; ok {
-				actualTI := unwrapAlias(i.typeInfoFromValue(v))
-				expectedTI := unwrapAlias(expected)
-
-				if !(typesAssignable(actualTI, expectedTI)) {
-					return ErrorValue{
-						V: NewRuntimeError(
-							expr,
-							fmt.Sprintf(
-								"field '%s' expects %v but got %v",
-								name,
-								expected.Name,
-								string(v.Type()),
-							),
-						),
-					}, nil
-				}
-			}
-
-			fields[name] = v
-			fieldTypes[name] = i.typeInfoFromValue(v)
-		}
-
-		return &StructValue{
-			TypeName: &TypeInfo{
-				Name:   "<anon>",
-				Fields: fieldTypes,
-			},
-			Fields: fields,
-		}, nil
 
 	case *parser.TypeAssertExpression:
 		val, err := i.EvalExpression(expr.Expr)
@@ -2692,42 +2626,73 @@ func (i *Interpreter) assignWithType(node parser.Node, v Value, expected *TypeIn
 	return v, nil
 }
 
-func (i *Interpreter) evalExprWithExpectedType(expr parser.Expression, expected *TypeInfo) (Value, error) {
-	if expected != nil {
-		expected = unwrapAlias(expected)
-	}
-
-	switch e := expr.(type) {
-
-	case *parser.ArrayLiteral:
-		if expected != nil && (expected.Kind == TypeArray || expected.Kind == TypeFixedArray) {
-			val, err := i.evalArrayLiteral(e)
-			if err != nil {
-				return NilValue{}, err
-			}
-			return val, nil
-		}
-		return i.EvalExpression(e)
-
-	case *parser.MapLiteral:
-		if expected != nil && expected.Kind == TypeMap {
-			return i.evalMapLiteral(e)
-		}
-		return i.EvalExpression(e)
-
+func (i *Interpreter) evalCompositeLiteral(expr *parser.CompositeLiteral, ti *TypeInfo) (Value, error) {
+	switch ti.Kind {
+	case TypeArray, TypeFixedArray:
+		return i.evalArrayLiteral(expr, ti)
+	case TypeMap:
+		return i.evalMapLiteral(expr, ti)
+	case TypeStruct:
+		return i.evalStructLiteral(expr, ti)
+	case TypeNamed:
+		return i.evalCompositeLiteral(expr, ti.Underlying)
 	default:
-		return i.EvalExpression(expr)
+		return nil, NewRuntimeError(expr, fmt.Sprintf("composite literals do not support '%s'", ti.Name))
 	}
 }
 
-func (i *Interpreter) evalArrayLiteral(expr *parser.ArrayLiteral) (Value, error) {
-	ti, err := i.resolveTypeNode(expr.Type)
-	if err != nil {
-		return NilValue{}, err
+func (i *Interpreter) evalStructLiteral(expr *parser.CompositeLiteral, typeInfo *TypeInfo) (Value, error) {
+	if typeInfo.Kind != TypeStruct {
+		return ErrorValue{
+			V: NewRuntimeError(expr, fmt.Sprintf("%s is not a struct type", typeInfo.Name)),
+		}, nil
 	}
 
-	ti = unwrapAlias(ti)
+	fields := make(map[string]Value)
 
+	for name, e := range expr.Fields {
+		expectedType, ok := typeInfo.Fields[name]
+		if !ok {
+			return ErrorValue{
+				V: NewRuntimeError(
+					expr,
+					fmt.Sprintf("unknown field '%s' in struct %s", name, typeInfo.Name),
+				),
+			}, nil
+		}
+
+		v, err := i.EvalExpression(e)
+		if err != nil {
+			return NilValue{}, err
+		}
+
+		actualTI := unwrapAlias(i.typeInfoFromValue(v))
+		expectedTI := unwrapAlias(expectedType)
+
+		if !typesAssignable(actualTI, expectedTI) {
+			return ErrorValue{
+				V: NewRuntimeError(
+					expr,
+					fmt.Sprintf(
+						"field '%s' expects %v but got %v",
+						name,
+						expectedType.Name,
+						v.Type(),
+					),
+				),
+			}, nil
+		}
+
+		fields[name] = v
+	}
+
+	return &StructValue{
+		TypeName: typeInfo,
+		Fields:   fields,
+	}, nil
+}
+
+func (i *Interpreter) evalArrayLiteral(expr *parser.CompositeLiteral, ti *TypeInfo) (Value, error) {
 	if ti.Kind != TypeArray && ti.Kind != TypeFixedArray {
 		return nil, NewRuntimeError(expr, "composite literal is not an array type")
 	}
@@ -2789,12 +2754,7 @@ func (i *Interpreter) evalArrayLiteral(expr *parser.ArrayLiteral) (Value, error)
 	}, nil
 }
 
-func (i *Interpreter) evalMapLiteral(expr *parser.MapLiteral) (Value, error) {
-	expected, err := i.resolveTypeNode(expr.Type)
-	if err != nil {
-		return nil, err
-	}
-
+func (i *Interpreter) evalMapLiteral(expr *parser.CompositeLiteral, expected *TypeInfo) (Value, error) {
 	if len(expr.Pairs) == 0 {
 		if expected == nil || expected.Kind != TypeMap {
 			return ErrorValue{

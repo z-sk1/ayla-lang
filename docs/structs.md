@@ -25,7 +25,7 @@ then use the `.` symbol to access the fields inside the struct
 egg name = p.Name
 egg age = p.Age
 
-explode("${name} is ${age} years old")
+put("${name} is ${age} years old")
 ```
 > output: Ziad is 13 years old
 
@@ -89,7 +89,7 @@ egg Operation = struct {
     Right: 4
 }
 
-explode("${Operation.Left} + ${Operation.Right} = ${Operation.Left + Operation.Right})
+put("${Operation.Left} + ${Operation.Right} = ${Operation.Left + Operation.Right})
 ```
 > output: 5 + 4 = 9
 
@@ -102,7 +102,7 @@ egg oper = strict {
 
 oper.Right = 10
 
-explode(oper.Right + oper.Left)
+put(oper.Right + oper.Left)
 ```
 > output: 14
 

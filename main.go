@@ -17,7 +17,7 @@ import (
 
 func main() {
 	rand.Seed(time.Now().Unix())
-
+	
 	cmds := []string{
 		"run: ayla run [--debug] [--timed] <file>, runs the ayla script",
 		"--version: ayla --version, returns the current version",

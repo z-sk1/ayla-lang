@@ -13,7 +13,7 @@ This is similar to:
 
 ```ayla
 spawn {
-    explodeln("hello from another execution")
+    putln("hello from another execution")
 }
 The program does not wait for the spawned block to finish unless explicitly blocked elsewhere.
 
@@ -32,10 +32,10 @@ Example:
 
 ```ayla
 spawn {
-    explodeln("A")
+    putln("A")
 }
 
-explodeln("B")
+putln("B")
 ```
 Possible output:
 
@@ -62,7 +62,7 @@ spawn {
 }
 
 wait(100)
-explodeln(x)
+putln(x)
 Output:
 5
 
@@ -92,7 +92,7 @@ spawn {
     scankey(key) // blocks this spawn only
 }
 
-explodeln("still running")
+putln("still running")
 ```
 
 infinite loops and spawn:
@@ -102,7 +102,7 @@ Using infinite loops inside spawn is allowed, but must be done carefully.
 ```ayla
 spawn {
     why yes {
-        explodeln("running forever")
+        putln("running forever")
         wait(1000)
     }
 }
@@ -120,7 +120,7 @@ egg timer int
 egg running bool
 egg quit bool
 
-explodeln("Press [ENTER] to start and stop stopwatch and q to quit")
+putln("Press [ENTER] to start and stop stopwatch and q to quit")
 
 spawn {
     why yes {
@@ -129,7 +129,7 @@ spawn {
             running = !running
         } elen ayla key == "q" {
             running = no
-            explodeln("Final: ${timer}s")
+            putln("Final: ${timer}s")
             quit = yes
             kitkat
         }
@@ -139,7 +139,7 @@ spawn {
 why yes {
     ayla running {
         timer = timer + 1
-        explodeln("Elapsed: ${timer}s")
+        putln("Elapsed: ${timer}s")
         wait(1000)
     } elen ayla quit {
         kitkat

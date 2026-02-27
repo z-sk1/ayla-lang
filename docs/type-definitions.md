@@ -1,30 +1,38 @@
 # type definitions
 
 ## named types
-named types are a completely new type, that have a native primitive type underneath.
+named types are a completely new type, that have another type underneath.
 
 here, `Age` has an underlying type of `int`
 ```ayla
 type Age int
 ```
 
-but you cant assign `int` to it.
+you can assign an int to it
 
 ```ayla
 type Age int
 
 egg a Age = 3
 ```
-> output: runtime error at 3:4: type mismatch: 'int' assigned to 'Age'
-
-this is because it needs to be casted to `Age`, since the variable `a` is type `Age` not int
 
 ```ayla 
 type Age int
 
-egg a Age = Age(3)
+egg a Age = 3
 
-explode(a)
+put(a)
+```
+> output: 3
+
+you can also do it without type annotation by using a type cast
+
+```ayla
+type Age int
+
+egg a = Age(3)
+
+put(a)
 ```
 > output: 3
 
@@ -50,7 +58,7 @@ type Number = int
 
 egg x Number = 5
 
-explodeln(x)
+putln(x)
 ```
 > output: 5
 

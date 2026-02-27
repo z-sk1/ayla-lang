@@ -1,5 +1,5 @@
-egg x = make([]int, 0)
+type Foo []string
 
-x = append(x, []int{1, 2, 3}...)
+egg x = Foo{"1", "hi", "wsp"}
 
-putln(x)
+putln(x[1])
