@@ -1,3 +1,0 @@
-four i := range 5 {
-    putln(i)
-}

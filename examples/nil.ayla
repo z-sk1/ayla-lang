@@ -1,5 +1,0 @@
-egg foo = nil
-
-ayla foo == nil {
-    put("wow")
-}

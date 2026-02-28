@@ -1,3 +1,0 @@
-egg rand = randi(5, 10)
-
-put("Random: ${rand}")
