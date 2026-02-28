@@ -1,7 +1,1 @@
-egg x thing = 2
-
-putln(x.(int) + 3)
-
-rock a []thing = [1, [1]]
-
-putln(a[1].([]thing)[0].(int) + 1)
+putln(1 == 1)

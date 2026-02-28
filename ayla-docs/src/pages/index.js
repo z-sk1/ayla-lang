@@ -25,7 +25,7 @@ function HomepageHeader() {
         </Heading>
 
         <p className="hero__subtitle">
-          A clean, Go-inspired language focused on clarity and simplicity.
+          A clean, statically typed programming language
         </p>
 
         <div className={styles.buttons}>

@@ -2418,6 +2418,41 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 
 		return val, nil
 
+	case *parser.SliceExpression:
+		left, err := i.EvalExpression(expr.Left)
+		if err != nil {
+			return NilValue{}, err
+		}
+		if v, ok := left.(ErrorValue); ok {
+			return v, nil
+		}
+
+		start, err := i.EvalExpression(expr.Start)
+		if err != nil {
+			return NilValue{}, err
+		}
+		if v, ok := start.(ErrorValue); ok {
+			return v, nil
+		}
+
+		end, err := i.EvalExpression(expr.End)
+		if err != nil {
+			return NilValue{}, err
+		}
+		if v, ok := end.(ErrorValue); ok {
+			return v, nil
+		}
+
+		val, err := i.evalSliceExpression(expr, left, start, end)
+		if err != nil {
+			return NilValue{}, err
+		}
+		if v, ok := val.(ErrorValue); ok {
+			return v, nil
+		}
+
+		return val, nil
+
 	case *parser.TypeAssertExpression:
 		val, err := i.EvalExpression(expr.Expr)
 		if err != nil {
@@ -2439,7 +2474,7 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 
 		if !typesAssignable(actualTI, targetTI) {
 			return ErrorValue{
-				V: NewRuntimeError(expr, fmt.Sprintf("type mismatch: %s asserted as %s", actualTI.Name, targetTI.Name)),
+				V: NewRuntimeError(expr, fmt.Sprintf("type mismatch: '%s' asserted as '%s'", actualTI.Name, targetTI.Name)),
 			}, nil
 		}
 
@@ -2674,10 +2709,10 @@ func (i *Interpreter) evalStructLiteral(expr *parser.CompositeLiteral, typeInfo 
 				V: NewRuntimeError(
 					expr,
 					fmt.Sprintf(
-						"field '%s' expects %v but got %v",
+						"field '%s' expects '%s' but got '%s'",
 						name,
 						expectedType.Name,
-						v.Type(),
+						actualTI.Name,
 					),
 				),
 			}, nil
@@ -3337,9 +3372,9 @@ func (i *Interpreter) evalIndexExpression(node parser.Expression, left, idx Valu
 
 	default:
 		var typeStr string
-		typeInt := 0
+		var typeInt int
 
-		switch int(typ.Kind) {
+		switch typ.Kind {
 		case 0:
 			typeStr = "int"
 		case 1:
@@ -3367,6 +3402,81 @@ func (i *Interpreter) evalIndexExpression(node parser.Expression, left, idx Valu
 			V: NewRuntimeError(node, fmt.Sprintf("indexing is not allowed with type: %d", typeInt)),
 		}, nil
 	}
+}
+
+func (i *Interpreter) evalSliceExpression(node parser.Expression, left, startVal, endVal Value) (Value, error) {
+	if nv, ok := left.(NamedValue); ok && nv.TypeName.Kind == TypeAny {
+		return ErrorValue{
+			V: NewRuntimeError(node,
+				"cannot slice value of type 'thing' without type assertion"),
+		}, nil
+	}
+
+	left = unwrapNamed(left)
+	typ := i.typeInfoFromValue(left)
+
+	var length int
+	switch typ.Kind {
+	case TypeArray, TypeFixedArray:
+		length = len(left.(ArrayValue).Elements)
+	case TypeString:
+		length = len([]rune(left.(StringValue).V))
+	default:
+		return ErrorValue{
+			V: NewRuntimeError(node,
+				fmt.Sprintf("slicing is not allowed with type: '%s'", typ.Name)),
+		}, nil
+	}
+
+	start := 0
+	end := length
+
+	if _, ok := startVal.(NilValue); !ok {
+		intVal, ok := startVal.(IntValue)
+		if !ok {
+			return ErrorValue{
+				V: NewRuntimeError(node, "slice start must be int"),
+			}, nil
+		}
+		start = intVal.V
+	}
+
+	if _, ok := endVal.(NilValue); !ok {
+		intVal, ok := endVal.(IntValue)
+		if !ok {
+			return ErrorValue{
+				V: NewRuntimeError(node, "slice end must be int"),
+			}, nil
+		}
+		end = intVal.V
+	}
+
+	if start < 0 || end < 0 || start > end || end > length {
+		return ErrorValue{
+			V: NewRuntimeError(node,
+				fmt.Sprintf("slice bounds out of range [%d:%d]", start, end)),
+		}, nil
+	}
+
+	switch typ.Kind {
+
+	case TypeArray, TypeFixedArray:
+		arr := left.(ArrayValue)
+		newElems := arr.Elements[start:end]
+
+		return ArrayValue{
+			Elements: newElems,
+			ElemType: arr.ElemType,
+		}, nil
+
+	case TypeString:
+		runes := []rune(left.(StringValue).V)
+		return StringValue{
+			V: string(runes[start:end]),
+		}, nil
+	}
+
+	return NilValue{}, nil
 }
 
 func (i *Interpreter) evalMemberExpression(node parser.Expression, left Value, field string) (Value, error) {

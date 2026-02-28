@@ -327,6 +327,13 @@ type AnonymousStructLiteral struct {
 	Fields map[string]Expression
 }
 
+type SliceExpression struct {
+	NodeBase
+	Left  Expression
+	Start Expression
+	End   Expression
+}
+
 type IndexExpression struct {
 	NodeBase
 	Left  Expression

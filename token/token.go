@@ -95,7 +95,7 @@ var keywords = map[string]TokenType{
 	"enum":      ENUM,
 	"ayla":      IF,
 	"elen":      ELSE,
-	"decide":    SWITCH,
+	"choose":    SWITCH,
 	"when":      CASE,
 	"otherwise": DEFAULT,
 	"with":      WITH,

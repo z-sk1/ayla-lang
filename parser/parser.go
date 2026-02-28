@@ -2041,22 +2041,56 @@ func (p *Parser) parseBlockStatement() []Statement {
 }
 
 func (p *Parser) parseIndexExpression(left Expression) Expression {
-	exp := &IndexExpression{
-		NodeBase: NodeBase{Token: p.curTok}, // '['
-		Left:     left,
-	}
+	tok := p.curTok // '['
 
-	p.nextToken() // move to index expression
-	exp.Index = p.parseExpression(LOWEST)
+	p.nextToken() // move after '['
+
+	var start Expression
+	var end Expression
+
+	if p.curTok.Type == token.COLON {
+		p.nextToken() // move to end expression or ']'
+
+		if p.curTok.Type != token.RBRACKET {
+			end = p.parseExpression(LOWEST)
+		}
+	} else {
+		start = p.parseExpression(LOWEST)
+
+		if p.peekTok.Type == token.COLON {
+			p.nextToken() // consume ':'
+			p.nextToken() // move to end expression or ']'
+
+			if p.curTok.Type != token.RBRACKET {
+				end = p.parseExpression(LOWEST)
+			}
+		} else {
+			if p.peekTok.Type != token.RBRACKET {
+				p.addError("expected ']'")
+				return nil
+			}
+			p.nextToken() // consume ']'
+
+			return &IndexExpression{
+				NodeBase: NodeBase{Token: tok},
+				Left:     left,
+				Index:    start,
+			}
+		}
+	}
 
 	if p.peekTok.Type != token.RBRACKET {
-		p.addError("expected ']'")
+		p.addError("expected ']' after slice expression")
 		return nil
 	}
-
 	p.nextToken() // consume ']'
 
-	return exp
+	return &SliceExpression{
+		NodeBase: NodeBase{Token: tok},
+		Left:     left,
+		Start:    start,
+		End:      end,
+	}
 }
 
 func (p *Parser) parseDotExpression(left Expression) Expression {
@@ -2152,7 +2186,7 @@ func (p *Parser) parseExpression(precedence int) Expression {
 			left = p.parseDotExpression(left)
 
 		case token.ELLIPSES:
-		p.nextToken()
+			p.nextToken()
 			left = &SpreadExpression{
 				NodeBase:   NodeBase{Token: p.curTok},
 				Expression: left,

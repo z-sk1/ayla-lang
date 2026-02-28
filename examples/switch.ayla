@@ -1,6 +1,6 @@
 egg x = 2
 
-decide yes {
+choose yes {
     when x == 2 {
         put("x is 2")
     }
