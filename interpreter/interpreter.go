@@ -3129,36 +3129,36 @@ func (i *Interpreter) evalTypeCast(target *TypeInfo, arg parser.Expression, node
 	}
 }
 
-func (i *Interpreter) evalArgs(exprs []parser.Expression) ([]Value, error) {
-	args := []Value{}
+func (i *Interpreter) evalArgs(args []parser.Expression) ([]Value, error) {
+	var values []Value
 
-	for _, arg := range exprs {
-		switch arg := arg.(type) {
-		case *parser.SpreadExpression:
-			v, err := i.EvalExpression(arg.Expression)
+	for _, arg := range args {
+		if spread, ok := arg.(*parser.SpreadExpression); ok {
+
+			v, err := i.EvalExpression(spread.Expression)
 			if err != nil {
 				return nil, err
 			}
 
-			slice, ok := v.(ArrayValue)
-			if !ok || slice.Fixed {
-				return nil, NewRuntimeError(arg, fmt.Sprintf("spreading expects slices, but tried to spread '%s'", i.typeInfoFromValue(v).Name))
+			arr, ok := v.(ArrayValue)
+			if !ok {
+				return nil, NewRuntimeError(spread,
+					"spread argument must be an array or slice")
 			}
 
-			for _, elem := range slice.Elements {
-				args = append(args, elem)
-			}
-		default:
-			v, err := i.EvalExpression(arg)
-			if err != nil {
-				return nil, err
-			}
-
-			args = append(args, v)
+			values = append(values, arr.Elements...)
+			continue
 		}
+
+		v, err := i.EvalExpression(arg)
+		if err != nil {
+			return nil, err
+		}
+
+		values = append(values, v)
 	}
 
-	return args, nil
+	return values, nil
 }
 
 func (i *Interpreter) evalFuncCall(expr *parser.FuncCall) (Value, error) {

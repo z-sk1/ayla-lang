@@ -1544,6 +1544,7 @@ func (p *Parser) parseMethodStatement() *MethodStatement {
 
 func (p *Parser) parseFuncParams() []*Param {
 	params := []*Param{}
+	seenVariadic := false
 
 	if p.peekTok.Type == token.RPAREN {
 		p.nextToken() // consume ')'
@@ -1563,12 +1564,18 @@ func (p *Parser) parseFuncParams() []*Param {
 			Value:    p.curTok.Literal,
 		}
 
-		// move to type
 		p.nextToken()
 
 		variadic := false
 		if p.curTok.Type == token.ELLIPSES {
 			variadic = true
+
+			if seenVariadic {
+				p.addError("only one variadic parameter allowed")
+				return nil
+			}
+
+			seenVariadic = true
 			p.nextToken()
 		}
 
@@ -1579,12 +1586,24 @@ func (p *Parser) parseFuncParams() []*Param {
 
 		paramType := p.parseType()
 
+		if variadic {
+			paramType = &ArrayType{
+				NodeBase: NodeBase{Token: paramName.Token},
+				Elem:     paramType,
+			}
+		}
+
 		params = append(params, &Param{
 			NodeBase: NodeBase{Token: paramName.Token},
 			Name:     paramName,
 			Type:     paramType,
 			Variadic: variadic,
 		})
+
+		if variadic && p.peekTok.Type == token.COMMA {
+			p.addError("variadic parameter must be last")
+			return nil
+		}
 
 		if p.peekTok.Type == token.COMMA {
 			p.nextToken() // consume comma
@@ -1731,45 +1750,6 @@ func (p *Parser) parseFuncCall() Expression {
 	call.Args = p.parseExpressionList(token.RPAREN)
 
 	return call
-}
-
-func (p *Parser) parseExpressionList(end token.TokenType) []Expression {
-	list := []Expression{}
-
-	p.nextToken()          // move past '('
-	p.consumeTerminators() // skip leading newlines
-
-	if p.curTok.Type == end {
-		return list
-	}
-
-	list = append(list, p.parseExpression(LOWEST))
-
-	for p.peekTok.Type == token.COMMA {
-		p.nextToken() // consume comma
-		p.nextToken() // move to next expression
-		p.consumeTerminators()
-
-		arg := p.parseExpression(LOWEST)
-
-		if p.peekTok.Type == token.ELLIPSES {
-			arg = &SpreadExpression{
-				Expression: arg,
-			}
-		}
-
-		list = append(list, arg)
-	}
-
-	p.nextToken()          // move forward once
-	p.consumeTerminators() // skip newlines
-
-	if p.curTok.Type != end {
-		p.addError(fmt.Sprintf("expected '%s'", end))
-		return nil
-	}
-
-	return list
 }
 
 func (p *Parser) parseReturnStatement() *ReturnStatement {
@@ -2132,6 +2112,55 @@ func (p *Parser) parseDotExpression(left Expression) Expression {
 	}
 
 	return member
+}
+
+func (p *Parser) parseExpressionList(end token.TokenType) []Expression {
+	list := []Expression{}
+
+	p.nextToken() // move past '('
+	p.consumeTerminators()
+
+	if p.curTok.Type == end {
+		return list
+	}
+
+	for {
+		expr := p.parseExpression(LOWEST)
+
+		if p.peekTok.Type == token.ELLIPSES {
+			p.nextToken()
+			expr = &SpreadExpression{
+				Expression: expr,
+			}
+		}
+
+		list = append(list, expr)
+
+		p.consumeTerminators()
+
+		if p.peekTok.Type == token.COMMA {
+			p.nextToken() // consume comma
+			p.nextToken() // move to next expression
+			p.consumeTerminators()
+
+			// allow trailing comma
+			if p.curTok.Type == end {
+				break
+			}
+
+			continue
+		}
+
+		if p.peekTok.Type == end {
+			p.nextToken() // move to ')'
+			break
+		}
+
+		p.addError(fmt.Sprintf("expected ',' or '%s'", end))
+		return nil
+	}
+
+	return list
 }
 
 func (p *Parser) parseCallExpression(callee Expression) Expression {

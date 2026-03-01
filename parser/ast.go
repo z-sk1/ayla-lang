@@ -219,8 +219,8 @@ type FuncStatement struct {
 
 type FuncCall struct {
 	NodeBase
-	Callee Expression
-	Args   []Expression
+	Callee  Expression
+	Args    []Expression
 }
 
 type FuncLiteral struct {

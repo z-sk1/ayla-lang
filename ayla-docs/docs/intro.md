@@ -6,10 +6,6 @@ ayla lang is a statically typed interpreted language written in go, designed to 
 
 # about
 
-## our team
-- **Me: z-sk1, Co-Owner**
-- **and Mregg55, Co-Owner (link: https://github.com/mregg55)**
-
 ## language server
 view the repo [here](https://github.com/z-sk1/elen)
 
