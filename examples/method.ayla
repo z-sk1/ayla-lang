@@ -3,8 +3,8 @@ type Person struct {
     Age int
 }
 
-fun (p Person) inc() (thing) {
-    back 1
+fun (p Person) getInfo() (string, int) {
+    back p.Name, p.Age
 }
 
 x := Person{
@@ -12,4 +12,6 @@ x := Person{
     Age: 13,
 }
 
-putln(x.inc() + 1)
+y := x.getInfo
+
+putln(y())

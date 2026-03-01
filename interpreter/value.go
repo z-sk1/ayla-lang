@@ -511,12 +511,15 @@ func valuesEqual(a, b Value) bool {
 	}
 }
 
-func valueTypeOf(ti *TypeInfo) ValueType {
-	for ti.Kind == TypeNamed {
-		ti = ti.Underlying
+func runtimeKind(ti *TypeInfo) TypeKind {
+	if ti.Kind == TypeNamed {
+		return ti.Underlying.Kind
 	}
+	return ti.Kind
+}
 
-	switch ti.Kind {
+func valueTypeOf(ti *TypeInfo) ValueType {
+	switch runtimeKind(ti) {
 	case TypeInt:
 		return INT
 	case TypeFloat:
@@ -537,23 +540,6 @@ func valueTypeOf(ti *TypeInfo) ValueType {
 		return FUNCTION
 	default:
 		return NIL
-	}
-}
-
-func (i *Interpreter) typeInfoFromIdent(id *parser.Identifier) *TypeInfo {
-	name := id.Value
-
-	switch name {
-	case
-		"int",
-		"float",
-		"string",
-		"bool",
-		"error",
-		"nil":
-		return i.typeEnv[name]
-	default:
-		return i.typeEnv["nil"]
 	}
 }
 

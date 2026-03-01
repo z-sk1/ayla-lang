@@ -29,7 +29,7 @@ type Variable struct {
 
 type Environment struct {
 	store    map[string]Variable
-	methods  map[*TypeInfo]map[string]*Func
+	methods  map[string]map[string]*Func
 	builtins map[string]*BuiltinFunc
 	defers   []*parser.FuncCall
 
@@ -45,7 +45,7 @@ type Interpreter struct {
 func New() *Interpreter {
 	env := &Environment{
 		store:    make(map[string]Variable),
-		methods:  make(map[*TypeInfo]map[string]*Func),
+		methods:  make(map[string]map[string]*Func),
 		builtins: make(map[string]*BuiltinFunc),
 		defers:   make([]*parser.FuncCall, 0),
 	}
@@ -132,17 +132,17 @@ func (e *Environment) Set(name string, val Value) Value {
 func (e *Environment) SetMethod(typ *TypeInfo, name string, fn *Func) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	if e.methods[typ] == nil {
-		e.methods[typ] = map[string]*Func{}
+	if e.methods[typ.Name] == nil {
+		e.methods[typ.Name] = map[string]*Func{}
 	}
-	e.methods[typ][name] = fn
+	e.methods[typ.Name][name] = fn
 }
 
 func (e *Environment) GetMethod(typ *TypeInfo, name string) (*Func, bool) {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	for env := e; env != nil; env = env.parent {
-		if m := env.methods[typ]; m != nil {
+		if m := env.methods[typ.Name]; m != nil {
 			if fn, ok := m[name]; ok {
 				return fn, true
 			}
@@ -1146,6 +1146,35 @@ func (i *Interpreter) checkFuncLiteral(fn *parser.FuncLiteral) error {
 	return nil
 }
 
+func (i *Interpreter) checkMethodStatement(fn *parser.MethodStatement) error {
+	hasValueReturn := false
+	hasEmptyReturn := false
+
+	for _, stmt := range fn.Body {
+		if r, ok := stmt.(*parser.ReturnStatement); ok {
+			if len(r.Values) > 0 {
+				hasValueReturn = true
+			} else {
+				hasEmptyReturn = true
+			}
+		}
+	}
+
+	if hasValueReturn && len(fn.ReturnTypes) == 0 {
+		return NewRuntimeError(fn, "method returns a value but has no return type")
+	}
+
+	if hasEmptyReturn && len(fn.ReturnTypes) > 0 {
+		return NewRuntimeError(fn, "missing return value")
+	}
+
+	if len(fn.ReturnTypes) > 0 && !hasValueReturn {
+		return NewRuntimeError(fn, "method must return a value")
+	}
+
+	return nil
+}
+
 func (i *Interpreter) EvalStatements(stmts []parser.Statement) (ControlSignal, error) {
 	for _, s := range stmts {
 		sig, err := i.EvalStatement(s)
@@ -1777,8 +1806,11 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 
 		expectedType := structVal.TypeName.Fields[stmt.Field.Value]
 
-		if val.Type() != valueTypeOf(expectedType) {
-			return NilValue{}, NewRuntimeError(stmt, fmt.Sprintf("field '%s' expects %v but got %v", stmt.Field.Value, expectedType, val.Type()))
+		actualTI := unwrapAlias(i.typeInfoFromValue(val))
+		expectedTI := unwrapAlias(expectedType)
+
+		if !typesAssignable(actualTI, expectedTI) {
+			return NilValue{}, NewRuntimeError(stmt, fmt.Sprintf("field '%s' expects %v but got %v", stmt.Field.Value, expectedType.Name, actualTI.Name))
 		}
 
 		structVal.Fields[stmt.Field.Value] = val
@@ -1877,10 +1909,53 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			stmt.Params...,
 		)
 
+		paramTypes := make([]*TypeInfo, 0)
+		paramNames := make([]string, 0)
+
+		returnTypes := make([]*TypeInfo, 0)
+		returnNames := make([]string, 0)
+
+		err = i.checkMethodStatement(stmt)
+		if err != nil {
+			return SignalNone{}, err
+		}
+
+		for _, typ := range stmt.ReturnTypes {
+			ti, err := i.resolveTypeNode(typ)
+			if err != nil {
+				return SignalNone{}, err
+			}
+
+			ti = unwrapAlias(ti)
+
+			returnTypes = append(returnTypes, ti)
+			paramNames = append(paramNames, ti.Name)
+		}
+
+		for _, param := range stmt.Params {
+			ti, err := i.resolveTypeNode(param.Type)
+			if err != nil {
+				return SignalNone{}, err
+			}
+
+			ti = unwrapAlias(ti)
+
+			paramTypes = append(paramTypes, ti)
+			paramNames = append(paramNames, ti.Name)
+		}
+
+		typeInfo := &TypeInfo{
+			Name:    fmt.Sprintf("fun(%s) (%s) (%s)", recvType.Name, strings.Join(paramNames, ", "), strings.Join(returnNames, ", ")),
+			Kind:    TypeFunc,
+			Returns: returnTypes,
+			Params:  paramTypes,
+		}
+
 		i.env.SetMethod(recvType, stmt.Name.Value, &Func{
-			Params: params,
-			Body:   stmt.Body,
-			Env:    i.env,
+			Params:   params,
+			Body:     stmt.Body,
+			Env:      i.env,
+			TypeName: typeInfo,
 		})
 
 		return SignalNone{}, nil
@@ -2314,10 +2389,10 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 						V: NewRuntimeError(
 							expr,
 							fmt.Sprintf(
-								"field '%s' expects %v but got %v",
+								"field '%s' expects '%s' but got '%s'",
 								name,
 								expected.Name,
-								string(v.Type()),
+								actualTI.Name,
 							),
 						),
 					}, nil
@@ -2670,6 +2745,9 @@ func (i *Interpreter) evalCompositeLiteral(expr *parser.CompositeLiteral, ti *Ty
 	case TypeStruct:
 		return i.evalStructLiteral(expr, ti)
 	case TypeNamed:
+		if ti.Underlying.Kind == TypeStruct {
+			return i.evalStructLiteral(expr, ti)
+		}
 		return i.evalCompositeLiteral(expr, ti.Underlying)
 	default:
 		return nil, NewRuntimeError(expr, fmt.Sprintf("composite literals do not support '%s'", ti.Name))
@@ -2677,21 +2755,38 @@ func (i *Interpreter) evalCompositeLiteral(expr *parser.CompositeLiteral, ti *Ty
 }
 
 func (i *Interpreter) evalStructLiteral(expr *parser.CompositeLiteral, typeInfo *TypeInfo) (Value, error) {
-	if typeInfo.Kind != TypeStruct {
+	var structType *TypeInfo
+
+	switch typeInfo.Kind {
+	case TypeStruct:
+		structType = typeInfo
+
+	case TypeNamed:
+		if typeInfo.Underlying.Kind != TypeStruct {
+			return ErrorValue{
+				V: NewRuntimeError(expr,
+					fmt.Sprintf("%s is not a struct type", typeInfo.Name)),
+			}, nil
+		}
+		structType = typeInfo.Underlying
+
+	default:
 		return ErrorValue{
-			V: NewRuntimeError(expr, fmt.Sprintf("%s is not a struct type", typeInfo.Name)),
+			V: NewRuntimeError(expr,
+				fmt.Sprintf("%s is not a struct type", typeInfo.Name)),
 		}, nil
 	}
 
 	fields := make(map[string]Value)
 
 	for name, e := range expr.Fields {
-		expectedType, ok := typeInfo.Fields[name]
+		expectedType, ok := structType.Fields[name]
 		if !ok {
 			return ErrorValue{
 				V: NewRuntimeError(
 					expr,
-					fmt.Sprintf("unknown field '%s' in struct %s", name, typeInfo.Name),
+					fmt.Sprintf("unknown field '%s' in struct %s",
+						name, typeInfo.Name),
 				),
 			}, nil
 		}
@@ -3498,11 +3593,25 @@ func (i *Interpreter) evalMemberExpression(node parser.Expression, left Value, f
 			}, nil
 		}
 
-		expectedType := obj.TypeName.Fields[field]
+		structTI := obj.TypeName
+		if structTI.Kind == TypeNamed {
+			structTI = structTI.Underlying
+		}
 
-		if val.Type() != valueTypeOf(expectedType) {
+		expectedType, ok := structTI.Fields[field]
+		if !ok {
 			return ErrorValue{
-				V: NewRuntimeError(node, fmt.Sprintf("field '%s' type '%s' should be '%s'", field, string(val.Type()), expectedType.Name)),
+				V: NewRuntimeError(node,
+					fmt.Sprintf("unknown field %s", field)),
+			}, nil
+		}
+
+		actualTI := unwrapAlias(i.typeInfoFromValue(val))
+		expectedTI := unwrapAlias(expectedType)
+
+		if !typesAssignable(actualTI, expectedTI) {
+			return ErrorValue{
+				V: NewRuntimeError(node, fmt.Sprintf("field '%s' expected '%s' but got '%s'", field, expectedType.Name, actualTI.Name)),
 			}, nil
 		}
 

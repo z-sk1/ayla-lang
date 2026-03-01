@@ -1108,7 +1108,6 @@ func (p *Parser) parseCompositeLiteral(typ TypeNode) Expression {
 		Pairs:    []MapPair{},
 	}
 
-	// move INSIDE the braces
 	p.nextToken()
 
 	p.consumeTerminators()
@@ -1117,26 +1116,19 @@ func (p *Parser) parseCompositeLiteral(typ TypeNode) Expression {
 		return lit
 	}
 
-	for {
-		// ---- Parse one entry ----
+	for p.curTok.Type != token.RBRACE {
 
 		if p.curTok.Type == token.IDENT && p.peekTok.Type == token.COLON {
-			// Struct field
 			fieldName := p.curTok.Literal
-
-			p.nextToken() // move to ':'
-			p.nextToken() // move to value
-
+			p.nextToken() // :
+			p.nextToken() // value
 			lit.Fields[fieldName] = p.parseExpression(LOWEST)
-
 		} else {
 			first := p.parseExpression(LOWEST)
 
 			if p.peekTok.Type == token.COLON {
-				// Map pair
-				p.nextToken() // ':'
+				p.nextToken() // :
 				p.nextToken() // value
-
 				value := p.parseExpression(LOWEST)
 
 				lit.Pairs = append(lit.Pairs, MapPair{
@@ -1144,7 +1136,6 @@ func (p *Parser) parseCompositeLiteral(typ TypeNode) Expression {
 					Value: value,
 				})
 			} else {
-				// Element
 				lit.Elements = append(lit.Elements, first)
 			}
 		}
@@ -1152,8 +1143,8 @@ func (p *Parser) parseCompositeLiteral(typ TypeNode) Expression {
 		p.consumeTerminators()
 
 		if p.peekTok.Type == token.COMMA {
-			p.nextToken() // ,
-			p.nextToken() // next element
+			p.nextToken() // move to comma
+			p.nextToken() // move to next element
 			p.consumeTerminators()
 			continue
 		}
