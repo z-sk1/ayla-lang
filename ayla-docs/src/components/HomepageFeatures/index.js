@@ -5,17 +5,17 @@ import styles from "./styles.module.css";
 export const FeatureList = [
   {
     title: "Simple Syntax",
-    Svg: require("@site/static/img/logo.svg").default,
+    image: require("@site/static/img/code.png").default,
     description: (
       <>
-        Ayla focuses on readability and simplicity. The syntax is inspired by
-        Go, keeping things explicit, predictable, and easy to understand.
+        Ayla focuses on readability and simplicity. The syntax is predictable,
+        and easy to understand.
       </>
     ),
   },
   {
     title: "Static Typing",
-    Svg: require("@site/static/img/logo.svg").default,
+    image: require("@site/static/img/shield.png").default,
     description: (
       <>
         Ayla uses static typing to catch errors early while keeping the language
@@ -25,21 +25,18 @@ export const FeatureList = [
   },
   {
     title: "Powered by Go",
-    Svg: require("@site/static/img/go.svg").default,
+    image: require("@site/static/img/go.png").default,
     description: (
-      <>
-        Ayla is built with Go and it mirrors alot of the philosophies and
-        patterns found in it.
-      </>
+      <>Ayla is built with Go and mirrors many of its philosophies.</>
     ),
   },
 ];
 
-function Feature({ Svg, title, description }) {
+function Feature({ image, title, description }) {
   return (
     <div className={clsx("col col--4")}>
       <div className="text--center">
-        <Svg className={styles.featureSvg} role="img" />
+        <img src={image} className={styles.featureSvg} alt={title} />
       </div>
       <div className="text--center padding-horiz--md">
         <Heading as="h3">{title}</Heading>

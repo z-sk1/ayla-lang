@@ -12,7 +12,7 @@ import { themes as prismThemes } from "prism-react-renderer";
 const config = {
   title: "Ayla",
   tagline: "A statically typed programming language",
-  favicon: "img/favicon.ico",
+  favicon: "img/logo.png",
 
   // Future flags, see https://docusaurus.io/docs/api/docusaurus-config#future
   future: {
@@ -31,6 +31,7 @@ const config = {
   projectName: "ayla-lang", // Usually your repo name.
 
   onBrokenLinks: "throw",
+  trailingSlash: true,
 
   // Even if you don't use internationalization, you can use this field to set
   // useful metadata like html lang. For example, if your site is Chinese, you
@@ -70,16 +71,15 @@ const config = {
         title: "Ayla",
         logo: {
           alt: "My Site Logo",
-          src: "img/logo.svg",
+          src: "img/logo.png",
         },
         items: [
           {
             type: "docSidebar",
             sidebarId: "tutorialSidebar",
             position: "left",
-            label: "Tutorial",
+            label: "Docs",
           },
-          { to: "/blog", label: "Blog", position: "left" },
           {
             href: "https://github.com/z-sk1/ayla-lang",
             label: "GitHub",
@@ -94,7 +94,7 @@ const config = {
             title: "Docs",
             items: [
               {
-                label: "Tutorial",
+                label: "Docs",
                 to: "/docs/intro",
               },
             ],
@@ -118,7 +118,7 @@ const config = {
             ],
           },
         ],
-        copyright: `Copyright © ${new Date().getFullYear()} My Project, Inc. Built with Docusaurus.`,
+        copyright: `Copyright © ${new Date().getFullYear()} Ayla`,
       },
       prism: {
         theme: prismThemes.github,
