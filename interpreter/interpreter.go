@@ -1,8 +1,10 @@
 package interpreter
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"math/rand"
 	"strconv"
@@ -406,6 +408,43 @@ func readKey() (rune, error) {
 	}
 
 	return rune(buf[0]), err
+}
+
+func (env *Environment) assignInput(node parser.Node, varName string, val Value, input string) error {
+	switch val.(type) {
+
+	case IntValue:
+		n, err := strconv.Atoi(input)
+		if err != nil {
+			return NewRuntimeError(node, "invalid int input")
+		}
+		env.Set(varName, IntValue{V: n})
+
+	case FloatValue:
+		f, err := strconv.ParseFloat(input, 64)
+		if err != nil {
+			return NewRuntimeError(node, "invalid float input")
+		}
+		env.Set(varName, FloatValue{V: f})
+
+	case BoolValue:
+		b, err := strconv.ParseBool(input)
+		if err != nil {
+			return NewRuntimeError(node, "invalid bool input")
+		}
+		env.Set(varName, BoolValue{V: b})
+
+	case StringValue:
+		env.Set(varName, StringValue{V: input})
+
+	case UninitializedValue, NilValue:
+		return NewRuntimeError(node, "variable must have a type before scan")
+
+	default:
+		return NewRuntimeError(node, "unsupported type for scan")
+	}
+
+	return nil
 }
 
 func initBuiltinTypes(typeEnv map[string]*TypeInfo) {
@@ -813,25 +852,51 @@ func (i *Interpreter) registerBuiltins() {
 		Name:  "putln",
 		Arity: -1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			if len(args) == 0 {
-				fmt.Println()
-				return NilValue{}, nil
-			}
 
-			if len(args) > 1 {
-				val := args[1:]
-
-				fmt.Print(args[0].String())
-
-				for _, v := range val {
-					fmt.Println(" " + v.String())
+			for i, v := range args {
+				if i > 0 {
+					fmt.Print(" ")
 				}
-
-				return NilValue{}, nil
+				fmt.Print(v.String())
 			}
 
-			fmt.Println(args[0].String())
+			fmt.Println()
+			return NilValue{}, nil
+		},
+	}
 
+	env.builtins["putf"] = &BuiltinFunc{
+		Name:  "putf",
+		Arity: -1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			if len(args) == 0 {
+				return NilValue{}, NewRuntimeError(node, "putf(format string, t ...thing) expected")
+			}
+
+			formatVal, ok := args[0].(StringValue)
+			if !ok {
+				return NilValue{}, NewRuntimeError(node, "putf(format string, t... thing) expected")
+			}
+
+			format := formatVal.V
+
+			goArgs := []any{}
+			for _, v := range args[1:] {
+				switch val := v.(type) {
+				case IntValue:
+					goArgs = append(goArgs, val.V)
+				case FloatValue:
+					goArgs = append(goArgs, val.V)
+				case StringValue:
+					goArgs = append(goArgs, val.V)
+				case BoolValue:
+					goArgs = append(goArgs, val.V)
+				default:
+					goArgs = append(goArgs, val.String())
+				}
+			}
+
+			fmt.Printf(format, goArgs...)
 			return NilValue{}, nil
 		},
 	}
@@ -855,29 +920,216 @@ func (i *Interpreter) registerBuiltins() {
 		},
 	}
 
+	env.builtins["explodef"] = &BuiltinFunc{
+		Name:  "explodef",
+		Arity: -1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			if len(args) == 0 {
+				return NilValue{}, NewRuntimeError(node, "explodef(format string, t ...thing) expected")
+			}
+
+			formatVal, ok := args[0].(StringValue)
+			if !ok {
+				return NilValue{}, NewRuntimeError(node, "explodef(format string, t... thing) expected")
+			}
+
+			format := formatVal.V
+
+			goArgs := []any{}
+			for _, v := range args[1:] {
+				switch val := v.(type) {
+				case IntValue:
+					goArgs = append(goArgs, val.V)
+				case FloatValue:
+					goArgs = append(goArgs, val.V)
+				case StringValue:
+					goArgs = append(goArgs, val.V)
+				case BoolValue:
+					goArgs = append(goArgs, val.V)
+				default:
+					goArgs = append(goArgs, val.String())
+				}
+			}
+
+			msg := fmt.Sprintf(format, goArgs...)
+
+			return NilValue{}, NewRuntimeError(node, msg)
+		},
+	}
+
 	env.builtins["scanln"] = &BuiltinFunc{
 		Name:  "scanln",
-		Arity: 1,
+		Arity: -1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			ident, ok := node.Args[0].(*parser.Identifier)
-			if !ok {
-				return NilValue{}, NewRuntimeError(node, "scanln expects a variable")
+
+			if len(node.Args) == 0 {
+				return NilValue{}, NewRuntimeError(node, "scanln(t ...thing) expected")
 			}
 
-			varName := ident.Value
+			reader := bufio.NewReader(os.Stdin)
+			line, err := reader.ReadString('\n')
+			if err != nil && err != io.EOF {
+				return NilValue{}, err
+			}
 
-			// is it const?
-			if v, ok := i.env.Get(varName); ok {
-				if _, isConst := v.(ConstValue); isConst {
+			fields := strings.Fields(line)
+
+			if len(fields) < len(node.Args) {
+				return NilValue{}, NewRuntimeError(node, "not enough input values")
+			}
+
+			for idx := 0; idx < len(node.Args) && idx < len(fields); idx++ {
+				arg := node.Args[idx]
+
+				ident, ok := arg.(*parser.Identifier)
+				if !ok {
+					return NilValue{}, NewRuntimeError(node, "scanln(t ...thing) expected")
+				}
+
+				varName := ident.Value
+				val, ok := i.env.Get(varName)
+				if !ok {
+					return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unknown var: %s", varName))
+				}
+
+				input := fields[idx]
+
+				err := i.env.assignInput(node, varName, val, input)
+				if err != nil {
+					return NilValue{}, err
+				}
+			}
+
+			return NilValue{}, nil
+		},
+	}
+
+	env.builtins["scan"] = &BuiltinFunc{
+		Name:  "scan",
+		Arity: -1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+
+			if len(node.Args) == 0 {
+				return NilValue{}, NewRuntimeError(node, "scan(t ...thing) expected")
+			}
+
+			for _, arg := range node.Args {
+
+				ident, ok := arg.(*parser.Identifier)
+				if !ok {
+					return NilValue{}, NewRuntimeError(node, "scan(t ...thing) expected")
+				}
+
+				varName := ident.Value
+
+				val, ok := i.env.Get(varName)
+				if !ok {
+					return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unknown var: %s", varName))
+				}
+
+				if _, isConst := val.(ConstValue); isConst {
 					return NilValue{}, NewRuntimeError(node, fmt.Sprintf("cannot assign to const: %s", varName))
 				}
-			} else {
-				return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unknown var: %s", varName))
+
+				var input string
+				_, err := fmt.Scan(&input)
+
+				if err != nil {
+					if err == io.EOF {
+						return NilValue{}, NewRuntimeError(node, "unexpected end of input")
+					}
+					return NilValue{}, err
+				}
+
+				err = i.env.assignInput(node, varName, val, input)
+				if err != nil {
+					return NilValue{}, err
+				}
 			}
 
-			var input string
-			fmt.Scanln(&input)
-			i.env.Set(varName, StringValue{V: input})
+			return NilValue{}, nil
+		},
+	}
+
+	env.builtins["scanf"] = &BuiltinFunc{
+		Name:  "scanf",
+		Arity: -1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+
+			if len(args) == 0 {
+				return NilValue{}, NewRuntimeError(node, "scanf(format string, t ...thing) expected")
+			}
+
+			formatVal, ok := args[0].(StringValue)
+			if !ok {
+				return NilValue{}, NewRuntimeError(node, "scanf(format string, t ...thing) expected")
+			}
+
+			_ = formatVal.V // ignore format for now
+
+			reader := bufio.NewReader(os.Stdin)
+			line, _ := reader.ReadString('\n')
+
+			fields := strings.Fields(line)
+			vars := node.Args[1:]
+
+			if len(fields) < len(vars) {
+				return NilValue{}, NewRuntimeError(node, "not enough input values")
+			}
+
+			for idx, arg := range vars {
+
+				ident, ok := arg.(*parser.Identifier)
+				if !ok {
+					return NilValue{}, NewRuntimeError(node, "scanf(format string, t ...thing) expected")
+				}
+
+				varName := ident.Value
+
+				val, ok := i.env.Get(varName)
+				if !ok {
+					return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unknown var: %s", varName))
+				}
+
+				if _, isConst := val.(ConstValue); isConst {
+					return NilValue{}, NewRuntimeError(node, fmt.Sprintf("cannot assign to const: %s", varName))
+				}
+
+				input := fields[idx]
+
+				switch val.(type) {
+
+				case IntValue:
+					n, err := strconv.Atoi(input)
+					if err != nil {
+						return NilValue{}, NewRuntimeError(node, "invalid int input")
+					}
+					i.env.Set(varName, IntValue{V: n})
+
+				case FloatValue:
+					f, err := strconv.ParseFloat(input, 64)
+					if err != nil {
+						return NilValue{}, NewRuntimeError(node, "invalid float input")
+					}
+					i.env.Set(varName, FloatValue{V: f})
+
+				case BoolValue:
+					b, err := strconv.ParseBool(input)
+					if err != nil {
+						return NilValue{}, NewRuntimeError(node, "invalid bool input")
+					}
+					i.env.Set(varName, BoolValue{V: b})
+
+				case StringValue:
+					i.env.Set(varName, StringValue{V: input})
+
+				case UninitializedValue, NilValue:
+					return NilValue{}, NewRuntimeError(node, "variable must have a type before scan")
+
+				default:
+					return NilValue{}, NewRuntimeError(node, "unsupported type")
+				}
+			}
 
 			return NilValue{}, nil
 		},

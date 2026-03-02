@@ -387,6 +387,26 @@ func (p *Parser) parseVarBlockDecl() Statement {
 			Value:    p.curTok.Literal,
 		}
 
+		// optional lifetime
+		if p.peekTok.Type == token.LT {
+			p.nextToken() // move to '<'
+			p.nextToken() // move to first token of lifetime expression
+
+			stmt.Lifetime = p.parseExpressionUntil(token.GT)
+
+			if p.peekTok.Type != token.GT {
+				p.addError("expected '>' after lifetime expression")
+				return nil
+			}
+
+			p.nextToken() // move to '>'
+		}
+
+		if p.isTypeName(p.peekTok.Literal) || p.isTypeToken(p.peekTok.Type) {
+			p.nextToken()
+			stmt.Type = p.parseType()
+		}
+
 		if p.peekTok.Type == token.ASSIGN {
 			p.nextToken() // =
 			p.nextToken() // expression start
@@ -398,6 +418,26 @@ func (p *Parser) parseVarBlockDecl() Statement {
 
 	case *MultiVarStatement:
 		stmt.Names = p.parseIdentList()
+
+		// optional lifetime
+		if p.peekTok.Type == token.LT {
+			p.nextToken() // move to '<'
+			p.nextToken() // move to first token of lifetime expression
+
+			stmt.Lifetime = p.parseExpressionUntil(token.GT)
+
+			if p.peekTok.Type != token.GT {
+				p.addError("expected '>' after lifetime expression")
+				return nil
+			}
+
+			p.nextToken() // move to '>'
+		}
+
+		if p.isTypeName(p.peekTok.Literal) || p.isTypeToken(p.peekTok.Type) {
+			p.nextToken()
+			stmt.Type = p.parseType()
+		}
 
 		// optional assignment
 		if p.peekTok.Type == token.ASSIGN {
