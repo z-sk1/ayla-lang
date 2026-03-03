@@ -84,6 +84,7 @@ const (
 	ENUM        ValueType = "enum"
 	ERROR       ValueType = "error"
 	NIL         ValueType = "nil"
+	MODULE      ValueType = "module"
 )
 
 type Value interface {
@@ -369,6 +370,19 @@ func (u UninitializedValue) Type() ValueType {
 
 func (u UninitializedValue) String() string {
 	return "nil"
+}
+
+type ModuleValue struct {
+	Name string
+	Env  *Environment
+}
+
+func (m ModuleValue) Type() ValueType {
+	return MODULE
+}
+
+func (m ModuleValue) String() string {
+	return fmt.Sprintf("<module %s>", m.Name)
 }
 
 func (i *Interpreter) resolveTypeNode(t parser.TypeNode) (*TypeInfo, error) {

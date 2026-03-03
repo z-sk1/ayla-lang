@@ -247,6 +247,8 @@ func (p *Parser) parseStatement() Statement {
 		}
 
 		return p.parseConstStatement()
+	case token.IMPORT:
+		return p.parseImportStatement()
 	case token.ENUM:
 		return p.parseEnumStatement()
 	case token.TYPE:
@@ -826,6 +828,17 @@ func (p *Parser) parseMultiConstStatement() *MultiConstStatement {
 
 		stmt.Values = values
 	}
+
+	return stmt
+}
+
+func (p *Parser) parseImportStatement() *ImportStatement {
+	stmt := &ImportStatement{
+		NodeBase: NodeBase{Token: p.curTok},
+	}
+
+	p.nextToken()
+	stmt.Name = p.curTok.Literal
 
 	return stmt
 }

@@ -1,10 +1,3 @@
-egg (
-    x int
-    y float
-    name string
-)
+import math
 
-
-scan(x, y, name)
-
-putln(y, x, name)
+putln(math.pi)

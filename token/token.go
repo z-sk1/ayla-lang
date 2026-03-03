@@ -55,6 +55,7 @@ const (
 	// keywords
 	VAR      = "VAR"
 	CONST    = "CONST"
+	IMPORT   = "IMPORT"
 	TYPE     = "TYPE"
 	STRUCT   = "STRUCT"
 	ENUM     = "ENUM"
@@ -90,6 +91,7 @@ const (
 var keywords = map[string]TokenType{
 	"egg":       VAR,
 	"rock":      CONST,
+	"import":    IMPORT,
 	"type":      TYPE,
 	"struct":    STRUCT,
 	"enum":      ENUM,

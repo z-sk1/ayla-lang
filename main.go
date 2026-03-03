@@ -2,7 +2,10 @@ package main
 
 import (
 	"fmt"
+	"io"
+	"net/http"
 	"os"
+	"path/filepath"
 
 	"time"
 
@@ -17,7 +20,7 @@ import (
 
 func main() {
 	rand.Seed(time.Now().Unix())
-	
+
 	cmds := []string{
 		"run: ayla run [--debug] [--timed] <file>, runs the ayla script",
 		"--version: ayla --version, returns the current version",
@@ -25,7 +28,7 @@ func main() {
 	}
 
 	if len(os.Args) == 1 {
-		fmt.Println("Welcome to ayla-lang v1.3.0, do ayla --help to see all commands.")
+		fmt.Println("Welcome to ayla-lang v1.4.0, do ayla --help to see all commands.")
 		return
 	}
 
@@ -37,13 +40,37 @@ func main() {
 		}
 
 		run()
+	case "install":
+		if len(os.Args) < 3 {
+			fmt.Println("usage: ayla install <url>")
+			return
+		}
+
+		install()
 	case "--version":
-		fmt.Println("ayla-lang v1.1.0")
+		fmt.Println("ayla-lang v1.4.0")
 	case "--help":
 		fmt.Println(strings.Join(cmds, "\n"))
 	default:
 		fmt.Println("unknown command: " + os.Args[1] + ", use --help if you need to see the available commands")
 	}
+}
+
+func readSourceFile(name string) (string, error) {
+	candidates := []string{
+		name,
+		name + ".ayl",
+		name + ".ayla",
+	}
+
+	for _, file := range candidates {
+		data, err := os.ReadFile(file)
+		if err == nil {
+			return string(data), nil
+		}
+	}
+
+	return "", fmt.Errorf("file not found: %s (.ayla or .ayl)", name)
 }
 
 func run() {
@@ -102,7 +129,7 @@ func run() {
 		started = time.Now()
 	}
 
-	interp := interpreter.New()
+	interp := interpreter.New(filename)
 
 	sig, err := interp.EvalStatements(program)
 
@@ -123,19 +150,43 @@ func run() {
 	}
 }
 
-func readSourceFile(name string) (string, error) {
-	candidates := []string{
-		name,
-		name + ".ayl",
-		name + ".ayla",
+func install() {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		fmt.Println(err)
+		return
 	}
 
-	for _, file := range candidates {
-		data, err := os.ReadFile(file)
-		if err == nil {
-			return string(data), nil
-		}
+	libDir := filepath.Join(home, ".ayla", "lib")
+	os.MkdirAll(libDir, 0755)
+
+	url := os.Args[2]
+
+	resp, err := http.Get(url)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		fmt.Println("failed to download module")
+		return
 	}
 
-	return "", fmt.Errorf("file not found: %s (.ayla or .ayl)", name)
+	fileName := filepath.Base(url)
+
+	dest := filepath.Join(libDir, fileName)
+
+	out, err := os.Create(dest)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, resp.Body)
+	if err != nil {
+		fmt.Println(err)
+	}
 }

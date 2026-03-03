@@ -219,8 +219,8 @@ type FuncStatement struct {
 
 type FuncCall struct {
 	NodeBase
-	Callee  Expression
-	Args    []Expression
+	Callee Expression
+	Args   []Expression
 }
 
 type FuncLiteral struct {
@@ -307,6 +307,11 @@ type ContinueStatement struct {
 type ReturnStatement struct {
 	NodeBase
 	Values []Expression
+}
+
+type ImportStatement struct {
+	NodeBase
+	Name string
 }
 
 type CompositeLiteral struct {
