@@ -134,12 +134,12 @@ func run() {
 	sig, err := interp.EvalStatements(program)
 
 	if err != nil {
-		fmt.Printf("\n%s: runtime error: %v\n", filename, err)
+		fmt.Printf("\n%s: %v\n", filename, err)
 		return
 	}
 
 	if ev, ok := sig.(interpreter.ErrorValue); ok {
-		fmt.Printf("\n%s: runtime error: %v\n", filename, ev.V)
+		fmt.Printf("\n%s: %v\n", filename, ev.V)
 	}
 
 	var elapsed time.Duration
@@ -148,6 +148,14 @@ func run() {
 		elapsed = time.Since(started)
 		fmt.Println(elapsed)
 	}
+}
+
+func normalizeGitHubURL(url string) string {
+	if strings.Contains(url, "github.com") && !strings.Contains(url, "raw.githubusercontent.com") {
+		url = strings.Replace(url, "github.com", "raw.githubusercontent.com", 1)
+		url = strings.Replace(url, "/blob/", "/", 1)
+	}
+	return url
 }
 
 func install() {
@@ -160,8 +168,9 @@ func install() {
 	libDir := filepath.Join(home, ".ayla", "lib")
 	os.MkdirAll(libDir, 0755)
 
-	url := os.Args[2]
+	url := normalizeGitHubURL(os.Args[2])
 
+	fmt.Println("downloading:", url)
 	resp, err := http.Get(url)
 	if err != nil {
 		fmt.Println(err)
@@ -176,7 +185,16 @@ func install() {
 
 	fileName := filepath.Base(url)
 
-	dest := filepath.Join(libDir, fileName)
+	if !strings.HasSuffix(fileName, ".ayla") && !strings.HasSuffix(fileName, ".ayl") {
+		fileName += ".ayla"
+	}
+
+	name := strings.TrimSuffix(fileName, filepath.Ext(fileName))
+	moduleDir := filepath.Join(libDir, name)
+
+	os.MkdirAll(moduleDir, 0755)
+
+	dest := filepath.Join(moduleDir, fileName)
 
 	out, err := os.Create(dest)
 	if err != nil {
@@ -189,4 +207,5 @@ func install() {
 	if err != nil {
 		fmt.Println(err)
 	}
+	fmt.Println("installed module:", fileName)
 }

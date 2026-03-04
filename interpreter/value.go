@@ -167,6 +167,14 @@ type BuiltinFunc struct {
 	Fn    func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error)
 }
 
+func (b BuiltinFunc) Type() ValueType {
+	return FUNCTION
+}
+
+func (b BuiltinFunc) String() string {
+	return fmt.Sprintf("%s()", b.Name)
+}
+
 type IntValue struct {
 	V int
 }
@@ -655,7 +663,7 @@ func (i *Interpreter) defaultValueFromTypeInfo(node parser.Statement, ti *TypeIn
 		return &Func{
 			Params:   make([]*parser.Param, 0),
 			Body:     make([]parser.Statement, 0),
-			Env:      i.env,
+			Env:      i.Env,
 			TypeName: ti,
 		}, nil
 	default:

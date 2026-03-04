@@ -1,8 +1,6 @@
 package parser
 
-import (
-	"github.com/z-sk1/ayla-lang/token"
-)
+import "github.com/z-sk1/ayla-lang/token"
 
 type Node interface {
 	Pos() (int, int)

@@ -43,9 +43,9 @@ func New(path string) *Interpreter {
 	wd, _ := os.Getwd()
 
 	i := &Interpreter{
-		env:           env,
+		Env:           env,
 		modules:       make(map[string]ModuleValue),
-		nativeModules: make(map[string]ModuleValue),
+		nativeModules: make(map[string]NativeLoader),
 		currentDir:    dir,
 	}
 
@@ -67,6 +67,7 @@ func New(path string) *Interpreter {
 	}
 
 	i.registerBuiltins()
+	i.registerNativeModules()
 	initBuiltinTypes(typeEnv)
 
 	i.typeEnv = typeEnv
@@ -82,9 +83,9 @@ func NewWithEnv(env *Environment, path string) *Interpreter {
 	wd, _ := os.Getwd()
 
 	i := &Interpreter{
-		env:           env,
+		Env:           env,
 		modules:       make(map[string]ModuleValue),
-		nativeModules: make(map[string]ModuleValue),
+		nativeModules: make(map[string]NativeLoader),
 		currentDir:    dir,
 	}
 
@@ -95,6 +96,7 @@ func NewWithEnv(env *Environment, path string) *Interpreter {
 
 	i.modulePaths = []string{
 		".",
+		wd,
 		"./lib",
 		filepath.Join(wd, "lib"),
 		filepath.Join(i.currentDir, "lib"),
@@ -106,6 +108,7 @@ func NewWithEnv(env *Environment, path string) *Interpreter {
 	}
 
 	i.registerBuiltins()
+	i.registerNativeModules()
 	initBuiltinTypes(typeEnv)
 
 	i.typeEnv = typeEnv
@@ -492,17 +495,17 @@ func (env *Environment) assignInput(node parser.Node, varName string, val Value,
 }
 
 func (i *Interpreter) tickLifetimes() {
-	for name, v := range i.env.store {
+	for name, v := range i.Env.store {
 		if v.Lifetime > 0 {
 			v.Lifetime--
 		}
 
 		if v.Lifetime == 0 {
-			delete(i.env.store, name)
+			delete(i.Env.store, name)
 			continue
 		}
 
-		i.env.store[name] = v
+		i.Env.store[name] = v
 	}
 }
 
