@@ -2,6 +2,7 @@ package interpreter
 
 import (
 	"fmt"
+	"io"
 	"math"
 	"math/rand"
 	"os"
@@ -485,12 +486,152 @@ func LoadFSModule(i *Interpreter) (ModuleValue, error) {
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
 			wd, err := os.Getwd()
 			if err != nil {
+				return TupleValue{
+					Values: []Value{
+						NilValue{},
+						ErrorValue{
+							V: NewRuntimeError(node, err.Error()),
+						},
+					},
+				}, nil
+			}
+
+			return TupleValue{
+				Values: []Value{
+					StringValue{V: wd},
+					NilValue{},
+				},
+			}, nil
+		},
+	})
+
+	env.Define("Size", &BuiltinFunc{
+		Name:  "Size",
+		Arity: 1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			pathVal, ok := unwrapNamed(args[0]).(StringValue)
+			if !ok {
+				return NilValue{}, NewRuntimeError(node, "fs.Size: argument must be a string")
+			}
+
+			path := pathVal.V
+
+			info, err := os.Stat(path)
+			if err != nil {
+				return TupleValue{
+					Values: []Value{
+						NilValue{},
+						ErrorValue{
+							V: NewRuntimeError(node, err.Error()),
+						},
+					},
+				}, nil
+			}
+
+			return TupleValue{
+				Values: []Value{
+					IntValue{V: int(info.Size())},
+					NilValue{},
+				},
+			}, nil
+		},
+	})
+
+	env.Define("ModTime", &BuiltinFunc{
+		Name:  "ModTime",
+		Arity: 1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			pathVal, ok := unwrapNamed(args[0]).(StringValue)
+			if !ok {
+				return NilValue{}, NewRuntimeError(node, "fs.ModTime: argument must be a string")
+			}
+
+			path := pathVal.V
+
+			info, err := os.Stat(path)
+			if err != nil {
+				return TupleValue{
+					Values: []Value{
+						NilValue{},
+						ErrorValue{
+							V: NewRuntimeError(node, err.Error()),
+						},
+					},
+				}, nil
+			}
+
+			return TupleValue{
+				Values: []Value{
+					IntValue{V: int(info.ModTime().Unix())},
+					NilValue{},
+				},
+			}, nil
+		},
+	})
+	
+	env.Define("Rename", &BuiltinFunc{
+		Name: "Rename",
+		Arity: 2,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			oldVal, ok1 := unwrapNamed(args[0]).(StringValue)
+			newVal, ok2 := unwrapNamed(args[1]).(StringValue)
+			
+			if !ok1 || !ok2 {
+				return NilValue{}, NewRuntimeError(node, "fs.Rename: both arguments must be a string")
+			}
+			
+			old := oldVal.V
+			new := newVal.V
+			
+			err := os.Rename(old, new)
+			if err != nil {
 				return ErrorValue{
 					V: NewRuntimeError(node, err.Error()),
 				}, nil
 			}
-
-			return StringValue{V: wd}, nil
+			
+			return NilValue{}, nil
+		},
+	})
+	
+	env.Define("Copy", &BuiltinFunc{
+		Name: "Copy",
+		Arity: 2,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			srcVal, ok1 := unwrapNamed(args[0]).(StringValue)
+			dstVal, ok2 := unwrapNamed(args[1]).(StringValue)
+			
+			if !ok1 || !ok2 {
+				return NilValue{}, NewRuntimeError(node, "fs.Copy: both arguments must be a string")
+			}
+			
+			src := srcVal.V
+			dst := dstVal.V
+			
+			in, err := os.Open(src)
+			if err != nil {
+				return ErrorValue{
+					V: NewRuntimeError(node, err.Error()),
+				}, nil
+			}
+			defer in.Close()
+			
+			out, err := os.Create(dst)
+			if err != nil {
+				return ErrorValue{
+					V: NewRuntimeError(node, err.Error()),
+				}, nil
+			}
+			defer out.Close()
+			
+			_, err = io.Copy(out, in)
+			if err != nil {
+				return ErrorValue{
+					V: NewRuntimeError(node, err.Error()),
+				}, nil
+			}
+			
+			return NilValue{}, nil
 		},
 	})
 

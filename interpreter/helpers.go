@@ -149,6 +149,17 @@ func (e *Environment) Get(name string) (Value, bool) {
 	return nil, false
 }
 
+func (e *Environment) GetLocal(name string) (Value, bool) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+
+	if v, ok := e.store[name]; ok {
+		return v.Value, true
+	}
+
+	return nil, false
+}
+
 func (e *Environment) Define(name string, val Value) Value {
 	e.mu.Lock()
 	defer e.mu.Unlock()

@@ -201,13 +201,15 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		if err != nil {
 			return SignalNone{}, err
 		}
-		if v, ok := val.(ErrorValue); ok {
-			return v, nil
-		}
 
 		val, err = i.assignWithType(stmt, val, expectedTI)
 		if err != nil {
 			return SignalNone{}, err
+		}
+		
+		// variable must not exist
+		if _, ok := i.Env.GetLocal(stmt.Name.Value); ok {
+			return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("cant redeclare var: %s", stmt.Name.Value))
 		}
 
 		if stmt.Lifetime != nil {
@@ -249,7 +251,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		}
 
 		// variable must not exist
-		if _, ok := i.Env.Get(stmt.Name.Value); ok {
+		if _, ok := i.Env.GetLocal(stmt.Name.Value); ok {
 			return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("cant redeclare var: %s", stmt.Name.Value))
 		}
 
@@ -286,7 +288,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 
 			for _, name := range stmt.Names {
 
-				if _, ok := i.Env.Get(name.Value); ok {
+				if _, ok := i.Env.GetLocal(name.Value); ok {
 					return SignalNone{}, NewRuntimeError(stmt,
 						fmt.Sprintf("cannot redeclare var: %s", name.Value))
 				}
@@ -324,9 +326,6 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			val, err := i.EvalExpression(stmt.Values[0])
 			if err != nil {
 				return SignalNone{}, err
-			}
-			if v, ok := val.(ErrorValue); ok {
-				return v, nil
 			}
 
 			if tup, ok := val.(TupleValue); ok {
@@ -370,7 +369,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 				continue
 			}
 
-			if _, ok := i.Env.Get(name.Value); ok {
+			if _, ok := i.Env.GetLocal(name.Value); ok {
 				return SignalNone{}, NewRuntimeError(stmt,
 					fmt.Sprintf("cannot redeclare var: %s", name.Value))
 			}
@@ -405,10 +404,6 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 				return SignalNone{}, err
 			}
 
-			if v, ok := val.(ErrorValue); ok {
-				return v, nil
-			}
-
 			if tup, ok := val.(TupleValue); ok {
 				values = tup.Values
 			} else {
@@ -423,10 +418,6 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 				v, err := i.EvalExpression(expr)
 				if err != nil {
 					return SignalNone{}, err
-				}
-
-				if v, ok := v.(ErrorValue); ok {
-					return v, nil
 				}
 
 				values[idx] = v
@@ -445,7 +436,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 				continue
 			}
 
-			if _, ok := i.Env.Get(name.Value); ok {
+			if _, ok := i.Env.GetLocal(name.Value); ok {
 				return SignalNone{}, NewRuntimeError(stmt,
 					fmt.Sprintf("cannot redeclare var: %s", name.Value))
 			}
@@ -504,7 +495,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		}
 
 		// check if variable already exist
-		if _, ok := i.Env.Get(stmt.Name.Value); ok {
+		if _, ok := i.Env.GetLocal(stmt.Name.Value); ok {
 			return SignalNone{}, NewRuntimeError(s, fmt.Sprintf("cant redeclare const: %s", stmt.Name.Value))
 		}
 
@@ -557,9 +548,9 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 
 			for _, name := range stmt.Names {
 
-				if _, ok := i.Env.Get(name.Value); ok {
+				if _, ok := i.Env.GetLocal(name.Value); ok {
 					return SignalNone{}, NewRuntimeError(stmt,
-						fmt.Sprintf("cannot redeclare var: %s", name.Value))
+						fmt.Sprintf("cannot redeclare const: %s", name.Value))
 				}
 
 				var v Value
@@ -595,9 +586,6 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			val, err := i.EvalExpression(stmt.Values[0])
 			if err != nil {
 				return SignalNone{}, err
-			}
-			if v, ok := val.(ErrorValue); ok {
-				return v, nil
 			}
 
 			if tup, ok := val.(TupleValue); ok {
@@ -641,7 +629,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 				continue
 			}
 
-			if _, ok := i.Env.Get(name.Value); ok {
+			if _, ok := i.Env.GetLocal(name.Value); ok {
 				return SignalNone{}, NewRuntimeError(stmt,
 					fmt.Sprintf("cannot redeclare var: %s", name.Value))
 			}
@@ -701,9 +689,6 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		if err != nil {
 			return SignalNone{}, err
 		}
-		if v, ok := val.(ErrorValue); ok {
-			return v, nil
-		}
 
 		existingVal, ok := i.Env.Get(stmt.Name.Value)
 		if !ok {
@@ -738,9 +723,6 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			val, err := i.EvalExpression(stmt.Values[0])
 			if err != nil {
 				return SignalNone{}, err
-			}
-			if v, ok := val.(ErrorValue); ok {
-				return v, nil
 			}
 
 			if tup, ok := val.(TupleValue); ok {
@@ -935,9 +917,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 	case *parser.MethodStatement:
 		recvType, err := i.resolveTypeNode(stmt.Receiver.Type)
 		if err != nil {
-			return ErrorValue{
-				V: NewRuntimeError(stmt, err.Error()),
-			}, nil
+			return SignalNone{}, NewRuntimeError(stmt, err.Error())
 		}
 
 		params := append(
@@ -1385,16 +1365,12 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 
 	case *parser.Identifier:
 		if expr.Value == "_" {
-			return ErrorValue{
-				V: NewRuntimeError(expr, "cannot use '_' as a value"),
-			}, nil
+			return NilValue{}, NewRuntimeError(expr, "cannot use '_' as a value")
 		}
 
 		v, ok := i.Env.Get(expr.Value)
 		if !ok {
-			return ErrorValue{
-				V: NewRuntimeError(expr, fmt.Sprintf("undefined variable: %s", expr.Value)),
-			}, nil
+			return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("undefined variable: %s", expr.Value))
 		}
 
 		if c, isConst := v.(ConstValue); isConst {
@@ -1406,9 +1382,7 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 	case *parser.CompositeLiteral:
 		ti, err := i.resolveTypeNode(expr.Type)
 		if err != nil {
-			return ErrorValue{
-				V: err,
-			}, nil
+			return NilValue{}, err
 		}
 		return i.evalCompositeLiteral(expr, ti)
 	case *parser.AnonymousStructLiteral:
@@ -1426,17 +1400,15 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 				expectedTI := unwrapAlias(expected)
 
 				if !(typesAssignable(actualTI, expectedTI)) {
-					return ErrorValue{
-						V: NewRuntimeError(
-							expr,
-							fmt.Sprintf(
-								"field '%s' expects '%s' but got '%s'",
-								name,
-								expected.Name,
-								actualTI.Name,
-							),
+					return NilValue{}, NewRuntimeError(
+						expr,
+						fmt.Sprintf(
+							"field '%s' expects '%s' but got '%s'",
+							name,
+							expected.Name,
+							actualTI.Name,
 						),
-					}, nil
+					)
 				}
 			}
 
@@ -1589,9 +1561,7 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 		actualTI := unwrapAlias(i.typeInfoFromValue(inner))
 
 		if !typesAssignable(actualTI, targetTI) {
-			return ErrorValue{
-				V: NewRuntimeError(expr, fmt.Sprintf("type mismatch: '%s' asserted as '%s'", actualTI.Name, targetTI.Name)),
-			}, nil
+			return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("type mismatch: '%s' asserted as '%s'", actualTI.Name, targetTI.Name))
 		}
 
 		return i.promoteValueToType(inner, targetTI), nil
@@ -1712,9 +1682,7 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 			return BoolValue{V: false}, nil
 		}
 
-		return ErrorValue{
-			V: NewRuntimeError(expr, "in expects map or array or string"),
-		}, nil
+		return NilValue{}, NewRuntimeError(expr, "in expects map or array or string")
 
 	case *parser.InterpolatedString:
 		is := expr
@@ -1731,9 +1699,7 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 		return StringValue{V: out.String()}, nil
 
 	default:
-		return ErrorValue{
-			V: NewRuntimeError(expr, fmt.Sprintf("unhandled expression type: %T", e)),
-		}, nil
+		return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("unhandled expression type: %T", e))
 	}
 }
 
@@ -1804,18 +1770,14 @@ func (i *Interpreter) evalStructLiteral(expr *parser.CompositeLiteral, typeInfo 
 
 	case TypeNamed:
 		if typeInfo.Underlying.Kind != TypeStruct {
-			return ErrorValue{
-				V: NewRuntimeError(expr,
-					fmt.Sprintf("%s is not a struct type", typeInfo.Name)),
-			}, nil
+			return NilValue{}, NewRuntimeError(expr,
+				fmt.Sprintf("%s is not a struct type", typeInfo.Name))
 		}
 		structType = typeInfo.Underlying
 
 	default:
-		return ErrorValue{
-			V: NewRuntimeError(expr,
-				fmt.Sprintf("%s is not a struct type", typeInfo.Name)),
-		}, nil
+		return NilValue{}, NewRuntimeError(expr,
+			fmt.Sprintf("%s is not a struct type", typeInfo.Name))
 	}
 
 	fields := make(map[string]Value)
@@ -1823,13 +1785,11 @@ func (i *Interpreter) evalStructLiteral(expr *parser.CompositeLiteral, typeInfo 
 	for name, e := range expr.Fields {
 		expectedType, ok := structType.Fields[name]
 		if !ok {
-			return ErrorValue{
-				V: NewRuntimeError(
-					expr,
-					fmt.Sprintf("unknown field '%s' in struct %s",
-						name, typeInfo.Name),
-				),
-			}, nil
+			return NilValue{}, NewRuntimeError(
+				expr,
+				fmt.Sprintf("unknown field '%s' in struct %s",
+					name, typeInfo.Name),
+			)
 		}
 
 		v, err := i.EvalExpression(e)
@@ -1841,17 +1801,15 @@ func (i *Interpreter) evalStructLiteral(expr *parser.CompositeLiteral, typeInfo 
 		expectedTI := unwrapAlias(expectedType)
 
 		if !typesAssignable(actualTI, expectedTI) {
-			return ErrorValue{
-				V: NewRuntimeError(
-					expr,
-					fmt.Sprintf(
-						"field '%s' expects '%s' but got '%s'",
-						name,
-						expectedType.Name,
-						actualTI.Name,
-					),
+			return NilValue{}, NewRuntimeError(
+				expr,
+				fmt.Sprintf(
+					"field '%s' expects '%s' but got '%s'",
+					name,
+					expectedType.Name,
+					actualTI.Name,
 				),
-			}, nil
+			)
 		}
 
 		fields[name] = v
@@ -1928,9 +1886,7 @@ func (i *Interpreter) evalArrayLiteral(expr *parser.CompositeLiteral, ti *TypeIn
 func (i *Interpreter) evalMapLiteral(expr *parser.CompositeLiteral, expected *TypeInfo) (Value, error) {
 	if len(expr.Pairs) == 0 {
 		if expected == nil || expected.Kind != TypeMap {
-			return ErrorValue{
-				V: NewRuntimeError(expr, "cannot infer type of empty map"),
-			}, nil
+			return NilValue{}, NewRuntimeError(expr, "cannot infer type of empty map")
 		}
 
 		return MapValue{
@@ -1961,22 +1917,16 @@ func (i *Interpreter) evalMapLiteral(expr *parser.CompositeLiteral, expected *Ty
 
 	if expected != nil {
 		if !isComparableValue(k0) {
-			return ErrorValue{
-				V: NewRuntimeError(expr, fmt.Sprintf("map key type %s is not comparable", keyTI.Name)),
-			}, nil
+			return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("map key type %s is not comparable", keyTI.Name))
 		}
 
 		if !typesAssignable(keyTI, expected.Key) {
-			return ErrorValue{
-				V: NewRuntimeError(expr, fmt.Sprintf("type mismatch: map key 0 expected %s but got %s", expected.Key.Name, keyTI.Name)),
-			}, nil
+			return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("type mismatch: map key 0 expected %s but got %s", expected.Key.Name, keyTI.Name))
 		}
 		keyTI = expected.Key
 
 		if !typesAssignable(valTI, expected.Value) {
-			return ErrorValue{
-				V: NewRuntimeError(expr, fmt.Sprintf("type mismatch: map value 0 expected %s but got %s", expected.Value.Name, valTI.Name)),
-			}, nil
+			return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("type mismatch: map value 0 expected %s but got %s", expected.Value.Name, valTI.Name))
 		}
 		valTI = expected.Value
 	}
@@ -2001,21 +1951,15 @@ func (i *Interpreter) evalMapLiteral(expr *parser.CompositeLiteral, expected *Ty
 		vt := unwrapAlias(i.typeInfoFromValue(v))
 
 		if keyTI.Kind == TypeAny && !isComparableValue(k) {
-			return ErrorValue{
-				V: NewRuntimeError(expr, fmt.Sprintf("map key %d is not comparable", idx)),
-			}, nil
+			return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("map key %d is not comparable", idx))
 		}
 
 		if !typesAssignable(kt, keyTI) {
-			return ErrorValue{
-				V: NewRuntimeError(expr, fmt.Sprintf("map key %d expected %s but got %s", idx, keyTI.Name, kt.Name)),
-			}, nil
+			return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("map key %d expected %s but got %s", idx, keyTI.Name, kt.Name))
 		}
 
 		if !typesAssignable(vt, valTI) {
-			return ErrorValue{
-				V: NewRuntimeError(expr, fmt.Sprintf("map value %d expected %s but got %s", idx, valTI.Name, vt.Name)),
-			}, nil
+			return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("map value %d expected %s but got %s", idx, valTI.Name, vt.Name))
 		}
 
 		elems[k] = v
@@ -2032,9 +1976,7 @@ func (i *Interpreter) evalCall(e *parser.FuncCall) (Value, error) {
 	if ident, ok := e.Callee.(*parser.Identifier); ok {
 		if ti, ok := i.typeEnv[ident.Value]; ok {
 			if len(e.Args) != 1 {
-				return ErrorValue{
-					V: NewRuntimeError(e, "type cast expects 1 arg"),
-				}, nil
+				return NilValue{}, NewRuntimeError(e, "type cast expects 1 arg")
 			}
 			return i.evalTypeCast(ti, e.Args[0], e)
 		}
@@ -2065,9 +2007,7 @@ func (i *Interpreter) evalTypeCast(target *TypeInfo, arg parser.Expression, node
 		case FloatValue:
 			val = int(v.V)
 		default:
-			return ErrorValue{
-				V: NewRuntimeError(node, fmt.Sprintf("int type cast does not support %s, try the function toInt to parse non-numeric types", string(v.Type()))),
-			}, nil
+			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("int type cast does not support %s, try the function toInt to parse non-numeric types", string(v.Type())))
 		}
 
 		return IntValue{V: val}, nil
@@ -2084,9 +2024,7 @@ func (i *Interpreter) evalTypeCast(target *TypeInfo, arg parser.Expression, node
 		case FloatValue:
 			val = v.V
 		default:
-			return ErrorValue{
-				V: NewRuntimeError(node, fmt.Sprintf("float type cast does not support %s, try the function toFloat to parse non-numeric types", string(v.Type()))),
-			}, nil
+			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("float type cast does not support %s, try the function toFloat to parse non-numeric types", string(v.Type())))
 		}
 
 		return FloatValue{V: val}, nil
@@ -2098,9 +2036,7 @@ func (i *Interpreter) evalTypeCast(target *TypeInfo, arg parser.Expression, node
 			return v, nil
 		}
 
-		return ErrorValue{
-			V: NewRuntimeError(node, fmt.Sprintf("string cast does not support %s, try the function toString to parse other types", string(v.Type()))),
-		}, nil
+		return NilValue{}, NewRuntimeError(node, fmt.Sprintf("string cast does not support %s, try the function toString to parse other types", string(v.Type())))
 	case TypeBool:
 		var val bool
 
@@ -2112,9 +2048,7 @@ func (i *Interpreter) evalTypeCast(target *TypeInfo, arg parser.Expression, node
 		case BoolValue:
 			val = v.V
 		default:
-			return ErrorValue{
-				V: NewRuntimeError(node, fmt.Sprintf("bool type cast does not support %s, try the function toBool to parse other types", string(v.Type()))),
-			}, nil
+			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("bool type cast does not support %s, try the function toBool to parse other types", string(v.Type())))
 		}
 
 		return BoolValue{V: val}, nil
@@ -2127,9 +2061,7 @@ func (i *Interpreter) evalTypeCast(target *TypeInfo, arg parser.Expression, node
 			return v, nil
 		}
 
-		return ErrorValue{
-			NewRuntimeError(node, fmt.Sprintf("array cast does not support %s, try the function toArr to construct arrays", string(v.Type()))),
-		}, nil
+		return NilValue{}, NewRuntimeError(node, fmt.Sprintf("array cast does not support %s, try the function toArr to construct arrays", string(v.Type())))
 	case TypeNamed:
 		base := target.Underlying
 
@@ -2160,13 +2092,9 @@ func (i *Interpreter) evalTypeCast(target *TypeInfo, arg parser.Expression, node
 			return ErrorValue{V: errors.New(s.V)}, nil
 		}
 
-		return ErrorValue{
-			V: NewRuntimeError(node, fmt.Sprintf("error cast does not support %s", string(v.Type()))),
-		}, nil
+		return NilValue{}, NewRuntimeError(node, fmt.Sprintf("error cast does not support %s", string(v.Type())))
 	default:
-		return ErrorValue{
-			V: NewRuntimeError(node, fmt.Sprintf("unknown type cast: %s", target.Name)),
-		}, nil
+		return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unknown type cast: %s", target.Name))
 	}
 }
 
@@ -2244,9 +2172,7 @@ func (i *Interpreter) evalFuncCall(expr *parser.FuncCall) (Value, error) {
 		args = append([]Value{fn.Receiver}, args...)
 		return i.callFunction(fn.Func, args, expr)
 	default:
-		return ErrorValue{
-			V: NewRuntimeError(expr, fmt.Sprintf("expected 'function' but got '%s'", unwrapAlias(i.typeInfoFromValue(val)).Name)),
-		}, nil
+		return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("expected 'function' but got '%s'", unwrapAlias(i.typeInfoFromValue(val)).Name))
 	}
 }
 
@@ -2261,16 +2187,12 @@ func (i *Interpreter) callFunction(fn *Func, args []Value, callNode parser.Node)
 
 	if !isVariadic {
 		if argCount != paramCount {
-			return ErrorValue{
-				V: NewRuntimeError(callNode, fmt.Sprintf("expected %d args, got %d", paramCount, argCount)),
-			}, nil
+			return NilValue{}, NewRuntimeError(callNode, fmt.Sprintf("expected %d args, got %d", paramCount, argCount))
 		}
 	} else {
 		fixedCount := paramCount - 1
 		if argCount < fixedCount {
-			return ErrorValue{
-				V: NewRuntimeError(callNode, fmt.Sprintf("expected atleast %d args, got %d", fixedCount, argCount)),
-			}, nil
+			return NilValue{}, NewRuntimeError(callNode, fmt.Sprintf("expected atleast %d args, got %d", fixedCount, argCount))
 		}
 	}
 
@@ -2295,9 +2217,7 @@ func (i *Interpreter) callFunction(fn *Func, args []Value, callNode parser.Node)
 
 			val, err = i.assignWithType(callNode, val, expected)
 			if err != nil {
-				return ErrorValue{
-					V: NewRuntimeError(callNode, fmt.Sprintf("param '%s' expected '%s' but got '%s'", param.Name.Value, expected.Name, actual.Name)),
-				}, nil
+				return NilValue{}, NewRuntimeError(callNode, fmt.Sprintf("param '%s' expected '%s' but got '%s'", param.Name.Value, expected.Name, actual.Name))
 			}
 		}
 
@@ -2363,20 +2283,16 @@ func (i *Interpreter) callFunction(fn *Func, args []Value, callNode parser.Node)
 	// handle return
 	if ret, ok := sig.(SignalReturn); ok {
 		if len(fn.TypeName.Returns) > 0 && len(fn.TypeName.Returns) != len(ret.Values) {
-			return ErrorValue{
-				V: NewRuntimeError(callNode,
-					fmt.Sprintf("expected %d return values, got %d",
-						len(fn.TypeName.Returns), len(ret.Values))),
-			}, nil
+			return NilValue{}, NewRuntimeError(callNode,
+				fmt.Sprintf("expected %d return values, got %d",
+					len(fn.TypeName.Returns), len(ret.Values)))
 		}
 
 		for idx, expectedType := range fn.TypeName.Returns {
 			actual := ret.Values[idx]
 
 			if err != nil {
-				return ErrorValue{
-					V: NewRuntimeError(callNode, err.Error()),
-				}, nil
+				return NilValue{}, NewRuntimeError(callNode, err.Error())
 			}
 			expectedTI := unwrapAlias(expectedType)
 
@@ -2409,9 +2325,7 @@ func (i *Interpreter) callFunction(fn *Func, args []Value, callNode parser.Node)
 
 func (i *Interpreter) evalIndexExpression(node parser.Expression, left, idx Value) (Value, error) {
 	if nv, ok := left.(NamedValue); ok && nv.TypeName.Kind == TypeAny {
-		return ErrorValue{
-			V: NewRuntimeError(node, "cannot index value of type 'thing' without type assertion"),
-		}, nil
+		return NilValue{}, NewRuntimeError(node, "cannot index value of type 'thing' without type assertion")
 	}
 
 	left = unwrapNamed(left)
@@ -2424,17 +2338,13 @@ func (i *Interpreter) evalIndexExpression(node parser.Expression, left, idx Valu
 
 		idxVal, ok := idx.(IntValue)
 		if !ok {
-			return ErrorValue{
-				V: NewRuntimeError(node, fmt.Sprintf("array index: %v, must be int", idxVal.V)),
-			}, nil
+			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("array index: %v, must be int", idxVal.V))
 		}
 
 		idx := idxVal.V
 
 		if idx < 0 || idx >= len(arr.Elements) {
-			return ErrorValue{
-				V: NewRuntimeError(node, fmt.Sprintf("array index: %d, out of bounds", idx)),
-			}, nil
+			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("array index: %d, out of bounds", idx))
 		}
 
 		elem := arr.Elements[idx]
@@ -2451,17 +2361,13 @@ func (i *Interpreter) evalIndexExpression(node parser.Expression, left, idx Valu
 	case TypeString:
 		idxVal, ok := idx.(IntValue)
 		if !ok {
-			return ErrorValue{
-				V: NewRuntimeError(node, fmt.Sprintf("string index: %v, must be int", idxVal.V)),
-			}, nil
+			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("string index: %v, must be int", idxVal.V))
 		}
 
 		idx := idxVal.V
 
 		if idx < 0 || idx >= len(left.(StringValue).V) {
-			return ErrorValue{
-				V: NewRuntimeError(node, fmt.Sprintf("string index: %d, out of bounds", idx)),
-			}, nil
+			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("string index: %d, out of bounds", idx))
 		}
 
 		r := []rune(left.(StringValue).V)
@@ -2475,25 +2381,21 @@ func (i *Interpreter) evalIndexExpression(node parser.Expression, left, idx Valu
 
 		if mv.KeyType.Kind == TypeAny {
 			if !isComparableValue(idx) {
-				return ErrorValue{
-					V: NewRuntimeError(
-						node,
-						"value of this type cannot be used as map key",
-					),
-				}, nil
+				return NilValue{}, NewRuntimeError(
+					node,
+					"value of this type cannot be used as map key",
+				)
 			}
 		} else {
 			if !typesAssignable(keyType, mv.KeyType) {
-				return ErrorValue{
-					V: NewRuntimeError(
-						node,
-						fmt.Sprintf(
-							"map index expected %s but got %s",
-							mv.KeyType.Name,
-							keyType.Name,
-						),
+				return NilValue{}, NewRuntimeError(
+					node,
+					fmt.Sprintf(
+						"map index expected %s but got %s",
+						mv.KeyType.Name,
+						keyType.Name,
 					),
-				}, nil
+				)
 			}
 		}
 
@@ -2534,23 +2436,17 @@ func (i *Interpreter) evalIndexExpression(node parser.Expression, left, idx Valu
 		}
 
 		if typeStr != "" {
-			return ErrorValue{
-				V: NewRuntimeError(node, fmt.Sprintf("indexing is not allowed with type: '%s'", typeStr)),
-			}, nil
+			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("indexing is not allowed with type: '%s'", typeStr))
 		}
 
-		return ErrorValue{
-			V: NewRuntimeError(node, fmt.Sprintf("indexing is not allowed with type: %d", typeInt)),
-		}, nil
+		return NilValue{}, NewRuntimeError(node, fmt.Sprintf("indexing is not allowed with type: %d", typeInt))
 	}
 }
 
 func (i *Interpreter) evalSliceExpression(node parser.Expression, left, startVal, endVal Value) (Value, error) {
 	if nv, ok := left.(NamedValue); ok && nv.TypeName.Kind == TypeAny {
-		return ErrorValue{
-			V: NewRuntimeError(node,
-				"cannot slice value of type 'thing' without type assertion"),
-		}, nil
+		return NilValue{}, NewRuntimeError(node,
+			"cannot slice value of type 'thing' without type assertion")
 	}
 
 	left = unwrapNamed(left)
@@ -2563,10 +2459,8 @@ func (i *Interpreter) evalSliceExpression(node parser.Expression, left, startVal
 	case TypeString:
 		length = len([]rune(left.(StringValue).V))
 	default:
-		return ErrorValue{
-			V: NewRuntimeError(node,
-				fmt.Sprintf("slicing is not allowed with type: '%s'", typ.Name)),
-		}, nil
+		return NilValue{}, NewRuntimeError(node,
+			fmt.Sprintf("slicing is not allowed with type: '%s'", typ.Name))
 	}
 
 	start := 0
@@ -2575,9 +2469,7 @@ func (i *Interpreter) evalSliceExpression(node parser.Expression, left, startVal
 	if _, ok := startVal.(NilValue); !ok {
 		intVal, ok := startVal.(IntValue)
 		if !ok {
-			return ErrorValue{
-				V: NewRuntimeError(node, "slice start must be int"),
-			}, nil
+			return NilValue{}, NewRuntimeError(node, "slice start must be int")
 		}
 		start = intVal.V
 	}
@@ -2585,18 +2477,14 @@ func (i *Interpreter) evalSliceExpression(node parser.Expression, left, startVal
 	if _, ok := endVal.(NilValue); !ok {
 		intVal, ok := endVal.(IntValue)
 		if !ok {
-			return ErrorValue{
-				V: NewRuntimeError(node, "slice end must be int"),
-			}, nil
+			return NilValue{}, NewRuntimeError(node, "slice end must be int")
 		}
 		end = intVal.V
 	}
 
 	if start < 0 || end < 0 || start > end || end > length {
-		return ErrorValue{
-			V: NewRuntimeError(node,
-				fmt.Sprintf("slice bounds out of range [%d:%d]", start, end)),
-		}, nil
+		return NilValue{}, NewRuntimeError(node,
+			fmt.Sprintf("slice bounds out of range [%d:%d]", start, end))
 	}
 
 	switch typ.Kind {
@@ -2633,9 +2521,7 @@ func (i *Interpreter) evalMemberExpression(node parser.Expression, left Value, f
 	case ModuleValue:
 		val, ok := obj.Env.Get(field)
 		if !ok {
-			return ErrorValue{
-				V: NewRuntimeError(node, fmt.Sprintf("unknown '%s'", field)),
-			}, nil
+			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unknown '%s'", field))
 		}
 
 		return val, nil
@@ -2643,9 +2529,7 @@ func (i *Interpreter) evalMemberExpression(node parser.Expression, left Value, f
 
 		val, ok := obj.Fields[field]
 		if !ok {
-			return ErrorValue{
-				V: NewRuntimeError(node, fmt.Sprintf("unknown field %s", field)),
-			}, nil
+			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unknown field %s", field))
 		}
 
 		structTI := obj.TypeName
@@ -2655,34 +2539,26 @@ func (i *Interpreter) evalMemberExpression(node parser.Expression, left Value, f
 
 		expectedType, ok := structTI.Fields[field]
 		if !ok {
-			return ErrorValue{
-				V: NewRuntimeError(node,
-					fmt.Sprintf("unknown field %s", field)),
-			}, nil
+			return NilValue{}, NewRuntimeError(node,
+				fmt.Sprintf("unknown field %s", field))
 		}
 
 		actualTI := unwrapAlias(i.typeInfoFromValue(val))
 		expectedTI := unwrapAlias(expectedType)
 
 		if !typesAssignable(actualTI, expectedTI) {
-			return ErrorValue{
-				V: NewRuntimeError(node, fmt.Sprintf("field '%s' expected '%s' but got '%s'", field, expectedType.Name, actualTI.Name)),
-			}, nil
+			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("field '%s' expected '%s' but got '%s'", field, expectedType.Name, actualTI.Name))
 		}
 
 		return val, nil
 	case TypeValue:
 		if obj.TypeName.Kind != TypeEnum {
-			return ErrorValue{
-				V: NewRuntimeError(node, fmt.Sprintf("type '%s' has no members", obj.TypeName.Name)),
-			}, nil
+			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("type '%s' has no members", obj.TypeName.Name))
 		}
 
 		idx, ok := obj.TypeName.Variants[field]
 		if !ok {
-			return ErrorValue{
-				V: NewRuntimeError(node, fmt.Sprintf("unknown enum variant '%s.%s'", obj.TypeName.Name, field)),
-			}, nil
+			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unknown enum variant '%s.%s'", obj.TypeName.Name, field))
 		}
 
 		return EnumValue{
@@ -2692,9 +2568,7 @@ func (i *Interpreter) evalMemberExpression(node parser.Expression, left Value, f
 		}, nil
 	}
 
-	return ErrorValue{
-		V: NewRuntimeError(node, fmt.Sprintf("member expression expects enums or structs, but got '%s'", string(left.Type()))),
-	}, nil
+	return NilValue{}, NewRuntimeError(node, fmt.Sprintf("member expression expects enums or structs, but got '%s'", string(left.Type())))
 }
 
 func (i *Interpreter) evalInfix(node *parser.InfixExpression, left Value, op string, right Value) (Value, error) {
@@ -2718,12 +2592,10 @@ func (i *Interpreter) evalInfix(node *parser.InfixExpression, left Value, op str
 	rightTI := unwrapAlias(i.typeInfoFromValue(right))
 
 	if leftTI.Kind == TypeAny || rightTI.Kind == TypeAny {
-		return ErrorValue{
-			V: NewRuntimeError(
-				node,
-				"cannot use 'thing' in operations, assert a type first",
-			),
-		}, nil
+		return NilValue{}, NewRuntimeError(
+			node,
+			"cannot use 'thing' in operations, assert a type first",
+		)
 	}
 
 	// named values
@@ -2732,12 +2604,10 @@ func (i *Interpreter) evalInfix(node *parser.InfixExpression, left Value, op str
 
 	if lok || rok {
 		if !lok || !rok || lnv.TypeName != rnv.TypeName {
-			return ErrorValue{
-				V: NewRuntimeError(
-					node,
-					"cannot operate on mismatched named types (try casting)",
-				),
-			}, nil
+			return NilValue{}, NewRuntimeError(
+				node,
+				"cannot operate on mismatched named types (try casting)",
+			)
 		}
 
 		// Same named type → unwrap
@@ -2769,9 +2639,7 @@ func (i *Interpreter) evalInfix(node *parser.InfixExpression, left Value, op str
 
 	// type mismatch check
 	if left.Type() != right.Type() {
-		return ErrorValue{
-			V: NewRuntimeError(node, fmt.Sprintf("type mismatch: '%s' %s '%s'", left.Type(), op, right.Type())),
-		}, nil
+		return NilValue{}, NewRuntimeError(node, fmt.Sprintf("type mismatch: '%s' %s '%s'", left.Type(), op, right.Type()))
 	}
 
 	switch left.Type() {
@@ -2785,9 +2653,7 @@ func (i *Interpreter) evalInfix(node *parser.InfixExpression, left Value, op str
 		return evalBoolInfix(node, left.(BoolValue), op, right.(BoolValue))
 	}
 
-	return ErrorValue{
-		V: NewRuntimeError(node, "unsupported operand types"),
-	}, nil
+	return NilValue{}, NewRuntimeError(node, "unsupported operand types")
 }
 
 func evalIntInfix(node *parser.InfixExpression, left IntValue, op string, right IntValue) (Value, error) {
@@ -2800,18 +2666,14 @@ func evalIntInfix(node *parser.InfixExpression, left IntValue, op string, right 
 		return IntValue{V: left.V * right.V}, nil
 	case "/":
 		if right.V == 0 {
-			return ErrorValue{
-				V: NewRuntimeError(node, "undefined: division by zero"),
-			}, nil
+			return NilValue{}, NewRuntimeError(node, "undefined: division by zero")
 		}
 
 		return FloatValue{V: float64(left.V) / float64(right.V)}, nil
 
 	case "%":
 		if right.V == 0 {
-			return ErrorValue{
-				V: NewRuntimeError(node, "undefined: mod by zero"),
-			}, nil
+			return NilValue{}, NewRuntimeError(node, "undefined: mod by zero")
 		}
 
 		return IntValue{V: left.V % right.V}, nil
@@ -2829,9 +2691,7 @@ func evalIntInfix(node *parser.InfixExpression, left IntValue, op string, right 
 		return BoolValue{V: left.V <= right.V}, nil
 	}
 
-	return ErrorValue{
-		V: NewRuntimeError(node, fmt.Sprintf("invalid operator %d %s %d", left.V, op, right.V)),
-	}, nil
+	return NilValue{}, NewRuntimeError(node, fmt.Sprintf("invalid operator %d %s %d", left.V, op, right.V))
 }
 
 func evalFloatInfix(node *parser.InfixExpression, left FloatValue, op string, right FloatValue) (Value, error) {
@@ -2844,9 +2704,7 @@ func evalFloatInfix(node *parser.InfixExpression, left FloatValue, op string, ri
 		return FloatValue{V: left.V * right.V}, nil
 	case "/":
 		if right.V == 0 {
-			return ErrorValue{
-				V: NewRuntimeError(node, "undefined: division by zero"),
-			}, nil
+			return NilValue{}, NewRuntimeError(node, "undefined: division by zero")
 		}
 
 		return FloatValue{V: left.V / right.V}, nil
@@ -2862,9 +2720,7 @@ func evalFloatInfix(node *parser.InfixExpression, left FloatValue, op string, ri
 		return BoolValue{V: left.V >= right.V}, nil
 	}
 
-	return ErrorValue{
-		V: NewRuntimeError(node, fmt.Sprintf("invalid operator %f %s %f", left.V, op, right.V)),
-	}, nil
+	return NilValue{}, NewRuntimeError(node, fmt.Sprintf("invalid operator %f %s %f", left.V, op, right.V))
 }
 
 func evalStringInfix(node *parser.InfixExpression, left StringValue, op string, right StringValue) (Value, error) {
@@ -2877,9 +2733,7 @@ func evalStringInfix(node *parser.InfixExpression, left StringValue, op string, 
 		return BoolValue{V: left.V != right.V}, nil
 	}
 
-	return ErrorValue{
-		V: NewRuntimeError(node, fmt.Sprintf("invalid operator %s %s %s", left.V, op, right.V)),
-	}, nil
+	return NilValue{}, NewRuntimeError(node, fmt.Sprintf("invalid operator %s %s %s", left.V, op, right.V))
 }
 
 func evalBoolInfix(node *parser.InfixExpression, left BoolValue, op string, right BoolValue) (Value, error) {
@@ -2890,9 +2744,7 @@ func evalBoolInfix(node *parser.InfixExpression, left BoolValue, op string, righ
 		return BoolValue{V: left.V != right.V}, nil
 	}
 
-	return ErrorValue{
-		V: NewRuntimeError(node, fmt.Sprintf("invalid operator %t %s %t", left.V, op, right.V)),
-	}, nil
+	return NilValue{}, NewRuntimeError(node, fmt.Sprintf("invalid operator %t %s %t", left.V, op, right.V))
 }
 
 func evalNilInfix(node *parser.InfixExpression, op string, other Value) (Value, error) {
@@ -2904,9 +2756,7 @@ func evalNilInfix(node *parser.InfixExpression, op string, other Value) (Value, 
 		_, isNil := other.(NilValue)
 		return BoolValue{V: !isNil}, nil
 	default:
-		return ErrorValue{
-			V: NewRuntimeError(node, fmt.Sprintf("invalid operator nil %s %s", op, other.String())),
-		}, nil
+		return NilValue{}, NewRuntimeError(node, fmt.Sprintf("invalid operator nil %s %s", op, other.String()))
 	}
 }
 
@@ -2927,9 +2777,7 @@ func evalErrorInfix(node *parser.InfixExpression, left ErrorValue, op string, ri
 	case "!=":
 		return BoolValue{V: left.V.Error() != re.V.Error()}, nil
 	default:
-		return ErrorValue{
-			V: NewRuntimeError(node, "invalid operator for error"),
-		}, nil
+		return NilValue{}, NewRuntimeError(node, "invalid operator for error")
 	}
 }
 
@@ -2938,9 +2786,7 @@ func evalPrefix(node *parser.PrefixExpression, operator string, right Value) (Va
 	case "!":
 		rTruthy, err := isTruthy(right)
 		if err != nil {
-			return ErrorValue{
-				V: NewRuntimeError(node, err.Error()),
-			}, nil
+			return NilValue{}, NewRuntimeError(node, err.Error())
 		}
 
 		return BoolValue{V: !rTruthy}, nil
@@ -2951,14 +2797,10 @@ func evalPrefix(node *parser.PrefixExpression, operator string, right Value) (Va
 		case FloatValue:
 			return FloatValue{V: -v.V}, nil
 		default:
-			return ErrorValue{
-				V: NewRuntimeError(node, fmt.Sprintf("invalid operand, %s, for unary '-'", right.String())),
-			}, nil
+			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("invalid operand, %s, for unary '-'", right.String()))
 		}
 	default:
-		return ErrorValue{
-			V: NewRuntimeError(node, fmt.Sprintf("unknown prefix operator: %s", operator)),
-		}, nil
+		return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unknown prefix operator: %s", operator))
 	}
 }
 
