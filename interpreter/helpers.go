@@ -38,7 +38,7 @@ func New(path string) *Interpreter {
 		mu:       sync.RWMutex{},
 	}
 
-	typeEnv := make(map[string]*TypeInfo)
+	typeEnv := make(map[string]TypeValue)
 
 	wd, _ := os.Getwd()
 
@@ -76,7 +76,7 @@ func New(path string) *Interpreter {
 }
 
 func NewWithEnv(env *Environment, path string) *Interpreter {
-	typeEnv := make(map[string]*TypeInfo)
+	typeEnv := make(map[string]TypeValue)
 
 	dir := filepath.Dir(path)
 
@@ -257,13 +257,12 @@ func typesAssignable(from, to *TypeInfo) bool {
 		return typesAssignable(from, to.Underlying)
 	}
 
-	if from.Kind == TypeNamed || to.Kind == TypeNamed {
-		if sameUnderlying(from, to) &&
-			(from.Kind != TypeNamed || to.Kind != TypeNamed) {
-			return true
-		}
+	if to.Kind == TypeNamed {
+		return sameUnderlying(from, to)
+	}
 
-		return false
+	if from.Kind == TypeNamed {
+		return typesIdentical(from, to)
 	}
 
 	switch {
@@ -604,5 +603,15 @@ func (i *Interpreter) checkMethodStatement(fn *parser.MethodStatement) error {
 		return NewRuntimeError(fn, "method must return a value")
 	}
 
+	return nil
+}
+
+func runValidator(t *TypeInfo, fields map[string]Value) error {
+	if t.Validator != nil {
+		return t.Validator(fields)
+	}
+	if t.Underlying != nil && t.Underlying.Validator != nil {
+		return t.Underlying.Validator(fields)
+	}
 	return nil
 }

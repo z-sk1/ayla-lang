@@ -11,45 +11,58 @@ import (
 	"github.com/z-sk1/ayla-lang/parser"
 )
 
-func initBuiltinTypes(typeEnv map[string]*TypeInfo) {
-	typeEnv["int"] = &TypeInfo{
-		Name:         "int",
-		Kind:         TypeInt,
-		IsComparable: true,
+func initBuiltinTypes(typeEnv map[string]TypeValue) {
+	typeEnv["int"] = TypeValue{
+		TypeInfo: &TypeInfo{
+			Name:         "int",
+			Kind:         TypeInt,
+			IsComparable: true,
+		},
 	}
 
-	typeEnv["float"] = &TypeInfo{
-		Name:         "float",
-		Kind:         TypeFloat,
-		IsComparable: true,
+	typeEnv["float"] = TypeValue{
+		TypeInfo: &TypeInfo{
+			Name:         "float",
+			Kind:         TypeFloat,
+			IsComparable: true,
+		},
+	}
+	typeEnv["string"] = TypeValue{
+		TypeInfo: &TypeInfo{
+			Name:         "string",
+			Kind:         TypeString,
+			IsComparable: true,
+		},
 	}
 
-	typeEnv["string"] = &TypeInfo{
-		Name:         "string",
-		Kind:         TypeString,
-		IsComparable: true,
+	typeEnv["bool"] = TypeValue{
+		TypeInfo: &TypeInfo{
+			Name:         "bool",
+			Kind:         TypeBool,
+			IsComparable: true,
+		},
 	}
 
-	typeEnv["bool"] = &TypeInfo{
-		Name:         "bool",
-		Kind:         TypeBool,
-		IsComparable: true,
+	typeEnv["nil"] = TypeValue{
+		TypeInfo: &TypeInfo{
+			Name:         "nil",
+			Kind:         TypeNil,
+			IsComparable: true,
+		},
 	}
 
-	typeEnv["nil"] = &TypeInfo{
-		Name:         "nil",
-		Kind:         TypeNil,
-		IsComparable: true,
+	typeEnv["thing"] = TypeValue{
+		TypeInfo: &TypeInfo{
+			Name: "thing",
+			Kind: TypeAny,
+		},
 	}
 
-	typeEnv["thing"] = &TypeInfo{
-		Name: "thing",
-		Kind: TypeAny,
-	}
-
-	typeEnv["error"] = &TypeInfo{
-		Name: "error",
-		Kind: TypeError,
+	typeEnv["error"] = TypeValue{
+		TypeInfo: &TypeInfo{
+			Name: "error",
+			Kind: TypeError,
+		},
 	}
 }
 
@@ -58,6 +71,8 @@ func (i *Interpreter) registerNativeModules() {
 		"math": LoadMathModule,
 		"rand": LoadRandModule,
 		"fs":   LoadFSModule,
+		"time": LoadTimeModule,
+		"gfx":  LoadGFXModule,
 	}
 }
 
@@ -271,7 +286,7 @@ func (i *Interpreter) registerBuiltins() {
 				return NilValue{}, NewRuntimeError(node, "make([]T, len [, cap]) required")
 			}
 
-			ti := typeVal.TypeName
+			ti := typeVal.TypeInfo
 
 			switch ti.Kind {
 			case TypeArray:

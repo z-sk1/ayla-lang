@@ -159,10 +159,18 @@ func (*StructType) typeNode() {}
 
 type IdentType struct {
 	NodeBase
-	Name string
+	Name *Identifier
 }
 
 func (*IdentType) typeNode() {}
+
+type QualifiedType struct {
+	NodeBase
+	Module *Identifier
+	Name   *Identifier
+}
+
+func (*QualifiedType) typeNode() {}
 
 type ArrayType struct {
 	NodeBase

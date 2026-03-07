@@ -25,7 +25,7 @@ type Environment struct {
 
 type Interpreter struct {
 	Env           *Environment
-	typeEnv       map[string]*TypeInfo
+	typeEnv       map[string]TypeValue
 	modules       map[string]ModuleValue
 	nativeModules map[string]NativeLoader
 	modulePaths   []string
@@ -206,7 +206,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		if err != nil {
 			return SignalNone{}, err
 		}
-		
+
 		// variable must not exist
 		if _, ok := i.Env.GetLocal(stmt.Name.Value); ok {
 			return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("cant redeclare var: %s", stmt.Name.Value))
@@ -681,7 +681,9 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			ti.Kind = underlying.Kind
 		}
 
-		i.typeEnv[stmt.Name.Value] = ti
+		i.typeEnv[stmt.Name.Value] = TypeValue{
+			TypeInfo: ti,
+		}
 
 		return SignalNone{}, nil
 	case *parser.AssignmentStatement:
@@ -860,11 +862,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			enumType.Variants[name] = idx
 		}
 
-		i.typeEnv[stmt.Name.Value] = enumType
-
-		i.Env.Define(stmt.Name.Value, TypeValue{
-			TypeName: enumType,
-		})
+		i.typeEnv[stmt.Name.Value] = TypeValue{TypeInfo: enumType}
 
 		return SignalNone{}, nil
 
@@ -1349,7 +1347,7 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 		}
 
 		return TypeValue{
-			TypeName: ti,
+			TypeInfo: ti,
 		}, nil
 
 	case *parser.MemberExpression:
@@ -1366,6 +1364,10 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 	case *parser.Identifier:
 		if expr.Value == "_" {
 			return NilValue{}, NewRuntimeError(expr, "cannot use '_' as a value")
+		}
+
+		if v, ok := i.typeEnv[expr.Value]; ok {
+			return v, nil
 		}
 
 		v, ok := i.Env.Get(expr.Value)
@@ -1744,6 +1746,8 @@ func (i *Interpreter) assignWithType(node parser.Node, v Value, expected *TypeIn
 }
 
 func (i *Interpreter) evalCompositeLiteral(expr *parser.CompositeLiteral, ti *TypeInfo) (Value, error) {
+	ti = unwrapAlias(ti)
+
 	switch ti.Kind {
 	case TypeArray, TypeFixedArray:
 		return i.evalArrayLiteral(expr, ti)
@@ -1813,6 +1817,11 @@ func (i *Interpreter) evalStructLiteral(expr *parser.CompositeLiteral, typeInfo 
 		}
 
 		fields[name] = v
+	}
+
+	err := runValidator(typeInfo, fields)
+	if err != nil {
+		return NilValue{}, NewRuntimeError(expr, err.Error())
 	}
 
 	return &StructValue{
@@ -1978,7 +1987,7 @@ func (i *Interpreter) evalCall(e *parser.FuncCall) (Value, error) {
 			if len(e.Args) != 1 {
 				return NilValue{}, NewRuntimeError(e, "type cast expects 1 arg")
 			}
-			return i.evalTypeCast(ti, e.Args[0], e)
+			return i.evalTypeCast(ti.TypeInfo, e.Args[0], e)
 		}
 	}
 
@@ -2217,7 +2226,7 @@ func (i *Interpreter) callFunction(fn *Func, args []Value, callNode parser.Node)
 
 			val, err = i.assignWithType(callNode, val, expected)
 			if err != nil {
-				return NilValue{}, NewRuntimeError(callNode, fmt.Sprintf("param '%s' expected '%s' but got '%s'", param.Name.Value, expected.Name, actual.Name))
+				return NilValue{}, NewRuntimeError(callNode, fmt.Sprintf("param '%s' expects '%s' but got '%s'", param.Name.Value, expected.Name, actual.Name))
 			}
 		}
 
@@ -2519,6 +2528,10 @@ func (i *Interpreter) evalMemberExpression(node parser.Expression, left Value, f
 
 	switch obj := left.(type) {
 	case ModuleValue:
+		if typ, ok := obj.typeEnv[field]; ok {
+			return typ, nil
+		}
+
 		val, ok := obj.Env.Get(field)
 		if !ok {
 			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unknown '%s'", field))
@@ -2552,17 +2565,17 @@ func (i *Interpreter) evalMemberExpression(node parser.Expression, left Value, f
 
 		return val, nil
 	case TypeValue:
-		if obj.TypeName.Kind != TypeEnum {
-			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("type '%s' has no members", obj.TypeName.Name))
+		if obj.TypeInfo.Kind != TypeEnum {
+			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("type '%s' has no members", obj.TypeInfo.Name))
 		}
 
-		idx, ok := obj.TypeName.Variants[field]
+		idx, ok := obj.TypeInfo.Variants[field]
 		if !ok {
-			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unknown enum variant '%s.%s'", obj.TypeName.Name, field))
+			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unknown enum variant '%s.%s'", obj.TypeInfo.Name, field))
 		}
 
 		return EnumValue{
-			Enum:    obj.TypeName,
+			Enum:    obj.TypeInfo,
 			Variant: field,
 			Index:   idx,
 		}, nil

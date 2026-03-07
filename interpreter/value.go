@@ -36,7 +36,8 @@ type TypeInfo struct {
 	Alias      bool
 
 	// structs
-	Fields map[string]*TypeInfo
+	Fields    map[string]*TypeInfo
+	Validator func(fields map[string]Value) error
 
 	// arrays
 	Elem *TypeInfo
@@ -85,6 +86,7 @@ const (
 	ERROR       ValueType = "error"
 	NIL         ValueType = "nil"
 	MODULE      ValueType = "module"
+	NATIVE      ValueType = "native"
 )
 
 type Value interface {
@@ -262,19 +264,6 @@ func (a ArrayValue) String() string {
 	return out
 }
 
-type StructType struct {
-	Name   string
-	Fields map[string]ValueType
-}
-
-func (st StructType) Type() ValueType {
-	return STRUCT_TYPE
-}
-
-func (st StructType) String() string {
-	return "struct type " + st.Name
-}
-
 type StructValue struct {
 	TypeName *TypeInfo
 	Fields   map[string]Value
@@ -339,25 +328,25 @@ func (e EnumValue) String() string {
 }
 
 type TypeValue struct {
-	TypeName *TypeInfo
+	TypeInfo *TypeInfo
 }
 
 func (t TypeValue) String() string {
-	if t.TypeName.Kind == TypeEnum {
-		variants := make([]string, 0, len(t.TypeName.Variants))
+	if t.TypeInfo.Kind == TypeEnum {
+		variants := make([]string, 0, len(t.TypeInfo.Variants))
 
-		for name := range t.TypeName.Variants {
+		for name := range t.TypeInfo.Variants {
 			variants = append(variants, name)
 		}
 
-		return fmt.Sprintf("%s: %s", t.TypeName.Name, strings.Join(variants, ", "))
+		return fmt.Sprintf("%s: %s", t.TypeInfo.Name, strings.Join(variants, ", "))
 	}
 
-	return t.TypeName.Name
+	return t.TypeInfo.Name
 }
 
 func (t TypeValue) Type() ValueType {
-	return valueTypeOf(t.TypeName)
+	return valueTypeOf(t.TypeInfo)
 }
 
 type NilValue struct{}
@@ -381,8 +370,9 @@ func (u UninitializedValue) String() string {
 }
 
 type ModuleValue struct {
-	Name string
-	Env  *Environment
+	Name    string
+	Env     *Environment
+	typeEnv map[string]TypeValue
 }
 
 func (m ModuleValue) Type() ValueType {
@@ -393,16 +383,47 @@ func (m ModuleValue) String() string {
 	return fmt.Sprintf("<module %s>", m.Name)
 }
 
+type NativeValue struct {
+	V any
+}
+
+func (n NativeValue) Type() ValueType {
+	return NATIVE
+}
+
+func (n NativeValue) String() string {
+	return "native"
+}
+
 func (i *Interpreter) resolveTypeNode(t parser.TypeNode) (*TypeInfo, error) {
 	switch tn := t.(type) {
 
 	case *parser.IdentType:
 		// int, string, Person, etc.
-		ti, ok := i.typeEnv[tn.Name]
+		tv, ok := i.typeEnv[tn.Name.Value]
 		if !ok {
-			return nil, fmt.Errorf("unknown type '%s'", tn.Name)
+			return nil, NewRuntimeError(tn, fmt.Sprintf("unknown type '%s'", tn.Name.Value))
 		}
-		return ti, nil
+		return tv.TypeInfo, nil
+
+	case *parser.QualifiedType:
+		modVal, ok := i.Env.Get(tn.Module.Value)
+		if !ok {
+			return nil, NewRuntimeError(tn, fmt.Sprintf("unknown module '%s'", tn.Module.Value))
+		}
+
+		mod, ok := modVal.(ModuleValue)
+		if !ok {
+			return nil, NewRuntimeError(tn, fmt.Sprintf("'%s' is not a module", tn.Module.Value))
+		}
+
+		tv, ok := mod.typeEnv[tn.Name.Value]
+		if !ok {
+			return nil, NewRuntimeError(tn,
+				fmt.Sprintf("module '%s' has no type '%s'", tn.Module.Value, tn.Name.Value))
+		}
+
+		return tv.TypeInfo, nil
 
 	case *parser.StructType:
 		// anonymous struct type
@@ -568,15 +589,15 @@ func valueTypeOf(ti *TypeInfo) ValueType {
 func (i *Interpreter) typeInfoFromValue(v Value) *TypeInfo {
 	switch v := v.(type) {
 	case IntValue:
-		return i.typeEnv["int"]
+		return i.typeEnv["int"].TypeInfo
 	case FloatValue:
-		return i.typeEnv["float"]
+		return i.typeEnv["float"].TypeInfo
 	case StringValue:
-		return i.typeEnv["string"]
+		return i.typeEnv["string"].TypeInfo
 	case BoolValue:
-		return i.typeEnv["bool"]
+		return i.typeEnv["bool"].TypeInfo
 	case ErrorValue:
-		return i.typeEnv["error"]
+		return i.typeEnv["error"].TypeInfo
 	case ArrayValue:
 		if v.Fixed {
 			return &TypeInfo{
@@ -614,7 +635,7 @@ func (i *Interpreter) typeInfoFromValue(v Value) *TypeInfo {
 	case NamedValue:
 		return v.TypeName
 	default:
-		return i.typeEnv["nil"]
+		return i.typeEnv["nil"].TypeInfo
 	}
 }
 

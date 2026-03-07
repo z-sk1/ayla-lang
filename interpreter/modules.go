@@ -7,20 +7,140 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"time"
+
+	rl "github.com/gen2brain/raylib-go/raylib"
 
 	"github.com/z-sk1/ayla-lang/parser"
 )
 
 type NativeLoader func(i *Interpreter) (ModuleValue, error)
 
+func expectArgsRange(node parser.Node, args []Value, startRange, endRange int, name string) error {
+	return NewRuntimeError(node, fmt.Sprintf("%s: expected %d-%d arguments, got %d", name, startRange, endRange, len(args)))
+}
+
+func argInt(node parser.Node, args []Value, i int, name string) (int, error) {
+	v := unwrapNamed(args[i])
+	iv, ok := v.(IntValue)
+	if !ok {
+		return 0, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be an int", name, i+1))
+	}
+	return iv.V, nil
+}
+
+func argFloat(node parser.Node, args []Value, i int, name string) (float64, error) {
+	v, ok := toFloat(unwrapNamed(args[i]))
+	if !ok {
+		return 0, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be an float", name, i+1))
+	}
+	return v, nil
+}
+
+func argString(node parser.Node, args []Value, i int, name string) (string, error) {
+	v := unwrapNamed(args[i])
+	iv, ok := v.(StringValue)
+	if !ok {
+		return "", NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be a string", name, i+1))
+	}
+	return iv.V, nil
+}
+
+func argStruct(node parser.Node, args []Value, i int, name, sname string) (*StructValue, error) {
+	v := unwrapNamed(args[i])
+	sv, ok := v.(*StructValue)
+	if !ok {
+		return nil, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be a %s", name, i+1, sname))
+	}
+	return sv, nil
+}
+
+func argArray(node parser.Node, args []Value, i int, name string) (ArrayValue, error) {
+	v := unwrapNamed(args[i])
+	av, ok := v.(ArrayValue)
+	if !ok {
+		return ArrayValue{}, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be an array or slice", name, i+1))
+	}
+	return av, nil
+}
+
+func argColor(node parser.Node, typeEnv map[string]TypeValue, args []Value, i int, name string) (rl.Color, error) {
+	colTI := typeEnv["Color"].TypeInfo
+
+	sv, err := argStruct(node, args, i, name, "gfx.Color")
+	if err != nil {
+		return rl.Color{}, err
+	}
+
+	if !typesAssignable(sv.TypeName, colTI) {
+		return rl.Color{}, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be gfx.Color", name, i+1))
+	}
+
+	return colorFromValue(sv)
+}
+
+func argVector2(node parser.Node, i *Interpreter, typeEnv map[string]TypeValue, args []Value, idx int, name string) (float32, float32, error) {
+	vecTI := typeEnv["Vector2"].TypeInfo
+
+	vecVal, ok := unwrapNamed(args[idx]).(*StructValue)
+	if !ok {
+		return 0, 0, NewRuntimeError(node, "gfx.DrawLine: first argument must be a gfx.Vector2")
+	}
+
+	if !typesAssignable(i.typeInfoFromValue(vecVal), vecTI) {
+		return 0, 0, NewRuntimeError(node, "gfx.DrawLine: first argument must be a gfx.Vector2")
+	}
+
+	x, y := unwrapVector2(vecVal)
+
+	return x, y, nil
+}
+
+func colorFromValue(v Value) (rl.Color, error) {
+	colVal := v.(*StructValue)
+
+	r := colVal.Fields["R"].(IntValue).V
+	g := colVal.Fields["G"].(IntValue).V
+	b := colVal.Fields["B"].(IntValue).V
+	a := colVal.Fields["A"].(IntValue).V
+
+	if r < 0 || r > 255 ||
+		g < 0 || g > 255 ||
+		b < 0 || b > 255 ||
+		a < 0 || a > 255 {
+		return rl.Color{}, fmt.Errorf("gfx.Color fields must be between 0 and 255")
+	}
+
+	return rl.Color{
+		R: uint8(r),
+		G: uint8(g),
+		B: uint8(b),
+		A: uint8(a),
+	}, nil
+}
+
+func unwrapVector2(v Value) (float32, float32) {
+	x, ok := toFloat(v.(*StructValue).Fields["X"])
+	if !ok {
+		return 0, 0
+	}
+
+	y, ok := toFloat(v.(*StructValue).Fields["Y"])
+	if !ok {
+		return 0, 0
+	}
+
+	return float32(x), float32(y)
+}
+
 func wrapFloat1(name string, fn func(float64) float64) *BuiltinFunc {
 	return &BuiltinFunc{
 		Name:  name,
 		Arity: 1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			f, ok := toFloat(unwrapNamed(args[0]))
-			if !ok {
-				return NilValue{}, NewRuntimeError(node, "expected number")
+			f, err := argFloat(node, args, 0, name)
+			if err != nil {
+				return NilValue{}, err
 			}
 
 			return FloatValue{V: fn(f)}, nil
@@ -33,14 +153,14 @@ func wrapFloat2(name string, fn func(float64, float64) float64) *BuiltinFunc {
 		Name:  name,
 		Arity: 2,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			f1, ok := toFloat(unwrapNamed(args[0]))
-			if !ok {
-				return NilValue{}, NewRuntimeError(node, "expected number")
+			f1, err := argFloat(node, args, 0, name)
+			if err != nil {
+				return NilValue{}, err
 			}
 
-			f2, ok := toFloat(unwrapNamed(args[1]))
-			if !ok {
-				return NilValue{}, NewRuntimeError(node, "expected number")
+			f2, err := argFloat(node, args, 1, name)
+			if err != nil {
+				return NilValue{}, err
 			}
 
 			return FloatValue{V: fn(f1, f2)}, nil
@@ -102,29 +222,27 @@ func LoadRandModule(i *Interpreter) (ModuleValue, error) {
 				n := rand.Intn(2)
 				return IntValue{V: n}, nil
 			case 1:
-				maxV, ok := unwrapNamed(args[0]).(IntValue)
-				if !ok {
-					return NilValue{}, NewRuntimeError(node, "rand.Int: first argument must be int")
+				max, err := argInt(node, args, 0, "rand.Int")
+				if err != nil {
+					return NilValue{}, err
 				}
 
-				if maxV.V <= 0 {
+				if max <= 0 {
 					return NilValue{}, NewRuntimeError(node, "rand.Int: first argument must > 0")
 				}
 
-				max := maxV.V
 				n := rand.Intn(max) + 1
-
 				return IntValue{V: n}, nil
 			case 2:
-				minV, ok1 := unwrapNamed(args[0]).(IntValue)
-				maxV, ok2 := unwrapNamed(args[1]).(IntValue)
-
-				if !ok1 || !ok2 {
-					return NilValue{}, NewRuntimeError(node, "rand.Int: both arguments must be an int")
+				min, err := argInt(node, args, 0, "rand.Int")
+				if err != nil {
+					return NilValue{}, err
 				}
 
-				min := minV.V
-				max := maxV.V
+				max, err := argInt(node, args, 1, "rand.Int")
+				if err != nil {
+					return NilValue{}, err
+				}
 
 				if min > max {
 					min, max = max, min
@@ -133,7 +251,7 @@ func LoadRandModule(i *Interpreter) (ModuleValue, error) {
 				n := rand.Intn(max-min+1) + min
 				return IntValue{V: n}, nil
 			}
-			return NilValue{}, NewRuntimeError(node, "invalid amount of args, rand.Int expects 0-2 args")
+			return NilValue{}, expectArgsRange(node, args, 0, 2, "rand.Int")
 		},
 	})
 
@@ -146,29 +264,32 @@ func LoadRandModule(i *Interpreter) (ModuleValue, error) {
 				n := rand.Float64()
 				return FloatValue{V: n}, nil
 			case 1:
-				maxV, ok := toFloat(unwrapNamed(args[0]))
-				if !ok {
-					return NilValue{}, NewRuntimeError(node, "rand.Float: first argument must be a float")
+				max, err := argFloat(node, args, 0, "rand.Float")
+				if err != nil {
+					return NilValue{}, err
 				}
 
-				n := rand.Float64() * maxV
+				n := rand.Float64() * max
 				return FloatValue{V: n}, nil
 			case 2:
-				minV, ok1 := toFloat(unwrapNamed(args[0]))
-				maxV, ok2 := toFloat(unwrapNamed(args[1]))
-
-				if !ok1 || !ok2 {
-					return NilValue{}, NewRuntimeError(node, "rand.Float: both arguments must be a float")
+				min, err := argFloat(node, args, 0, "rand.Float")
+				if err != nil {
+					return NilValue{}, err
 				}
 
-				if minV > maxV {
-					minV, maxV = maxV, minV
+				max, err := argFloat(node, args, 1, "rand.Float")
+				if err != nil {
+					return NilValue{}, err
 				}
 
-				n := rand.Float64()*(maxV-minV+1) + minV
+				if min > max {
+					min, max = max, min
+				}
+
+				n := rand.Float64()*(max-min+1) + min
 				return FloatValue{V: n}, nil
 			}
-			return NilValue{}, NewRuntimeError(node, "invalid amount of args, rand.Float expects 0-2 args")
+			return NilValue{}, expectArgsRange(node, args, 0, 2, "rand.Float")
 		},
 	})
 
@@ -176,9 +297,9 @@ func LoadRandModule(i *Interpreter) (ModuleValue, error) {
 		Name:  "Choice",
 		Arity: 1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			arr, ok := unwrapNamed(args[0]).(ArrayValue)
-			if !ok {
-				return NilValue{}, NewRuntimeError(node, fmt.Sprintf("expected array or slice but got '%s'", i.typeInfoFromValue(args[0]).Name))
+			arr, err := argArray(node, args, 0, "rand.Choice")
+			if err != nil {
+				return NilValue{}, err
 			}
 
 			rand := rand.Intn(len(arr.Elements))
@@ -201,17 +322,17 @@ func LoadFSModule(i *Interpreter) (ModuleValue, error) {
 		Name:  "Write",
 		Arity: 2,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			path, ok := unwrapNamed(args[0]).(StringValue)
-			if !ok {
-				return NilValue{}, NewRuntimeError(node, fmt.Sprintf("fs.Write: first argument must be a string, got '%s'", i.typeInfoFromValue(args[0]).Name))
+			path, err := argString(node, args, 0, "fs.Write")
+			if err != nil {
+				return NilValue{}, err
 			}
 
-			content, ok := unwrapNamed(args[1]).(StringValue)
-			if !ok {
-				return NilValue{}, NewRuntimeError(node, fmt.Sprintf("fs.Write: second argument must be a string, got '%s'", i.typeInfoFromValue(args[1]).Name))
+			content, err := argString(node, args, 1, "fs.Write")
+			if err != nil {
+				return NilValue{}, err
 			}
 
-			err := os.WriteFile(path.V, []byte(content.V), 0644)
+			err = os.WriteFile(path, []byte(content), 0644)
 			if err != nil {
 				return ErrorValue{V: NewRuntimeError(node, err.Error())}, nil
 			}
@@ -225,12 +346,9 @@ func LoadFSModule(i *Interpreter) (ModuleValue, error) {
 		Arity: 1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
 
-			path, ok := unwrapNamed(args[0]).(StringValue)
-			if !ok {
-				return NilValue{}, NewRuntimeError(node, "fs.Read: argument must be string")
-			}
+			path, err := argString(node, args, 0, "fs.Read")
 
-			data, err := os.ReadFile(path.V)
+			data, err := os.ReadFile(path)
 			if err != nil {
 				return TupleValue{
 					Values: []Value{
@@ -255,16 +373,12 @@ func LoadFSModule(i *Interpreter) (ModuleValue, error) {
 		Name:  "Exists",
 		Arity: 1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			v := unwrapNamed(args[0])
-
-			pathVal, ok := v.(StringValue)
-			if !ok {
-				return NilValue{}, NewRuntimeError(node, "fs.Read: argument must be string")
+			path, err := argString(node, args, 0, "fs.Exists")
+			if err != nil {
+				return NilValue{}, err
 			}
 
-			path := pathVal.V
-
-			_, err := os.Stat(path)
+			_, err = os.Stat(path)
 			if err == nil {
 				return TupleValue{Values: []Value{
 					BoolValue{V: true},
@@ -292,15 +406,15 @@ func LoadFSModule(i *Interpreter) (ModuleValue, error) {
 		Name:  "Append",
 		Arity: 2,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			pathVal, ok1 := unwrapNamed(args[0]).(StringValue)
-			dataVal, ok2 := unwrapNamed(args[1]).(StringValue)
-
-			if !ok1 || !ok2 {
-				return NilValue{}, NewRuntimeError(node, "fs.Append: both arguments must be a string")
+			path, err := argString(node, args, 0, "fs.Append")
+			if err != nil {
+				return NilValue{}, err
 			}
 
-			path := pathVal.V
-			data := dataVal.V
+			data, err := argString(node, args, 1, "fs.Append")
+			if err != nil {
+				return NilValue{}, err
+			}
 
 			file, err := os.OpenFile(
 				path,
@@ -330,14 +444,12 @@ func LoadFSModule(i *Interpreter) (ModuleValue, error) {
 		Name:  "Delete",
 		Arity: 1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			pathVal, ok := unwrapNamed(args[0]).(StringValue)
-			if !ok {
-				return NilValue{}, NewRuntimeError(node, "fs.Delete: argument must be a string")
+			path, err := argString(node, args, 0, "fs.Delete")
+			if err != nil {
+				return NilValue{}, err
 			}
 
-			path := pathVal.V
-
-			err := os.Remove(path)
+			err = os.Remove(path)
 			if err != nil {
 				return NilValue{}, NewRuntimeError(node, err.Error())
 			}
@@ -350,12 +462,10 @@ func LoadFSModule(i *Interpreter) (ModuleValue, error) {
 		Name:  "List",
 		Arity: 1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			pathVal, ok := unwrapNamed(args[0]).(StringValue)
-			if !ok {
-				return NilValue{}, NewRuntimeError(node, "fs.List: argument must be a string")
+			path, err := argString(node, args, 0, "fs.List")
+			if err != nil {
+				return NilValue{}, err
 			}
-
-			path := pathVal.V
 
 			entries, err := os.ReadDir(path)
 			if err != nil {
@@ -378,7 +488,7 @@ func LoadFSModule(i *Interpreter) (ModuleValue, error) {
 				Values: []Value{
 					ArrayValue{
 						Elements: slice,
-						ElemType: i.typeEnv["string"],
+						ElemType: i.typeEnv["string"].TypeInfo,
 					},
 					NilValue{},
 				},
@@ -390,14 +500,12 @@ func LoadFSModule(i *Interpreter) (ModuleValue, error) {
 		Name:  "Mkdir",
 		Arity: 1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			pathVal, ok := unwrapNamed(args[0]).(StringValue)
-			if !ok {
-				return NilValue{}, NewRuntimeError(node, "fs.Mkdir: argument must be a string")
+			path, err := argString(node, args, 0, "fs.Mkdir")
+			if err != nil {
+				return NilValue{}, err
 			}
 
-			path := pathVal.V
-
-			err := os.MkdirAll(path, 0755)
+			err = os.MkdirAll(path, 0755)
 			if err != nil {
 				return ErrorValue{
 					V: NewRuntimeError(node, err.Error()),
@@ -412,12 +520,10 @@ func LoadFSModule(i *Interpreter) (ModuleValue, error) {
 		Name:  "IsDir",
 		Arity: 1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			pathVal, ok := unwrapNamed(args[0]).(StringValue)
-			if !ok {
-				return NilValue{}, NewRuntimeError(node, "fs.IsDir: argument must be a string")
+			path, err := argString(node, args, 0, "fs.IsDir")
+			if err != nil {
+				return NilValue{}, err
 			}
-
-			path := pathVal.V
 
 			info, err := os.Stat(path)
 			if err != nil {
@@ -444,14 +550,14 @@ func LoadFSModule(i *Interpreter) (ModuleValue, error) {
 		Name:  "Walk",
 		Arity: 1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			root, ok := unwrapNamed(args[0]).(StringValue)
-			if !ok {
-				return NilValue{}, NewRuntimeError(node, "fs.Walk: argument must be a string")
+			root, err := argString(node, args, 0, "fs.Walk")
+			if err != nil {
+				return NilValue{}, err
 			}
 
 			var files []Value
 
-			err := filepath.Walk(root.V, func(path string, info os.FileInfo, err error) error {
+			err = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 				if err != nil {
 					return err
 				}
@@ -473,7 +579,7 @@ func LoadFSModule(i *Interpreter) (ModuleValue, error) {
 
 			return TupleValue{
 				Values: []Value{
-					ArrayValue{Elements: files, ElemType: i.typeEnv["string"]},
+					ArrayValue{Elements: files, ElemType: i.typeEnv["string"].TypeInfo},
 					NilValue{},
 				},
 			}, nil
@@ -509,12 +615,10 @@ func LoadFSModule(i *Interpreter) (ModuleValue, error) {
 		Name:  "Size",
 		Arity: 1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			pathVal, ok := unwrapNamed(args[0]).(StringValue)
-			if !ok {
-				return NilValue{}, NewRuntimeError(node, "fs.Size: argument must be a string")
+			path, err := argString(node, args, 0, "fs.Size")
+			if err != nil {
+				return NilValue{}, err
 			}
-
-			path := pathVal.V
 
 			info, err := os.Stat(path)
 			if err != nil {
@@ -541,12 +645,10 @@ func LoadFSModule(i *Interpreter) (ModuleValue, error) {
 		Name:  "ModTime",
 		Arity: 1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			pathVal, ok := unwrapNamed(args[0]).(StringValue)
-			if !ok {
-				return NilValue{}, NewRuntimeError(node, "fs.ModTime: argument must be a string")
+			path, err := argString(node, args, 0, "fs.ModTime")
+			if err != nil {
+				return NilValue{}, err
 			}
-
-			path := pathVal.V
 
 			info, err := os.Stat(path)
 			if err != nil {
@@ -568,46 +670,46 @@ func LoadFSModule(i *Interpreter) (ModuleValue, error) {
 			}, nil
 		},
 	})
-	
+
 	env.Define("Rename", &BuiltinFunc{
-		Name: "Rename",
+		Name:  "Rename",
 		Arity: 2,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			oldVal, ok1 := unwrapNamed(args[0]).(StringValue)
-			newVal, ok2 := unwrapNamed(args[1]).(StringValue)
-			
-			if !ok1 || !ok2 {
-				return NilValue{}, NewRuntimeError(node, "fs.Rename: both arguments must be a string")
+			old, err := argString(node, args, 0, "fs.Rename")
+			if err != nil {
+				return NilValue{}, err
 			}
-			
-			old := oldVal.V
-			new := newVal.V
-			
-			err := os.Rename(old, new)
+
+			new, err := argString(node, args, 1, "fs.Rename")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			err = os.Rename(old, new)
 			if err != nil {
 				return ErrorValue{
 					V: NewRuntimeError(node, err.Error()),
 				}, nil
 			}
-			
+
 			return NilValue{}, nil
 		},
 	})
-	
+
 	env.Define("Copy", &BuiltinFunc{
-		Name: "Copy",
+		Name:  "Copy",
 		Arity: 2,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			srcVal, ok1 := unwrapNamed(args[0]).(StringValue)
-			dstVal, ok2 := unwrapNamed(args[1]).(StringValue)
-			
-			if !ok1 || !ok2 {
-				return NilValue{}, NewRuntimeError(node, "fs.Copy: both arguments must be a string")
+			src, err := argString(node, args, 0, "fs.Copy")
+			if err != nil {
+				return NilValue{}, err
 			}
-			
-			src := srcVal.V
-			dst := dstVal.V
-			
+
+			dst, err := argString(node, args, 1, "fs.Copy")
+			if err != nil {
+				return NilValue{}, err
+			}
+
 			in, err := os.Open(src)
 			if err != nil {
 				return ErrorValue{
@@ -615,7 +717,7 @@ func LoadFSModule(i *Interpreter) (ModuleValue, error) {
 				}, nil
 			}
 			defer in.Close()
-			
+
 			out, err := os.Create(dst)
 			if err != nil {
 				return ErrorValue{
@@ -623,14 +725,14 @@ func LoadFSModule(i *Interpreter) (ModuleValue, error) {
 				}, nil
 			}
 			defer out.Close()
-			
+
 			_, err = io.Copy(out, in)
 			if err != nil {
 				return ErrorValue{
 					V: NewRuntimeError(node, err.Error()),
 				}, nil
 			}
-			
+
 			return NilValue{}, nil
 		},
 	})
@@ -638,6 +740,424 @@ func LoadFSModule(i *Interpreter) (ModuleValue, error) {
 	module := ModuleValue{
 		Name: "fs",
 		Env:  env,
+	}
+
+	return module, nil
+}
+
+func LoadTimeModule(i *Interpreter) (ModuleValue, error) {
+	env := NewEnvironment(i.Env)
+
+	env.Define("Sleep", &BuiltinFunc{
+		Name:  "Sleep",
+		Arity: 1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			v := unwrapNamed(args[0])
+
+			switch v := v.(type) {
+			case IntValue:
+				time.Sleep(time.Duration(v.V) * time.Second)
+			case FloatValue:
+				time.Sleep(time.Duration(v.V) * time.Second)
+			default:
+				return NilValue{}, NewRuntimeError(node, "time.Sleep: argument must be int or float seconds")
+			}
+
+			return NilValue{}, nil
+		},
+	})
+
+	env.Define("Now", &BuiltinFunc{
+		Name:  "Now",
+		Arity: 0,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			return IntValue{V: int(time.Now().Unix())}, nil
+		},
+	})
+
+	env.Define("Since", &BuiltinFunc{
+		Name:  "Since",
+		Arity: 1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			start, err := argInt(node, args, 0, "time.Since")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			now := time.Now().Unix()
+			return IntValue{V: int(now - int64(start))}, nil
+		},
+	})
+
+	env.Define("Format", &BuiltinFunc{
+		Name:  "Format",
+		Arity: -1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			switch len(args) {
+			case 1:
+				ts, err := argInt(node, args, 0, "time.Format")
+				if err != nil {
+					return NilValue{}, err
+				}
+
+				t := time.Unix(int64(ts), 0)
+				s := t.Format("2006-01-02 15:04:05")
+
+				return StringValue{V: s}, nil
+			case 2:
+				ts, err := argInt(node, args, 0, "time.Format")
+				if err != nil {
+					return NilValue{}, err
+				}
+
+				layout, err := argString(node, args, 1, "time.Format")
+				if err != nil {
+					return NilValue{}, err
+				}
+
+				t := time.Unix(int64(ts), 0)
+				s := t.Format(layout)
+
+				return StringValue{V: s}, nil
+			default:
+				return NilValue{}, NewRuntimeError(node, "time.Format: invalid amount of args, 0-2 args allowed")
+			}
+		},
+	})
+
+	module := ModuleValue{
+		Name: "time",
+		Env:  env,
+	}
+
+	return module, nil
+}
+
+func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
+	env := NewEnvironment(i.Env)
+	typeEnv := make(map[string]TypeValue)
+
+	typeEnv["Color"] = TypeValue{
+		TypeInfo: &TypeInfo{
+			Name: "Color",
+			Kind: TypeStruct,
+			Fields: map[string]*TypeInfo{
+				"R": i.typeEnv["int"].TypeInfo,
+				"G": i.typeEnv["int"].TypeInfo,
+				"B": i.typeEnv["int"].TypeInfo,
+				"A": i.typeEnv["int"].TypeInfo,
+			},
+			Validator: func(fields map[string]Value) error {
+				var r, g, b, a int
+
+				if fields["R"] != nil {
+					r = unwrapNamed(fields["R"]).(IntValue).V
+				}
+
+				if fields["G"] != nil {
+					g = unwrapNamed(fields["G"]).(IntValue).V
+				}
+
+				if fields["B"] != nil {
+					b = unwrapNamed(fields["B"]).(IntValue).V
+				}
+
+				if fields["A"] != nil {
+					a = unwrapNamed(fields["A"]).(IntValue).V
+				}
+
+				if r < 0 || r > 255 {
+					return fmt.Errorf("gfx.Color.R must be between 0-255, got %d", r)
+				}
+
+				if g < 0 || g > 255 {
+					return fmt.Errorf("gfx.Color.G must be between 0-255, got %d", g)
+				}
+
+				if b < 0 || b > 255 {
+					return fmt.Errorf("gfx.Color.B must be between 0-255, got %d", b)
+				}
+
+				if a < 0 || a > 255 {
+					return fmt.Errorf("gfx.Color.A must be between 0-255, got %d", a)
+				}
+
+				return nil
+			},
+		},
+	}
+
+	typeEnv["Vector2"] = TypeValue{
+		TypeInfo: &TypeInfo{
+			Name: "Vector2",
+			Kind: TypeStruct,
+			Fields: map[string]*TypeInfo{
+				"X": i.typeEnv["float"].TypeInfo,
+				"Y": i.typeEnv["float"].TypeInfo,
+			},
+		},
+	}
+
+	env.Define("Init", &BuiltinFunc{
+		Name:  "Init",
+		Arity: 3,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			w, err := argInt(node, args, 0, "gfx.Init")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			h, err := argInt(node, args, 1, "gfx.Init")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			title, err := argString(node, args, 2, "gfx.Init")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			rl.InitWindow(int32(w), int32(h), title)
+			rl.SetTargetFPS(60)
+
+			return NilValue{}, nil
+		},
+	})
+
+	env.Define("ShouldClose", &BuiltinFunc{
+		Name:  "ShouldClose",
+		Arity: 0,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			return BoolValue{V: rl.WindowShouldClose()}, nil
+		},
+	})
+
+	env.Define("Clear", &BuiltinFunc{
+		Name:  "Clear",
+		Arity: -1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+
+			switch len(args) {
+			case 0:
+				rl.BeginDrawing()
+				rl.ClearBackground(rl.Black)
+
+				return NilValue{}, nil
+			case 1:
+				col, err := argColor(node, typeEnv, args, 0, "gfx.Clear")
+				if err != nil {
+					return NilValue{}, err
+				}
+
+				rl.BeginDrawing()
+				rl.ClearBackground(col)
+				return NilValue{}, nil
+			}
+
+			return NilValue{}, NewRuntimeError(node, "gfx.Clear: invalid amount of arguments, expected between 0-1 arguments")
+		},
+	})
+
+	env.Define("Present", &BuiltinFunc{
+		Name:  "Present",
+		Arity: 0,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			rl.EndDrawing()
+			return NilValue{}, nil
+		},
+	})
+
+	env.Define("NewColor", &BuiltinFunc{
+		Name:  "NewColor",
+		Arity: 4,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			r, err := argInt(node, args, 0, "gfx.NewColor")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			g, err := argInt(node, args, 1, "gfx.NewColor")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			b, err := argInt(node, args, 2, "gfx.NewColor")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			a, err := argInt(node, args, 3, "gfx.NewColor")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			if r > 255 || r < 0 {
+				return NilValue{}, NewRuntimeError(node, "gfx.NewColor: first argument must be between 0-255")
+			}
+
+			if g > 255 || g < 0 {
+				return NilValue{}, NewRuntimeError(node, "gfx.NewColor: second argument must be between 0-255")
+			}
+
+			if b > 255 || b < 0 {
+				return NilValue{}, NewRuntimeError(node, "gfx.NewColor: third argument must be between 0-255")
+			}
+
+			if a > 255 || a < 0 {
+				return NilValue{}, NewRuntimeError(node, "gfx.NewColor: fourth argument must be between 0-255")
+			}
+
+			return &StructValue{
+				TypeName: typeEnv["Color"].TypeInfo,
+				Fields: map[string]Value{
+					"R": IntValue{V: r},
+					"G": IntValue{V: g},
+					"B": IntValue{V: b},
+					"A": IntValue{V: a},
+				},
+			}, nil
+		},
+	})
+
+	env.Define("DrawRect", &BuiltinFunc{
+		Name:  "DrawRect",
+		Arity: 5,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			xVal, err := argInt(node, args, 0, "gfx.DrawRect")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			yVal, err := argInt(node, args, 1, "gfx.DrawRect")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			wVal, err := argInt(node, args, 2, "gfx.DrawRect")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			hVal, err := argInt(node, args, 3, "gfx.DrawRect")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			col, err := argColor(node, typeEnv, args, 4, "gfx.DrawRect")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			x := int32(xVal)
+			y := int32(yVal)
+			w := int32(wVal)
+			h := int32(hVal)
+
+			rl.DrawRectangle(x, y, w, h, col)
+			return NilValue{}, nil
+		},
+	})
+
+	env.Define("DrawCircle", &BuiltinFunc{
+		Name:  "DrawCircle",
+		Arity: 4,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			cxVal, err := argInt(node, args, 0, "gfx.DrawCircle")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			cyVal, err := argInt(node, args, 1, "gfx.DrawCircle")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			rVal, err := argInt(node, args, 2, "gfx.DrawCircle")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			col, err := argColor(node, typeEnv, args, 3, "gfx.DrawCircle")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			cx := int32(cxVal)
+			cy := int32(cyVal)
+			r := float32(rVal)
+
+			rl.DrawCircle(cx, cy, r, col)
+			return NilValue{}, nil
+		},
+	})
+
+	env.Define("DrawText", &BuiltinFunc{
+		Name:  "DrawText",
+		Arity: 5,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			txtVal, err := argString(node, args, 0, "gfx.DrawText")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			xVal, err := argInt(node, args, 1, "gfx.DrawText")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			yVal, err := argInt(node, args, 2, "gfx.DrawText")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			fontVal, err := argInt(node, args, 3, "gfx.DrawText")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			col, err := argColor(node, typeEnv, args, 4, "gfx.DrawText")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			txt := txtVal
+			x := int32(xVal)
+			y := int32(yVal)
+			font := int32(fontVal)
+
+			rl.DrawText(txt, x, y, font, col)
+			return NilValue{}, nil
+		},
+	})
+
+	env.Define("DrawLine", &BuiltinFunc{
+		Name:  "DrawLine",
+		Arity: 3,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			x1, y1, err := argVector2(node, i, typeEnv, args, 0, "gfx.DrawLine")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			x2, y2, err := argVector2(node, i, typeEnv, args, 1, "gfx.DrawLine")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			col, err := argColor(node, typeEnv, args, 2, "gfx.DrawLine")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			rl.DrawLine(int32(x1), int32(y1), int32(x2), int32(y2), col)
+			return NilValue{}, nil
+		},
+	})
+
+	module := ModuleValue{
+		Name:    "gfx",
+		Env:     env,
+		typeEnv: typeEnv,
 	}
 
 	return module, nil

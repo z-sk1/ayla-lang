@@ -1,8 +1,7 @@
+import time
+
 egg text = "Yara's the worst person ever "
 
-why yes {
-    four _, s := range text {
-        put(s)
-        wait(25)
-    }
+four i := 0; i < len(text); i = i + 1 {
+    putln(text[i])
 }
