@@ -647,6 +647,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		}
 
 		return SignalNone{}, nil
+		
 	case *parser.AssignmentStatement:
 		val, err := i.EvalExpression(stmt.Value)
 		if err != nil {
@@ -742,37 +743,96 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			return NilValue{}, err
 		}
 
-		arrVal, ok := leftVal.(ArrayValue)
-		if !ok {
-			return SignalNone{}, NewRuntimeError(s, fmt.Sprintf("assignment to non-array: %v", leftVal.String()))
+		switch val := leftVal.(type) {
+		case MapValue:
+			key, err := i.EvalExpression(stmt.Index)
+			if err != nil {
+				return SignalNone{}, err
+			}
+
+			keyType := unwrapAlias(i.typeInfoFromValue(key))
+
+			if val.KeyType.Kind == TypeAny {
+				if !isComparableValue(key) {
+					return SignalNone{}, NewRuntimeError(stmt, "value of this type cannot be used as map key")
+				}
+			} else {
+				if !typesAssignable(keyType, val.KeyType) {
+					return SignalNone{}, NewRuntimeError(
+						stmt,
+						fmt.Sprintf("map index expected %s but got %s",
+							val.KeyType.Name, keyType.Name),
+					)
+				}
+
+				if err := validateRange(stmt, key, val.KeyType); err != nil {
+					return SignalNone{}, err
+				}
+			}
+
+			newVal, err := i.EvalExpression(stmt.Value)
+			if err != nil {
+				return SignalNone{}, err
+			}
+
+			valType := unwrapAlias(i.typeInfoFromValue(newVal))
+
+			if val.ValueType.Kind != TypeAny {
+				if !typesAssignable(valType, val.ValueType) {
+					return SignalNone{}, NewRuntimeError(
+						stmt,
+						fmt.Sprintf("map value expected %s but got %s",
+							val.ValueType.Name, valType.Name),
+					)
+				}
+
+				if err := validateRange(stmt, newVal, val.ValueType); err != nil {
+					return SignalNone{}, err
+				}
+			}
+
+			val.Entries[key] = newVal
+
+		case ArrayValue:
+			index, err := i.EvalExpression(stmt.Index)
+			if err != nil {
+				return SignalNone{}, err
+			}
+
+			idxVal, ok := index.(IntValue)
+			if !ok {
+				return SignalNone{}, NewRuntimeError(stmt, "index must be int")
+			}
+
+			idx := idxVal.V
+			if idx < 0 || idx >= len(val.Elements) {
+				return SignalNone{}, NewRuntimeError(stmt,
+					fmt.Sprintf("index: %d, out of bounds", idx))
+			}
+
+			newVal, err := i.EvalExpression(stmt.Value)
+			if err != nil {
+				return SignalNone{}, err
+			}
+
+			valType := unwrapAlias(i.typeInfoFromValue(newVal))
+
+			if val.ElemType.Kind != TypeAny {
+				if !typesAssignable(valType, val.ElemType) {
+					return SignalNone{}, NewRuntimeError(
+						stmt,
+						fmt.Sprintf("array element expected %s but got %s",
+							val.ElemType.Name, valType.Name),
+					)
+				}
+
+				if err := validateRange(stmt, newVal, val.ElemType); err != nil {
+					return SignalNone{}, err
+				}
+			}
+
+			val.Elements[idx] = newVal
 		}
-
-		index, err := i.EvalExpression(stmt.Index)
-		if err != nil {
-			return SignalNone{}, err
-		}
-
-		idxVal, ok := index.(IntValue)
-		if !ok {
-			return SignalNone{}, NewRuntimeError(s, fmt.Sprintf("array index: %v, must be int", idxVal.V))
-		}
-
-		idx := idxVal.V
-
-		if idx < 0 || idx >= len(arrVal.Elements) {
-			return SignalNone{}, NewRuntimeError(s, fmt.Sprintf("array index: %d, out of bounds", idx))
-		}
-
-		newVal, err := i.EvalExpression(stmt.Value)
-		if err != nil {
-			return SignalNone{}, err
-		}
-
-		if newVal == nil {
-			return SignalNone{}, nil
-		}
-
-		arrVal.Elements[idx] = newVal
 		return SignalNone{}, nil
 
 	case *parser.MemberAssignmentStatement:
@@ -1349,6 +1409,7 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 			return NilValue{}, err
 		}
 		return i.evalCompositeLiteral(expr, ti)
+		
 	case *parser.AnonymousStructLiteral:
 		fields := make(map[string]Value)
 		fieldTypes := make(map[string]*TypeInfo)
@@ -1910,6 +1971,14 @@ func (i *Interpreter) evalMapLiteral(expr *parser.CompositeLiteral, expected *Ty
 			return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("map value %d expected %s but got %s", idx, valTI.Name, vt.Name))
 		}
 
+		if err := validateRange(expr, k, keyTI); err != nil {
+			return NilValue{}, err
+		}
+
+		if err := validateRange(expr, v, valTI); err != nil {
+			return NilValue{}, err
+		}
+
 		elems[k] = v
 	}
 
@@ -2286,16 +2355,28 @@ func (i *Interpreter) evalIndexExpression(node parser.Expression, left, idx Valu
 
 		idxVal, ok := idx.(IntValue)
 		if !ok {
-			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("array index: %v, must be int", idxVal.V))
+			return NilValue{}, NewRuntimeError(node, "index: must be int")
 		}
 
 		idx := idxVal.V
 
 		if idx < 0 || idx >= len(arr.Elements) {
-			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("array index: %d, out of bounds", idx))
+			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("index: %d, out of bounds", idx))
 		}
 
 		elem := arr.Elements[idx]
+
+		elemType := unwrapAlias(i.typeInfoFromValue(elem))
+
+		if !typesAssignable(elemType, arr.ElemType) {
+			return NilValue{}, NewRuntimeError(node,
+				fmt.Sprintf("array element expected %s but got %s",
+					arr.ElemType.Name, elemType.Name))
+		}
+
+		if err := validateRange(node, elem, arr.ElemType); err != nil {
+			return NilValue{}, err
+		}
 
 		if arr.ElemType.Kind == TypeAny {
 			elem = NamedValue{
@@ -2309,13 +2390,13 @@ func (i *Interpreter) evalIndexExpression(node parser.Expression, left, idx Valu
 	case TypeString:
 		idxVal, ok := idx.(IntValue)
 		if !ok {
-			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("string index: %v, must be int", idxVal.V))
+			return NilValue{}, NewRuntimeError(node, "index must be int")
 		}
 
 		idx := idxVal.V
 
 		if idx < 0 || idx >= len(left.(StringValue).V) {
-			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("string index: %d, out of bounds", idx))
+			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("index: %d, out of bounds", idx))
 		}
 
 		r := []rune(left.(StringValue).V)
@@ -2345,11 +2426,27 @@ func (i *Interpreter) evalIndexExpression(node parser.Expression, left, idx Valu
 					),
 				)
 			}
+
+			if err := validateRange(node, idx, mv.KeyType); err != nil {
+				return NilValue{}, err
+			}
 		}
 
 		val, ok := mv.Entries[idx]
 		if !ok {
 			return NilValue{}, nil
+		}
+
+		valType := unwrapAlias(i.typeInfoFromValue(val))
+
+		if !typesAssignable(valType, mv.ValueType) {
+			return NilValue{}, NewRuntimeError(node,
+				fmt.Sprintf("map value expected %s but got %s",
+					mv.ValueType.Name, valType.Name))
+		}
+
+		if err := validateRange(node, val, mv.ValueType); err != nil {
+			return NilValue{}, err
 		}
 
 		if mv.ValueType.Kind == TypeAny {
@@ -2362,32 +2459,28 @@ func (i *Interpreter) evalIndexExpression(node parser.Expression, left, idx Valu
 		return val, nil
 
 	default:
-		var typeStr string
-		var typeInt int
-
-		switch typ.Kind {
-		case 0:
-			typeStr = "int"
-		case 1:
-			typeStr = "float"
-		case 3:
-			typeStr = "bool"
-		case 5:
-			typeStr = "nil"
-		case 6:
-			typeStr = "struct"
-		case 8:
-			typeStr = "thing"
-		default:
-			typeStr = ""
-			typeInt = int(typ.Kind)
+		types := map[TypeKind]string{
+			TypeInt:        "int",
+			TypeFloat:      "float",
+			TypeString:     "string",
+			TypeBool:       "bool",
+			TypeArray:      "slice",
+			TypeFixedArray: "array",
+			TypeFunc:       "function",
+			TypeNil:        "nil",
+			TypeStruct:     "struct",
+			TypeMap:        "map",
+			TypeEnum:       "enum",
+			TypeError:      "error",
 		}
 
-		if typeStr != "" {
+		typeStr, ok := types[typ.Kind]
+
+		if ok {
 			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("indexing is not allowed with type: '%s'", typeStr))
 		}
 
-		return NilValue{}, NewRuntimeError(node, fmt.Sprintf("indexing is not allowed with type: %d", typeInt))
+		return NilValue{}, NewRuntimeError(node, fmt.Sprintf("indexing is not allowed with type: %d", typ.Kind))
 	}
 }
 
