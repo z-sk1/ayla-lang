@@ -70,20 +70,41 @@ func (l *Lexer) readIdentifier() string {
 
 // read numbers
 func (l *Lexer) readNumber() string {
-	start := l.position
-	hasDot := false
+	position := l.position
 
-	for isDigit(l.ch) || l.ch == '.' {
-		if l.ch == '.' {
-			if hasDot { // second dot, invalid
-				break
-			}
-			hasDot = true
-		}
-
+	for isDigit(l.ch) {
 		l.readChar()
 	}
-	return l.input[start:l.position]
+
+	// only allow decimal if digit follows
+	if l.ch == '.' && isDigit(l.peekChar()) {
+		l.readChar()
+
+		for isDigit(l.ch) {
+			l.readChar()
+		}
+	}
+
+	return l.input[position:l.position]
+}
+
+func (l *Lexer) readFloatStartingWithDot() token.Token {
+	position := l.position
+	line := l.line
+	col := l.column
+
+	l.readChar() // consume '.'
+
+	for isDigit(l.ch) {
+		l.readChar()
+	}
+
+	return token.Token{
+		Type:    token.FLOAT,
+		Literal: l.input[position:l.position],
+		Line:    line,
+		Column:  col,
+	}
 }
 
 func (l *Lexer) readString() string {
@@ -203,26 +224,24 @@ func (l *Lexer) NextToken() token.Token {
 		}
 
 	case '.':
-		if l.peekChar() == '.' && l.peekSecondChar() == '.' {
-			line := l.line
-			col := l.column
+		line := l.line
+		col := l.column
 
-			l.readChar() // consume second '.'
-			l.readChar() // consume third '.'
+		if isDigit(l.peekChar()) {
+			return l.readFloatStartingWithDot()
+		}
 
-			tok = token.Token{
-				Type:    token.ELLIPSES,
-				Literal: "...",
-				Line:    line,
-				Column:  col,
+		if l.peekChar() == '.' {
+			if l.peekSecondChar() == '.' {
+				l.readChar()
+				l.readChar()
+				tok = token.Token{Type: token.ELLIPSES, Literal: "...", Line: line, Column: col}
+			} else {
+				l.readChar()
+				tok = token.Token{Type: token.DUODOT, Literal: "..", Line: line, Column: col}
 			}
 		} else {
-			tok = token.Token{
-				Type:    token.DOT,
-				Literal: ".",
-				Line:    l.line,
-				Column:  l.column,
-			}
+			tok = token.Token{Type: token.DOT, Literal: ".", Line: line, Column: col}
 		}
 	case '*':
 		tok = token.Token{Type: token.ASTERISK, Literal: "*", Line: l.line, Column: l.column}

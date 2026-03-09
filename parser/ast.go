@@ -164,6 +164,15 @@ type IdentType struct {
 
 func (*IdentType) typeNode() {}
 
+type RangeType struct {
+	NodeBase
+	Base TypeNode
+	Min  Expression
+	Max  Expression
+}
+
+func (*RangeType) typeNode() {}
+
 type QualifiedType struct {
 	NodeBase
 	Module *Identifier

@@ -46,6 +46,7 @@ func (e RuntimeError) Error() string {
 type Variable struct {
 	Value    Value
 	Lifetime int
+	isConst  bool
 }
 
 func fileExists(path string) bool {
@@ -92,7 +93,7 @@ func (i *Interpreter) loadModule(name string) (Value, error) {
 		}
 
 		i.modules[name] = mod
-		i.Env.Define(name, mod)
+		i.Env.Define(name, mod, false)
 		return mod, nil
 	}
 
@@ -126,7 +127,7 @@ func (i *Interpreter) loadModule(name string) (Value, error) {
 		Env:  Env,
 	}
 
-	i.Env.Define(name, module)
+	i.Env.Define(name, module, false)
 
 	return module, nil
 }
@@ -208,7 +209,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		}
 
 		// variable must not exist
-		if _, ok := i.Env.GetLocal(stmt.Name.Value); ok {
+		if _, ok, _ := i.Env.GetLocal(stmt.Name.Value); ok {
 			return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("cant redeclare var: %s", stmt.Name.Value))
 		}
 
@@ -219,7 +220,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			}
 
 			if lifetime.(IntValue).V > 0 {
-				i.Env.DefineWithLifetime(stmt.Name.Value, val, lifetime.(IntValue).V+1) // +1 because the var statement itself also decrements it
+				i.Env.DefineWithLifetime(stmt.Name.Value, val, lifetime.(IntValue).V+1, false) // +1 because the var statement itself also decrements it
 				return SignalNone{}, nil
 			}
 		}
@@ -228,7 +229,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			return SignalNone{}, nil
 		}
 
-		i.Env.Define(stmt.Name.Value, val)
+		i.Env.Define(stmt.Name.Value, val, false)
 		return SignalNone{}, nil
 
 	case *parser.VarStatementBlock:
@@ -251,7 +252,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		}
 
 		// variable must not exist
-		if _, ok := i.Env.GetLocal(stmt.Name.Value); ok {
+		if _, ok, _ := i.Env.GetLocal(stmt.Name.Value); ok {
 			return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("cant redeclare var: %s", stmt.Name.Value))
 		}
 
@@ -262,7 +263,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			}
 
 			if lifetime.(IntValue).V > 0 {
-				i.Env.DefineWithLifetime(stmt.Name.Value, val, lifetime.(IntValue).V+1) // +1 because the var statement itself also decrements it
+				i.Env.DefineWithLifetime(stmt.Name.Value, val, lifetime.(IntValue).V+1, false) // +1 because the var statement itself also decrements it
 				return SignalNone{}, nil
 			}
 		}
@@ -271,7 +272,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			return SignalNone{}, nil
 		}
 
-		i.Env.Define(stmt.Name.Value, val)
+		i.Env.Define(stmt.Name.Value, val, false)
 		return SignalNone{}, nil
 
 	case *parser.MultiVarStatement:
@@ -284,11 +285,12 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 				if err != nil {
 					return SignalNone{}, err
 				}
+				expectedTI = unwrapAlias(expectedTI)
 			}
 
 			for _, name := range stmt.Names {
 
-				if _, ok := i.Env.GetLocal(name.Value); ok {
+				if _, ok, _ := i.Env.GetLocal(name.Value); ok {
 					return SignalNone{}, NewRuntimeError(stmt,
 						fmt.Sprintf("cannot redeclare var: %s", name.Value))
 				}
@@ -310,10 +312,10 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 					}
 
 					if lifetime.(IntValue).V > 0 {
-						i.Env.DefineWithLifetime(name.Value, v, lifetime.(IntValue).V+1) // +1 because the var statement itself also decrements it
+						i.Env.DefineWithLifetime(name.Value, v, lifetime.(IntValue).V+1, false) // +1 because the var statement itself also decrements it
 					}
 				} else {
-					i.Env.Define(name.Value, v)
+					i.Env.Define(name.Value, v, false)
 				}
 			}
 
@@ -369,7 +371,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 				continue
 			}
 
-			if _, ok := i.Env.GetLocal(name.Value); ok {
+			if _, ok, _ := i.Env.GetLocal(name.Value); ok {
 				return SignalNone{}, NewRuntimeError(stmt,
 					fmt.Sprintf("cannot redeclare var: %s", name.Value))
 			}
@@ -387,10 +389,10 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 
 				lifetime := lifetimeVal.(IntValue).V
 				if lifetime > 0 {
-					i.Env.DefineWithLifetime(name.Value, v, lifetime+1)
+					i.Env.DefineWithLifetime(name.Value, v, lifetime+1, false)
 				}
 			} else {
-				i.Env.Define(name.Value, v)
+				i.Env.Define(name.Value, v, false)
 			}
 		}
 
@@ -436,7 +438,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 				continue
 			}
 
-			if _, ok := i.Env.GetLocal(name.Value); ok {
+			if _, ok, _ := i.Env.GetLocal(name.Value); ok {
 				return SignalNone{}, NewRuntimeError(stmt,
 					fmt.Sprintf("cannot redeclare var: %s", name.Value))
 			}
@@ -449,10 +451,10 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 
 				lifetime := lifetimeVal.(IntValue).V
 				if lifetime > 0 {
-					i.Env.DefineWithLifetime(name.Value, values[idx], lifetime+1)
+					i.Env.DefineWithLifetime(name.Value, values[idx], lifetime+1, false)
 				}
 			} else {
-				i.Env.Define(name.Value, values[idx])
+				i.Env.Define(name.Value, values[idx], false)
 			}
 		}
 
@@ -475,10 +477,14 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			if err != nil {
 				return SignalNone{}, err
 			}
+			expectedTI = unwrapAlias(expectedTI)
 		}
 
 		if stmt.Value != nil {
 			val, err = i.EvalExpression(stmt.Value)
+			if err != nil {
+				return SignalNone{}, err
+			}
 
 			if tup, ok := val.(TupleValue); ok {
 				if len(tup.Values) > 1 {
@@ -495,7 +501,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		}
 
 		// check if variable already exist
-		if _, ok := i.Env.GetLocal(stmt.Name.Value); ok {
+		if _, ok, _ := i.Env.GetLocal(stmt.Name.Value); ok {
 			return SignalNone{}, NewRuntimeError(s, fmt.Sprintf("cant redeclare const: %s", stmt.Name.Value))
 		}
 
@@ -511,13 +517,13 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			}
 
 			if lifetime.(IntValue).V > 0 {
-				i.Env.DefineWithLifetime(stmt.Name.Value, ConstValue{Value: val}, lifetime.(IntValue).V+1) // +1 because the var statement itself also decrements it
+				i.Env.DefineWithLifetime(stmt.Name.Value, val, lifetime.(IntValue).V+1, true) // +1 because the var statement itself also decrements it
 				return SignalNone{}, nil
 			}
 		}
 
 		// store const val
-		i.Env.Define(stmt.Name.Value, ConstValue{Value: val})
+		i.Env.Define(stmt.Name.Value, val, true)
 		return SignalNone{}, nil
 
 	case *parser.MultiConstStatement:
@@ -533,51 +539,6 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			}
 
 			return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("constants, %s, must be initialised", names))
-		}
-
-		if stmt.Values == nil {
-			var expectedTI *TypeInfo
-			var err error
-
-			if stmt.Type != nil {
-				expectedTI, err = i.resolveTypeNode(stmt.Type)
-				if err != nil {
-					return SignalNone{}, err
-				}
-			}
-
-			for _, name := range stmt.Names {
-
-				if _, ok := i.Env.GetLocal(name.Value); ok {
-					return SignalNone{}, NewRuntimeError(stmt,
-						fmt.Sprintf("cannot redeclare const: %s", name.Value))
-				}
-
-				var v Value
-				if expectedTI != nil {
-					v, err = i.defaultValueFromTypeInfo(stmt, expectedTI)
-					if err != nil {
-						return SignalNone{}, err
-					}
-				} else {
-					v = UninitializedValue{}
-				}
-
-				if stmt.Lifetime != nil {
-					lifetime, err := i.EvalExpression(stmt.Lifetime)
-					if err != nil {
-						return SignalNone{}, err
-					}
-
-					if lifetime.(IntValue).V > 0 {
-						i.Env.DefineWithLifetime(name.Value, v, lifetime.(IntValue).V+1) // +1 because the var statement itself also decrements it
-					}
-				} else {
-					i.Env.Define(name.Value, v)
-				}
-			}
-
-			return SignalNone{}, nil
 		}
 
 		var values []Value
@@ -629,7 +590,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 				continue
 			}
 
-			if _, ok := i.Env.GetLocal(name.Value); ok {
+			if _, ok, _ := i.Env.GetLocal(name.Value); ok {
 				return SignalNone{}, NewRuntimeError(stmt,
 					fmt.Sprintf("cannot redeclare var: %s", name.Value))
 			}
@@ -647,10 +608,10 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 
 				lifetime := lifetimeVal.(IntValue).V
 				if lifetime > 0 {
-					i.Env.DefineWithLifetime(name.Value, ConstValue{Value: v}, lifetime+1)
+					i.Env.DefineWithLifetime(name.Value, v, lifetime+1, true)
 				}
 			} else {
-				i.Env.Define(name.Value, ConstValue{Value: v})
+				i.Env.Define(name.Value, v, true)
 			}
 		}
 
@@ -692,12 +653,12 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			return SignalNone{}, err
 		}
 
-		existingVal, ok := i.Env.Get(stmt.Name.Value)
+		existingVal, ok, isConst := i.Env.Get(stmt.Name.Value)
 		if !ok {
 			return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("assignment to undefined variable: %s", stmt.Name.Value))
 		}
 
-		if _, isConst := existingVal.(ConstValue); isConst {
+		if isConst {
 			return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("cannot reassign to const: %s", stmt.Name.Value))
 		}
 
@@ -757,9 +718,14 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		var expectedTI *TypeInfo
 
 		for idx, name := range stmt.Names {
-			if _, ok := i.Env.Get(name.Value); ok {
+			_, ok, isConst := i.Env.Get(name.Value)
+			if !ok {
 				return SignalNone{}, NewRuntimeError(stmt,
-					fmt.Sprintf("cannot redeclare var: %s", name.Value))
+					fmt.Sprintf("unknown var: %s", name.Value))
+			}
+
+			if isConst {
+				return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("cannot assign to const: %s", name.Value))
 			}
 
 			v, err := i.assignWithType(stmt, values[idx], expectedTI)
@@ -842,7 +808,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		return SignalNone{}, nil
 
 	case *parser.EnumStatement:
-		if _, ok := i.Env.Get(stmt.Name.Value); ok {
+		if _, ok, _ := i.Env.Get(stmt.Name.Value); ok {
 			return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("cannot redeclare enum: %s", stmt.Name.Value))
 		}
 
@@ -909,7 +875,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			Params:  paramTypes,
 		}
 
-		i.Env.Define(stmt.Name.Value, &Func{Params: stmt.Params, Body: stmt.Body, TypeName: typeInfo, Env: i.Env})
+		i.Env.Define(stmt.Name.Value, &Func{Params: stmt.Params, Body: stmt.Body, TypeName: typeInfo, Env: i.Env}, false)
 		return SignalNone{}, nil
 
 	case *parser.MethodStatement:
@@ -1089,7 +1055,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		oldEnv := i.Env
 		i.Env = NewEnvironment(oldEnv)
 
-		i.Env.Define("it", ConstValue{Value: val})
+		i.Env.Define("it", val, true)
 
 		sig, err := i.EvalStatements(stmt.Body)
 
@@ -1153,11 +1119,11 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 				i.Env = NewEnvironment(oldEnv)
 
 				if stmt.Key != nil && stmt.Key.Value != "_" {
-					i.Env.Define(stmt.Key.Value, IntValue{V: idx})
+					i.Env.Define(stmt.Key.Value, IntValue{V: idx}, false)
 				}
 
 				if stmt.Value != nil && stmt.Value.Value != "_" {
-					i.Env.Define(stmt.Value.Value, elem)
+					i.Env.Define(stmt.Value.Value, elem, false)
 				}
 
 				sig, err := i.EvalBlock(stmt.Body, false)
@@ -1183,11 +1149,11 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 				i.Env = NewEnvironment(oldEnv)
 
 				if stmt.Key != nil && stmt.Key.Value != "_" {
-					i.Env.Define(stmt.Key.Value, k)
+					i.Env.Define(stmt.Key.Value, k, false)
 				}
 
 				if stmt.Value != nil && stmt.Value.Value != "_" {
-					i.Env.Define(stmt.Value.Value, val)
+					i.Env.Define(stmt.Value.Value, val, false)
 				}
 
 				sig, err := i.EvalBlock(stmt.Body, false)
@@ -1213,11 +1179,11 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 				i.Env = NewEnvironment(oldEnv)
 
 				if stmt.Key != nil && stmt.Key.Value != "_" {
-					i.Env.Define(stmt.Key.Value, IntValue{V: idx})
+					i.Env.Define(stmt.Key.Value, IntValue{V: idx}, false)
 				}
 
 				if stmt.Value != nil && stmt.Value.Value != "_" {
-					i.Env.Define(stmt.Value.Value, StringValue{V: string(s)})
+					i.Env.Define(stmt.Value.Value, StringValue{V: string(s)}, false)
 				}
 
 				sig, err := i.EvalBlock(stmt.Body, false)
@@ -1243,7 +1209,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 				i.Env = NewEnvironment(oldEnv)
 
 				if stmt.Key != nil && stmt.Key.Value != "_" {
-					i.Env.Define(stmt.Key.Value, IntValue{V: idx})
+					i.Env.Define(stmt.Key.Value, IntValue{V: idx}, false)
 				}
 
 				if stmt.Value != nil && stmt.Value.Value != "_" {
@@ -1370,13 +1336,9 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 			return v, nil
 		}
 
-		v, ok := i.Env.Get(expr.Value)
+		v, ok, _ := i.Env.Get(expr.Value)
 		if !ok {
 			return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("undefined variable: %s", expr.Value))
-		}
-
-		if c, isConst := v.(ConstValue); isConst {
-			return c.Value, nil
 		}
 
 		return v, nil
@@ -1705,46 +1667,6 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 	}
 }
 
-func (i *Interpreter) assignWithType(node parser.Node, v Value, expected *TypeInfo) (Value, error) {
-	if expected == nil {
-		return v, nil
-	}
-
-	expected = unwrapAlias(expected)
-	actual := unwrapAlias(i.typeInfoFromValue(v))
-
-	// special case: []thing absorbs array elem types
-	if expected.Kind == TypeArray && expected.Elem.Kind == TypeAny {
-		if arr, ok := v.(ArrayValue); ok {
-			arr.ElemType = expected.Elem
-			v = arr
-			actual = expected
-		}
-	}
-
-	if !typesAssignable(actual, expected) {
-		return NilValue{}, NewRuntimeError(
-			node,
-			fmt.Sprintf(
-				"type mismatch: expected '%s' but got '%s'",
-				expected.Name,
-				actual.Name,
-			),
-		)
-	}
-
-	v = i.promoteValueToType(v, expected)
-
-	if expected.Kind == TypeAny {
-		v = NamedValue{
-			TypeName: expected,
-			Value:    v,
-		}
-	}
-
-	return v, nil
-}
-
 func (i *Interpreter) evalCompositeLiteral(expr *parser.CompositeLiteral, ti *TypeInfo) (Value, error) {
 	ti = unwrapAlias(ti)
 
@@ -1816,12 +1738,23 @@ func (i *Interpreter) evalStructLiteral(expr *parser.CompositeLiteral, typeInfo 
 			)
 		}
 
+		v = i.promoteValueToType(v, expectedTI)
+
+		if err := validateRange(expr, v, expectedTI); err != nil {
+			return NilValue{}, err
+		}
+
 		fields[name] = v
 	}
 
-	err := runValidator(typeInfo, fields)
-	if err != nil {
-		return NilValue{}, NewRuntimeError(expr, err.Error())
+	for name, ti := range structType.Fields {
+		if _, ok := fields[name]; !ok {
+			def, err := i.defaultValueFromTypeInfo(expr, ti)
+			if err != nil {
+				return NilValue{}, err
+			}
+			fields[name] = def
+		}
 	}
 
 	return &StructValue{
@@ -1860,6 +1793,12 @@ func (i *Interpreter) evalArrayLiteral(expr *parser.CompositeLiteral, ti *TypeIn
 		}
 
 		val = i.promoteValueToType(val, elemType)
+
+		err = validateRange(expr, val, elemType)
+		if err != nil {
+			return NilValue{}, err
+		}
+
 		elements = append(elements, val)
 	}
 
@@ -2230,7 +2169,7 @@ func (i *Interpreter) callFunction(fn *Func, args []Value, callNode parser.Node)
 			}
 		}
 
-		newEnv.Define(param.Name.Value, val)
+		newEnv.Define(param.Name.Value, val, false)
 	}
 
 	if isVariadic {
@@ -2269,7 +2208,7 @@ func (i *Interpreter) callFunction(fn *Func, args []Value, callNode parser.Node)
 			Fixed:    false,
 		}
 
-		newEnv.Define(variadicParam.Name.Value, sliceValue)
+		newEnv.Define(variadicParam.Name.Value, sliceValue, false)
 	}
 
 	// execute
@@ -2532,7 +2471,7 @@ func (i *Interpreter) evalMemberExpression(node parser.Expression, left Value, f
 			return typ, nil
 		}
 
-		val, ok := obj.Env.Get(field)
+		val, ok, _ := obj.Env.Get(field)
 		if !ok {
 			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unknown '%s'", field))
 		}

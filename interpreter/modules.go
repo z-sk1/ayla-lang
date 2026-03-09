@@ -104,13 +104,6 @@ func colorFromValue(v Value) (rl.Color, error) {
 	b := colVal.Fields["B"].(IntValue).V
 	a := colVal.Fields["A"].(IntValue).V
 
-	if r < 0 || r > 255 ||
-		g < 0 || g > 255 ||
-		b < 0 || b > 255 ||
-		a < 0 || a > 255 {
-		return rl.Color{}, fmt.Errorf("gfx.Color fields must be between 0 and 255")
-	}
-
 	return rl.Color{
 		R: uint8(r),
 		G: uint8(g),
@@ -172,35 +165,35 @@ func LoadMathModule(i *Interpreter) (ModuleValue, error) {
 	env := NewEnvironment(i.Env)
 
 	// functions
-	env.Define("Abs", wrapFloat1("Abs", math.Abs))
-	env.Define("Sin", wrapFloat1("Sin", math.Sin))
-	env.Define("Asin", wrapFloat1("Asin", math.Asin))
-	env.Define("Cos", wrapFloat1("Cos", math.Cos))
-	env.Define("Acos", wrapFloat1("Acos", math.Acos))
-	env.Define("Tan", wrapFloat1("Tan", math.Tan))
-	env.Define("Atan", wrapFloat1("Atan", math.Atan))
-	env.Define("Sqrt", wrapFloat1("Sqrt", math.Sqrt))
-	env.Define("Log", wrapFloat1("Log", math.Log))
-	env.Define("Exp", wrapFloat1("Exp", math.Exp))
-	env.Define("Floor", wrapFloat1("Floor", math.Floor))
-	env.Define("Ceil", wrapFloat1("Ceil", math.Ceil))
-	env.Define("Round", wrapFloat1("Round", math.Round))
-	env.Define("RoundToEven", wrapFloat1("RoundToEven", math.RoundToEven))
-	env.Define("Trunc", wrapFloat1("Trunc", math.Trunc))
+	env.Define("Abs", wrapFloat1("Abs", math.Abs), false)
+	env.Define("Sin", wrapFloat1("Sin", math.Sin), false)
+	env.Define("Asin", wrapFloat1("Asin", math.Asin), false)
+	env.Define("Cos", wrapFloat1("Cos", math.Cos), false)
+	env.Define("Acos", wrapFloat1("Acos", math.Acos), false)
+	env.Define("Tan", wrapFloat1("Tan", math.Tan), false)
+	env.Define("Atan", wrapFloat1("Atan", math.Atan), false)
+	env.Define("Sqrt", wrapFloat1("Sqrt", math.Sqrt), false)
+	env.Define("Log", wrapFloat1("Log", math.Log), false)
+	env.Define("Exp", wrapFloat1("Exp", math.Exp), false)
+	env.Define("Floor", wrapFloat1("Floor", math.Floor), false)
+	env.Define("Ceil", wrapFloat1("Ceil", math.Ceil), false)
+	env.Define("Round", wrapFloat1("Round", math.Round), false)
+	env.Define("RoundToEven", wrapFloat1("RoundToEven", math.RoundToEven), false)
+	env.Define("Trunc", wrapFloat1("Trunc", math.Trunc), false)
 
-	env.Define("Max", wrapFloat2("Max", math.Max))
-	env.Define("Min", wrapFloat2("Min", math.Min))
-	env.Define("Pow", wrapFloat2("Pow", math.Pow))
-	env.Define("Remainder", wrapFloat2("Remainder", math.Remainder))
+	env.Define("Max", wrapFloat2("Max", math.Max), false)
+	env.Define("Min", wrapFloat2("Min", math.Min), false)
+	env.Define("Pow", wrapFloat2("Pow", math.Pow), false)
+	env.Define("Remainder", wrapFloat2("Remainder", math.Remainder), false)
 
 	// constants
-	env.Define("Pi", ConstValue{FloatValue{V: math.Pi}})
-	env.Define("Phi", ConstValue{Value: FloatValue{V: math.Phi}})
-	env.Define("E", ConstValue{Value: FloatValue{V: math.E}})
-	env.Define("Sqrt2", ConstValue{Value: FloatValue{V: math.Sqrt2}})
-	env.Define("SqrtPi", ConstValue{FloatValue{V: math.SqrtPi}})
-	env.Define("SqrtPhi", ConstValue{Value: FloatValue{V: math.SqrtPhi}})
-	env.Define("SqrtE", ConstValue{Value: FloatValue{V: math.SqrtE}})
+	env.Define("Pi", FloatValue{V: math.Pi}, true)
+	env.Define("Phi", FloatValue{V: math.Phi}, true)
+	env.Define("E", FloatValue{V: math.E}, true)
+	env.Define("Sqrt2", FloatValue{V: math.Sqrt2}, true)
+	env.Define("SqrtPi", FloatValue{V: math.SqrtPi}, true)
+	env.Define("SqrtPhi", FloatValue{V: math.SqrtPhi}, true)
+	env.Define("SqrtE", FloatValue{V: math.SqrtE}, true)
 
 	module := ModuleValue{
 		Name: "math",
@@ -253,7 +246,7 @@ func LoadRandModule(i *Interpreter) (ModuleValue, error) {
 			}
 			return NilValue{}, expectArgsRange(node, args, 0, 2, "rand.Int")
 		},
-	})
+	}, false)
 
 	env.Define("Float", &BuiltinFunc{
 		Name:  "Float",
@@ -291,7 +284,7 @@ func LoadRandModule(i *Interpreter) (ModuleValue, error) {
 			}
 			return NilValue{}, expectArgsRange(node, args, 0, 2, "rand.Float")
 		},
-	})
+	}, false)
 
 	env.Define("Choice", &BuiltinFunc{
 		Name:  "Choice",
@@ -305,7 +298,7 @@ func LoadRandModule(i *Interpreter) (ModuleValue, error) {
 			rand := rand.Intn(len(arr.Elements))
 			return arr.Elements[rand], nil
 		},
-	})
+	}, false)
 
 	module := ModuleValue{
 		Name: "rand",
@@ -339,7 +332,7 @@ func LoadFSModule(i *Interpreter) (ModuleValue, error) {
 
 			return NilValue{}, nil
 		},
-	})
+	}, false)
 
 	env.Define("Read", &BuiltinFunc{
 		Name:  "Read",
@@ -367,7 +360,7 @@ func LoadFSModule(i *Interpreter) (ModuleValue, error) {
 				},
 			}, nil
 		},
-	})
+	}, false)
 
 	env.Define("Exists", &BuiltinFunc{
 		Name:  "Exists",
@@ -400,7 +393,7 @@ func LoadFSModule(i *Interpreter) (ModuleValue, error) {
 				},
 			}}, nil
 		},
-	})
+	}, false)
 
 	env.Define("Append", &BuiltinFunc{
 		Name:  "Append",
@@ -438,7 +431,7 @@ func LoadFSModule(i *Interpreter) (ModuleValue, error) {
 
 			return NilValue{}, nil
 		},
-	})
+	}, false)
 
 	env.Define("Delete", &BuiltinFunc{
 		Name:  "Delete",
@@ -456,7 +449,7 @@ func LoadFSModule(i *Interpreter) (ModuleValue, error) {
 
 			return NilValue{}, nil
 		},
-	})
+	}, false)
 
 	env.Define("List", &BuiltinFunc{
 		Name:  "List",
@@ -494,7 +487,7 @@ func LoadFSModule(i *Interpreter) (ModuleValue, error) {
 				},
 			}, nil
 		},
-	})
+	}, false)
 
 	env.Define("Mkdir", &BuiltinFunc{
 		Name:  "Mkdir",
@@ -514,7 +507,7 @@ func LoadFSModule(i *Interpreter) (ModuleValue, error) {
 
 			return NilValue{}, nil
 		},
-	})
+	}, false)
 
 	env.Define("IsDir", &BuiltinFunc{
 		Name:  "IsDir",
@@ -544,7 +537,7 @@ func LoadFSModule(i *Interpreter) (ModuleValue, error) {
 				},
 			}, nil
 		},
-	})
+	}, false)
 
 	env.Define("Walk", &BuiltinFunc{
 		Name:  "Walk",
@@ -584,7 +577,7 @@ func LoadFSModule(i *Interpreter) (ModuleValue, error) {
 				},
 			}, nil
 		},
-	})
+	}, false)
 
 	env.Define("Cwd", &BuiltinFunc{
 		Name:  "Cwd",
@@ -609,7 +602,7 @@ func LoadFSModule(i *Interpreter) (ModuleValue, error) {
 				},
 			}, nil
 		},
-	})
+	}, false)
 
 	env.Define("Size", &BuiltinFunc{
 		Name:  "Size",
@@ -639,7 +632,7 @@ func LoadFSModule(i *Interpreter) (ModuleValue, error) {
 				},
 			}, nil
 		},
-	})
+	}, false)
 
 	env.Define("ModTime", &BuiltinFunc{
 		Name:  "ModTime",
@@ -669,7 +662,7 @@ func LoadFSModule(i *Interpreter) (ModuleValue, error) {
 				},
 			}, nil
 		},
-	})
+	}, false)
 
 	env.Define("Rename", &BuiltinFunc{
 		Name:  "Rename",
@@ -694,7 +687,7 @@ func LoadFSModule(i *Interpreter) (ModuleValue, error) {
 
 			return NilValue{}, nil
 		},
-	})
+	}, false)
 
 	env.Define("Copy", &BuiltinFunc{
 		Name:  "Copy",
@@ -735,7 +728,7 @@ func LoadFSModule(i *Interpreter) (ModuleValue, error) {
 
 			return NilValue{}, nil
 		},
-	})
+	}, false)
 
 	module := ModuleValue{
 		Name: "fs",
@@ -765,7 +758,7 @@ func LoadTimeModule(i *Interpreter) (ModuleValue, error) {
 
 			return NilValue{}, nil
 		},
-	})
+	}, false)
 
 	env.Define("Now", &BuiltinFunc{
 		Name:  "Now",
@@ -773,7 +766,7 @@ func LoadTimeModule(i *Interpreter) (ModuleValue, error) {
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
 			return IntValue{V: int(time.Now().Unix())}, nil
 		},
-	})
+	}, false)
 
 	env.Define("Since", &BuiltinFunc{
 		Name:  "Since",
@@ -787,7 +780,7 @@ func LoadTimeModule(i *Interpreter) (ModuleValue, error) {
 			now := time.Now().Unix()
 			return IntValue{V: int(now - int64(start))}, nil
 		},
-	})
+	}, false)
 
 	env.Define("Format", &BuiltinFunc{
 		Name:  "Format",
@@ -823,7 +816,7 @@ func LoadTimeModule(i *Interpreter) (ModuleValue, error) {
 				return NilValue{}, NewRuntimeError(node, "time.Format: invalid amount of args, 0-2 args allowed")
 			}
 		},
-	})
+	}, false)
 
 	module := ModuleValue{
 		Name: "time",
@@ -837,52 +830,26 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 	env := NewEnvironment(i.Env)
 	typeEnv := make(map[string]TypeValue)
 
+	min := 0.0
+	max := 255.0
+
+	uint8Type := &TypeInfo{
+		Name:         "int[0..255]",
+		Kind:         TypeInt,
+		Min:          &min,
+		Max:          &max,
+		IsComparable: true,
+	}
+
 	typeEnv["Color"] = TypeValue{
 		TypeInfo: &TypeInfo{
 			Name: "Color",
 			Kind: TypeStruct,
 			Fields: map[string]*TypeInfo{
-				"R": i.typeEnv["int"].TypeInfo,
-				"G": i.typeEnv["int"].TypeInfo,
-				"B": i.typeEnv["int"].TypeInfo,
-				"A": i.typeEnv["int"].TypeInfo,
-			},
-			Validator: func(fields map[string]Value) error {
-				var r, g, b, a int
-
-				if fields["R"] != nil {
-					r = unwrapNamed(fields["R"]).(IntValue).V
-				}
-
-				if fields["G"] != nil {
-					g = unwrapNamed(fields["G"]).(IntValue).V
-				}
-
-				if fields["B"] != nil {
-					b = unwrapNamed(fields["B"]).(IntValue).V
-				}
-
-				if fields["A"] != nil {
-					a = unwrapNamed(fields["A"]).(IntValue).V
-				}
-
-				if r < 0 || r > 255 {
-					return fmt.Errorf("gfx.Color.R must be between 0-255, got %d", r)
-				}
-
-				if g < 0 || g > 255 {
-					return fmt.Errorf("gfx.Color.G must be between 0-255, got %d", g)
-				}
-
-				if b < 0 || b > 255 {
-					return fmt.Errorf("gfx.Color.B must be between 0-255, got %d", b)
-				}
-
-				if a < 0 || a > 255 {
-					return fmt.Errorf("gfx.Color.A must be between 0-255, got %d", a)
-				}
-
-				return nil
+				"R": uint8Type,
+				"G": uint8Type,
+				"B": uint8Type,
+				"A": uint8Type,
 			},
 		},
 	}
@@ -922,7 +889,7 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 
 			return NilValue{}, nil
 		},
-	})
+	}, false)
 
 	env.Define("ShouldClose", &BuiltinFunc{
 		Name:  "ShouldClose",
@@ -930,7 +897,7 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
 			return BoolValue{V: rl.WindowShouldClose()}, nil
 		},
-	})
+	}, false)
 
 	env.Define("Clear", &BuiltinFunc{
 		Name:  "Clear",
@@ -956,7 +923,7 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 
 			return NilValue{}, NewRuntimeError(node, "gfx.Clear: invalid amount of arguments, expected between 0-1 arguments")
 		},
-	})
+	}, false)
 
 	env.Define("Present", &BuiltinFunc{
 		Name:  "Present",
@@ -965,7 +932,7 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 			rl.EndDrawing()
 			return NilValue{}, nil
 		},
-	})
+	}, false)
 
 	env.Define("NewColor", &BuiltinFunc{
 		Name:  "NewColor",
@@ -991,22 +958,6 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 				return NilValue{}, err
 			}
 
-			if r > 255 || r < 0 {
-				return NilValue{}, NewRuntimeError(node, "gfx.NewColor: first argument must be between 0-255")
-			}
-
-			if g > 255 || g < 0 {
-				return NilValue{}, NewRuntimeError(node, "gfx.NewColor: second argument must be between 0-255")
-			}
-
-			if b > 255 || b < 0 {
-				return NilValue{}, NewRuntimeError(node, "gfx.NewColor: third argument must be between 0-255")
-			}
-
-			if a > 255 || a < 0 {
-				return NilValue{}, NewRuntimeError(node, "gfx.NewColor: fourth argument must be between 0-255")
-			}
-
 			return &StructValue{
 				TypeName: typeEnv["Color"].TypeInfo,
 				Fields: map[string]Value{
@@ -1017,7 +968,7 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 				},
 			}, nil
 		},
-	})
+	}, false)
 
 	env.Define("DrawRect", &BuiltinFunc{
 		Name:  "DrawRect",
@@ -1056,7 +1007,7 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 			rl.DrawRectangle(x, y, w, h, col)
 			return NilValue{}, nil
 		},
-	})
+	}, false)
 
 	env.Define("DrawCircle", &BuiltinFunc{
 		Name:  "DrawCircle",
@@ -1089,7 +1040,7 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 			rl.DrawCircle(cx, cy, r, col)
 			return NilValue{}, nil
 		},
-	})
+	}, false)
 
 	env.Define("DrawText", &BuiltinFunc{
 		Name:  "DrawText",
@@ -1128,7 +1079,7 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 			rl.DrawText(txt, x, y, font, col)
 			return NilValue{}, nil
 		},
-	})
+	}, false)
 
 	env.Define("DrawLine", &BuiltinFunc{
 		Name:  "DrawLine",
@@ -1152,7 +1103,7 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 			rl.DrawLine(int32(x1), int32(y1), int32(x2), int32(y2), col)
 			return NilValue{}, nil
 		},
-	})
+	}, false)
 
 	module := ModuleValue{
 		Name:    "gfx",

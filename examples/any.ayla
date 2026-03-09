@@ -1,3 +1,1 @@
-import math
-
-putln(math.cos(2))
+egg a, b = 5, 12

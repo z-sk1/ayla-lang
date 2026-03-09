@@ -364,7 +364,7 @@ func (i *Interpreter) registerBuiltins() {
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
 			ident, ok := node.Args[0].(*parser.Identifier)
 
-			val, ok2 := i.Env.Get(ident.Value)
+			val, ok2, isConst := i.Env.Get(ident.Value)
 			if !ok2 {
 				return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unknown var: '%s'", ident.Value))
 			}
@@ -372,11 +372,22 @@ func (i *Interpreter) registerBuiltins() {
 			if !ok {
 				_, ok = args[0].(MapValue)
 				if !ok {
-					return NilValue{}, NewRuntimeError(node, "delete(map[T]T, key)")
+					return NilValue{}, NewRuntimeError(node, "delete: first argument must be a map")
 				}
 			}
 
-			delete(val.(MapValue).Entries, args[1])
+			if isConst {
+				return NilValue{}, NewRuntimeError(node, "delete: map must not be a const")
+			}
+
+			expectedTI := args[0].(MapValue).KeyType
+
+			key, err := i.assignWithType(node, args[1], expectedTI)
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			delete(val.(MapValue).Entries, key)
 			i.Env.Set(ident.Value, val)
 			return NilValue{}, nil
 		},
@@ -399,7 +410,7 @@ func (i *Interpreter) registerBuiltins() {
 				return StringValue{V: v.TypeName.Name}, nil
 			}
 
-			return StringValue{V: string(v.Type())}, nil
+			return StringValue{V: i.typeInfoFromValue(v).Name}, nil
 		},
 	}
 
@@ -554,13 +565,17 @@ func (i *Interpreter) registerBuiltins() {
 
 				ident, ok := arg.(*parser.Identifier)
 				if !ok {
-					return NilValue{}, NewRuntimeError(node, "scanln(t ...thing) expected")
+					return NilValue{}, NewRuntimeError(node, "scanln: first argument expects a variable name")
 				}
 
 				varName := ident.Value
-				val, ok := i.Env.Get(varName)
+				val, ok, isConst := i.Env.Get(varName)
 				if !ok {
 					return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unknown var: %s", varName))
+				}
+
+				if isConst {
+					return NilValue{}, NewRuntimeError(node, fmt.Sprintf("cannot assign to const: %s", varName))
 				}
 
 				input := fields[idx]
@@ -593,12 +608,12 @@ func (i *Interpreter) registerBuiltins() {
 
 				varName := ident.Value
 
-				val, ok := i.Env.Get(varName)
+				val, ok, isConst := i.Env.Get(varName)
 				if !ok {
 					return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unknown var: %s", varName))
 				}
 
-				if _, isConst := val.(ConstValue); isConst {
+				if isConst {
 					return NilValue{}, NewRuntimeError(node, fmt.Sprintf("cannot assign to const: %s", varName))
 				}
 
@@ -628,12 +643,12 @@ func (i *Interpreter) registerBuiltins() {
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
 
 			if len(args) == 0 {
-				return NilValue{}, NewRuntimeError(node, "scanf(format string, t ...thing) expected")
+				return NilValue{}, NewRuntimeError(node, "scanf: atleast 2 arguments expected")
 			}
 
 			formatVal, ok := args[0].(StringValue)
 			if !ok {
-				return NilValue{}, NewRuntimeError(node, "scanf(format string, t ...thing) expected")
+				return NilValue{}, NewRuntimeError(node, "scanf: first argument must be a string")
 			}
 
 			_ = formatVal.V // ignore format for now
@@ -657,12 +672,12 @@ func (i *Interpreter) registerBuiltins() {
 
 				varName := ident.Value
 
-				val, ok := i.Env.Get(varName)
+				val, ok, isConst := i.Env.Get(varName)
 				if !ok {
 					return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unknown var: %s", varName))
 				}
 
-				if _, isConst := val.(ConstValue); isConst {
+				if isConst {
 					return NilValue{}, NewRuntimeError(node, fmt.Sprintf("cannot assign to const: %s", varName))
 				}
 
@@ -718,9 +733,9 @@ func (i *Interpreter) registerBuiltins() {
 			varName := ident.Value
 
 			// is it const?
-			v, ok := i.Env.Get(varName)
+			v, ok, isConst := i.Env.Get(varName)
 			if ok {
-				if _, isConst := v.(ConstValue); isConst {
+				if isConst {
 					return NilValue{}, NewRuntimeError(node, fmt.Sprintf("cannot assign to const: %s", varName))
 				}
 			} else {

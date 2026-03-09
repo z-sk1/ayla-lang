@@ -135,50 +135,52 @@ func NewRuntimeError(node parser.Node, msg string) RuntimeError {
 	return RuntimeError{Message: msg, Line: line, Column: col}
 }
 
-func (e *Environment) Get(name string) (Value, bool) {
+func (e *Environment) Get(name string) (Value, bool, bool) {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	if v, ok := e.store[name]; ok {
-		return v.Value, true
+	v, ok := e.store[name]
+	if ok {
+		return v.Value, true, v.isConst
 	}
 
 	if e.parent != nil {
 		return e.parent.Get(name)
 	}
 
-	return nil, false
+	return nil, false, v.isConst
 }
 
-func (e *Environment) GetLocal(name string) (Value, bool) {
+func (e *Environment) GetLocal(name string) (Value, bool, bool) {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 
-	if v, ok := e.store[name]; ok {
-		return v.Value, true
+	v, ok := e.store[name]
+	if ok {
+		return v.Value, true, v.isConst
 	}
 
-	return nil, false
+	return nil, false, v.isConst
 }
 
-func (e *Environment) Define(name string, val Value) Value {
+func (e *Environment) Define(name string, val Value, isConst bool) Value {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	e.store[name] = Variable{Value: val, Lifetime: -1}
+	e.store[name] = Variable{Value: val, Lifetime: -1, isConst: isConst}
 	return val
 }
 
-func (e *Environment) DefineWithLifetime(name string, val Value, lifetime int) Value {
+func (e *Environment) DefineWithLifetime(name string, val Value, lifetime int, isConst bool) Value {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	e.store[name] = Variable{Value: val, Lifetime: lifetime}
+	e.store[name] = Variable{Value: val, Lifetime: lifetime, isConst: isConst}
 	return val
 }
 
 func (e *Environment) Set(name string, val Value) Value {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	if _, ok := e.store[name]; ok {
-		e.store[name] = Variable{Value: val, Lifetime: -1}
+	if v, ok := e.store[name]; ok {
+		e.store[name] = Variable{Value: val, Lifetime: -1, isConst: v.isConst}
 		return val
 	}
 
@@ -238,8 +240,21 @@ func toFloat(v Value) (float64, bool) {
 }
 
 func typesAssignable(from, to *TypeInfo) bool {
+	from = unwrapAlias(from)
+	to = unwrapAlias(to)
+
 	if from == nil || to == nil {
 		return false
+	}
+
+	if from.Kind == to.Kind && (from.Kind == TypeInt || from.Kind == TypeFloat) {
+		if from.Min == nil && from.Max == nil {
+			return true
+		}
+
+		if rangeMismatch(from, to) {
+			return false
+		}
 	}
 
 	if typesIdentical(from, to) {
@@ -248,13 +263,6 @@ func typesAssignable(from, to *TypeInfo) bool {
 
 	if to.Kind == TypeAny {
 		return true
-	}
-
-	if from.Alias {
-		return typesAssignable(from.Underlying, to)
-	}
-	if to.Alias {
-		return typesAssignable(from, to.Underlying)
 	}
 
 	if to.Kind == TypeNamed {
@@ -268,10 +276,10 @@ func typesAssignable(from, to *TypeInfo) bool {
 	switch {
 
 	case from.Kind == TypeArray && to.Kind == TypeArray:
-		return typesIdentical(from.Elem, to.Elem)
+		return typesAssignable(from.Elem, to.Elem)
 
 	case from.Kind == TypeFixedArray && to.Kind == TypeFixedArray:
-		return typesIdentical(from.Elem, to.Elem) &&
+		return typesAssignable(from.Elem, to.Elem) &&
 			from.Size == to.Size
 
 	case from.Kind == TypeMap && to.Kind == TypeMap:
@@ -335,8 +343,20 @@ func typesIdentical(a, b *TypeInfo) bool {
 	}
 
 	switch a.Kind {
+	case TypeInt, TypeFloat:
+		if a.Min != nil || b.Min != nil {
+			if a.Min == nil || b.Min == nil || *a.Min != *b.Min {
+				return false
+			}
+		}
+		if a.Max != nil || b.Max != nil {
+			if a.Max == nil || b.Max == nil || *a.Max != *b.Max {
+				return false
+			}
+		}
+		return true
 
-	case TypeInt, TypeFloat, TypeString, TypeBool, TypeAny:
+	case TypeString, TypeBool, TypeAny:
 		return true
 
 	case TypeArray:
@@ -606,12 +626,100 @@ func (i *Interpreter) checkMethodStatement(fn *parser.MethodStatement) error {
 	return nil
 }
 
-func runValidator(t *TypeInfo, fields map[string]Value) error {
-	if t.Validator != nil {
-		return t.Validator(fields)
+func (i *Interpreter) assignWithType(node parser.Node, v Value, expected *TypeInfo) (Value, error) {
+	if expected == nil {
+		return v, nil
 	}
-	if t.Underlying != nil && t.Underlying.Validator != nil {
-		return t.Underlying.Validator(fields)
+
+	expected = unwrapAlias(expected)
+	actual := unwrapAlias(i.typeInfoFromValue(v))
+
+	// special case: []thing absorbs array elem types
+	if expected.Kind == TypeArray && expected.Elem.Kind == TypeAny {
+		if arr, ok := v.(ArrayValue); ok {
+			arr.ElemType = expected.Elem
+			v = arr
+			actual = expected
+		}
 	}
+
+	if !typesAssignable(actual, expected) {
+		return NilValue{}, NewRuntimeError(
+			node,
+			fmt.Sprintf(
+				"type mismatch: expected '%s' but got '%s'",
+				expected.Name,
+				actual.Name,
+			),
+		)
+	}
+
+	v = i.promoteValueToType(v, expected)
+
+	if arr, ok := v.(ArrayValue); ok && expected.Kind == TypeArray {
+		for _, el := range arr.Elements {
+			if err := validateRange(node, el, expected.Elem); err != nil {
+				return NilValue{}, err
+			}
+		}
+	}
+
+	if expected.Kind == TypeAny {
+		v = NamedValue{
+			TypeName: expected,
+			Value:    v,
+		}
+	}
+
+	return v, nil
+}
+
+func validateRange(node parser.Node, v Value, expected *TypeInfo) error {
+	if expected.Min != nil || expected.Max != nil {
+		switch val := v.(type) {
+		case IntValue:
+			x := float64(val.V)
+
+			if expected.Min != nil && x < *expected.Min {
+				return NewRuntimeError(node, fmt.Sprintf("value %v below minimum %v", x, *expected.Min))
+			}
+
+			if expected.Max != nil && x > *expected.Max {
+				return NewRuntimeError(node, fmt.Sprintf("value %v above maximum %v", x, *expected.Max))
+			}
+
+		case FloatValue:
+			x := val.V
+
+			if expected.Min != nil && x < *expected.Min {
+				return NewRuntimeError(node, fmt.Sprintf("value %v below minimum %v", x, *expected.Min))
+			}
+
+			if expected.Max != nil && x > *expected.Max {
+				return NewRuntimeError(node, fmt.Sprintf("value %v above maximum %v", x, *expected.Max))
+			}
+		}
+	}
+
 	return nil
+}
+
+func rangeMismatch(src, dst *TypeInfo) bool {
+	if dst.Min == nil && dst.Max == nil {
+		return false
+	}
+
+	if src.Min == nil && src.Max == nil {
+		return false
+	}
+
+	if src.Min != nil && dst.Min != nil && *src.Min != *dst.Min {
+		return true
+	}
+
+	if src.Max != nil && dst.Max != nil && *src.Max != *dst.Max {
+		return true
+	}
+
+	return false
 }

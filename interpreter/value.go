@@ -35,9 +35,12 @@ type TypeInfo struct {
 	Underlying *TypeInfo
 	Alias      bool
 
+	// boundaries
+	Min *float64
+	Max *float64
+
 	// structs
-	Fields    map[string]*TypeInfo
-	Validator func(fields map[string]Value) error
+	Fields map[string]*TypeInfo
 
 	// arrays
 	Elem *TypeInfo
@@ -102,18 +105,6 @@ type SignalContinue struct{}
 
 type SignalReturn struct {
 	Values []Value
-}
-
-type ConstValue struct {
-	Value Value
-}
-
-func (c ConstValue) Type() ValueType {
-	return c.Value.Type()
-}
-
-func (c ConstValue) String() string {
-	return c.Value.String()
 }
 
 type TupleValue struct {
@@ -406,8 +397,63 @@ func (i *Interpreter) resolveTypeNode(t parser.TypeNode) (*TypeInfo, error) {
 		}
 		return tv.TypeInfo, nil
 
+	case *parser.RangeType:
+		baseTI, err := i.resolveTypeNode(tn.Base)
+		if err != nil {
+			return nil, err
+		}
+
+		minVal, err := i.EvalExpression(tn.Min)
+		if err != nil {
+			return nil, err
+		}
+
+		maxVal, err := i.EvalExpression(tn.Max)
+		if err != nil {
+			return nil, err
+		}
+
+		var minPtr *float64
+		var maxPtr *float64
+
+		var minNum float64
+		switch v := minVal.(type) {
+		case IntValue:
+			minNum = float64(v.V)
+		case FloatValue:
+			minNum = v.V
+		default:
+			return nil, NewRuntimeError(tn.Min, "range minimum must be numeric")
+		}
+		minPtr = &minNum
+
+		var maxNum float64
+		switch v := maxVal.(type) {
+		case IntValue:
+			maxNum = float64(v.V)
+		case FloatValue:
+			maxNum = v.V
+		default:
+			return nil, NewRuntimeError(tn.Max, "range maximum must be numeric")
+		}
+		maxPtr = &maxNum
+
+		if minNum > maxNum {
+			return nil, NewRuntimeError(tn, "range minimum cannot be greater than maximum")
+		}
+
+		name := fmt.Sprintf("%s[%v..%v]", baseTI.Name, minNum, maxNum)
+
+		return &TypeInfo{
+			Name:       name,
+			Kind:       baseTI.Kind,
+			Underlying: baseTI,
+			Min:        minPtr,
+			Max:        maxPtr,
+		}, nil
+
 	case *parser.QualifiedType:
-		modVal, ok := i.Env.Get(tn.Module.Value)
+		modVal, ok, _ := i.Env.Get(tn.Module.Value)
 		if !ok {
 			return nil, NewRuntimeError(tn, fmt.Sprintf("unknown module '%s'", tn.Module.Value))
 		}
@@ -639,7 +685,7 @@ func (i *Interpreter) typeInfoFromValue(v Value) *TypeInfo {
 	}
 }
 
-func (i *Interpreter) defaultValueFromTypeInfo(node parser.Statement, ti *TypeInfo) (Value, error) {
+func (i *Interpreter) defaultValueFromTypeInfo(node parser.Node, ti *TypeInfo) (Value, error) {
 	ti = unwrapAlias(ti)
 
 	switch ti.Kind {

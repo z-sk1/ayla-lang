@@ -28,6 +28,7 @@ const (
 	MOD      = "%"
 	WALRUS   = "WALRUS"
 	ELLIPSES = "ELLIPSES"
+	DUODOT   = "DUODOT"
 
 	EQ     = "EQ"
 	NOT_EQ = "NOT_EQ"

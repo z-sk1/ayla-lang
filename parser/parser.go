@@ -954,18 +954,22 @@ func (p *Parser) parseType() TypeNode {
 		return nil
 	}
 
+	var base TypeNode
+
 	switch p.curTok.Type {
 
 	case token.INT_TYPE,
-		token.STRING_TYPE,
 		token.FLOAT_TYPE,
 		token.BOOL_TYPE,
+		token.STRING_TYPE,
 		token.ANY_TYPE,
 		token.ERROR_TYPE:
-		return &IdentType{
+
+		base = &IdentType{
 			NodeBase: NodeBase{Token: p.curTok},
 			Name: &Identifier{
-				Value: p.curTok.Literal,
+				NodeBase: NodeBase{Token: p.curTok},
+				Value:    p.curTok.Literal,
 			},
 		}
 
@@ -976,43 +980,54 @@ func (p *Parser) parseType() TypeNode {
 		}
 
 		if p.peekTok.Type == token.DOT {
-			p.nextToken() // move to '.'
-			p.nextToken() // move to field identifier
+			p.nextToken()
+			p.nextToken()
 
 			if p.curTok.Type != token.IDENT {
 				p.addError("expected identifier after '.'")
 				return nil
 			}
 
-			return &QualifiedType{
+			base = &QualifiedType{
 				Module: ident,
 				Name: &Identifier{
 					NodeBase: NodeBase{Token: p.curTok},
 					Value:    p.curTok.Literal,
 				},
 			}
-		}
 
-		return &IdentType{
-			NodeBase: NodeBase{Token: p.curTok},
-			Name:     ident,
+		} else {
+			base = &IdentType{
+				NodeBase: NodeBase{Token: p.curTok},
+				Name:     ident,
+			}
 		}
 
 	case token.FUNC:
-		return p.parseFuncType()
+		base = p.parseFuncType()
 
 	case token.STRUCT:
-		return p.parseStructType()
+		base = p.parseStructType()
 
 	case token.LBRACKET:
-		return p.parseArrayType()
+		base = p.parseArrayType()
 
 	case token.MAP:
-		return p.parseMapType()
+		base = p.parseMapType()
 
 	default:
 		return p.exprToType(p.parseExpression(LOWEST))
 	}
+
+	for p.peekTok.Type == token.LBRACKET {
+		if p.peekN(2).Type == token.DUODOT {
+			base = p.parseRangeType(base)
+		} else {
+			break
+		}
+	}
+
+	return base
 }
 
 func (p *Parser) parseTypeList(end token.TokenType) []TypeNode {
@@ -1039,6 +1054,39 @@ func (p *Parser) parseTypeList(end token.TokenType) []TypeNode {
 
 	p.nextToken()
 	return list
+}
+
+func (p *Parser) parseRangeType(base TypeNode) TypeNode {
+	p.nextToken() // move to '['
+	p.nextToken() // first token of min
+
+	min := p.parseExpression(LOWEST)
+
+	if p.curTok.Type != token.DUODOT {
+		if p.peekTok.Type == token.DUODOT {
+			p.nextToken()
+		} else {
+			p.addError("expected '..' in range type")
+			return nil
+		}
+	}
+
+	p.nextToken() // move to max start
+
+	max := p.parseExpression(LOWEST)
+
+	if p.peekTok.Type != token.RBRACKET {
+		p.addError("expected ']' after range type")
+		return nil
+	}
+
+	p.nextToken() // consume ']'
+
+	return &RangeType{
+		Base: base,
+		Min:  min,
+		Max:  max,
+	}
 }
 
 func (p *Parser) parseArrayType() TypeNode {
