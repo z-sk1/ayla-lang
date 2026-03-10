@@ -14,7 +14,7 @@ import (
 )
 
 type Environment struct {
-	store    map[string]Variable
+	store    map[string]*Variable
 	methods  map[string]map[string]*Func
 	builtins map[string]*BuiltinFunc
 	defers   []*parser.FuncCall
@@ -28,6 +28,7 @@ type Interpreter struct {
 	typeEnv       map[string]TypeValue
 	modules       map[string]ModuleValue
 	nativeModules map[string]NativeLoader
+	pointerCache  map[*TypeInfo]*TypeInfo
 	modulePaths   []string
 	currentDir    string
 	projectRoot   string
@@ -647,7 +648,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		}
 
 		return SignalNone{}, nil
-		
+
 	case *parser.AssignmentStatement:
 		val, err := i.EvalExpression(stmt.Value)
 		if err != nil {
@@ -841,6 +842,11 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			return SignalNone{}, nil
 		}
 
+		// deref ptr value
+		if ptr, ok := objVal.(*PointerValue); ok {
+			objVal = ptr.Target.Value
+		}
+
 		structVal, ok := objVal.(*StructValue)
 		if !ok {
 			return SignalNone{}, NewRuntimeError(s, "cannot assign field on non-struct")
@@ -855,16 +861,58 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			return SignalNone{}, NewRuntimeError(s, fmt.Sprintf("unknown struct field: %s", stmt.Field.Value))
 		}
 
-		expectedType := structVal.TypeName.Fields[stmt.Field.Value]
+		structTI := structVal.TypeName
+		if structTI.Kind == TypeNamed {
+			structTI = structTI.Underlying
+		}
+
+		expectedType, ok := structTI.Fields[stmt.Field.Value]
+		if !ok {
+			return SignalNone{}, NewRuntimeError(
+				s,
+				fmt.Sprintf("unknown struct field: %s", stmt.Field.Value),
+			)
+		}
 
 		actualTI := unwrapAlias(i.typeInfoFromValue(val))
 		expectedTI := unwrapAlias(expectedType)
 
+		if actualTI == nil || expectedTI == nil {
+			return SignalNone{}, NewRuntimeError(stmt,
+				fmt.Sprintf("invalid type info (expected=%v actual=%v)", expectedTI, actualTI))
+		}
+
 		if !typesAssignable(actualTI, expectedTI) {
-			return NilValue{}, NewRuntimeError(stmt, fmt.Sprintf("field '%s' expects %v but got %v", stmt.Field.Value, expectedType.Name, actualTI.Name))
+			return NilValue{}, NewRuntimeError(stmt,
+				fmt.Sprintf("field '%s' expects %v but got %v",
+					stmt.Field.Value, expectedType.Name, actualTI.Name))
 		}
 
 		structVal.Fields[stmt.Field.Value] = val
+		return SignalNone{}, nil
+
+	case *parser.PointerAssignmentStatement:
+		deref, ok := stmt.Pointer.(*parser.PrefixExpression)
+		if !ok || deref.Operator != "*" {
+			return SignalNone{}, NewRuntimeError(stmt, "invalid pointer assignment")
+		}
+
+		ptrVal, err := i.EvalExpression(deref.Right)
+		if err != nil {
+			return SignalNone{}, err
+		}
+
+		ptr, ok := ptrVal.(*PointerValue)
+		if !ok {
+			return SignalNone{}, NewRuntimeError(stmt, "cannot assign through non-pointer")
+		}
+
+		val, err := i.EvalExpression(stmt.Value)
+		if err != nil {
+			return SignalNone{}, err
+		}
+
+		ptr.Target.Value = val
 		return SignalNone{}, nil
 
 	case *parser.EnumStatement:
@@ -1396,12 +1444,12 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 			return v, nil
 		}
 
-		v, ok, _ := i.Env.Get(expr.Value)
+		v, ok := i.Env.GetVar(expr.Value)
 		if !ok {
 			return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("undefined variable: %s", expr.Value))
 		}
 
-		return v, nil
+		return v.Value, nil
 
 	case *parser.CompositeLiteral:
 		ti, err := i.resolveTypeNode(expr.Type)
@@ -1409,7 +1457,7 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 			return NilValue{}, err
 		}
 		return i.evalCompositeLiteral(expr, ti)
-		
+
 	case *parser.AnonymousStructLiteral:
 		fields := make(map[string]Value)
 		fieldTypes := make(map[string]*TypeInfo)
@@ -1666,7 +1714,7 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 			return NilValue{}, err
 		}
 
-		return evalPrefix(expr, expr.Operator, right)
+		return i.evalPrefix(expr, expr.Operator, right)
 
 	case *parser.GroupedExpression:
 		return i.EvalExpression(expr.Expression)
@@ -1818,8 +1866,13 @@ func (i *Interpreter) evalStructLiteral(expr *parser.CompositeLiteral, typeInfo 
 		}
 	}
 
+	valueType := typeInfo
+	if typeInfo.Kind == TypeStruct {
+		valueType = structType
+	}
+
 	return &StructValue{
-		TypeName: typeInfo,
+		TypeName: valueType,
 		Fields:   fields,
 	}, nil
 }
@@ -2551,11 +2604,42 @@ func (i *Interpreter) evalSliceExpression(node parser.Expression, left, startVal
 
 func (i *Interpreter) evalMemberExpression(node parser.Expression, left Value, field string) (Value, error) {
 	recvType := unwrapAlias(i.typeInfoFromValue(left))
-	if fn, ok := i.Env.GetMethod(recvType, field); ok {
+	ptrType := i.pointerTo(recvType)
+
+	if fn, ok := i.Env.GetMethod(ptrType, field); ok {
+		tmp := &Variable{Value: left}
 		return BoundMethodValue{
-			Receiver: left,
+			Receiver: &PointerValue{Target: tmp, ElemType: recvType},
 			Func:     fn,
 		}, nil
+	}
+
+	if fn, ok := i.Env.GetMethod(recvType, field); ok {
+		recv := left
+
+		if sv, ok := left.(*StructValue); ok {
+			newFields := make(map[string]Value)
+			for k, v := range sv.Fields {
+				newFields[k] = v
+			}
+
+			recv = &StructValue{
+				TypeName: sv.TypeName,
+				Fields:   newFields,
+			}
+		}
+
+		return BoundMethodValue{
+			Receiver: recv,
+			Func:     fn,
+		}, nil
+	}
+
+	if ptr, ok := left.(*PointerValue); ok {
+		if ptr.Target == nil {
+			return NilValue{}, NewRuntimeError(node, "nil pointer dereference")
+		}
+		left = ptr.Target.Value
 	}
 
 	switch obj := left.(type) {
@@ -2571,7 +2655,6 @@ func (i *Interpreter) evalMemberExpression(node parser.Expression, left Value, f
 
 		return val, nil
 	case *StructValue:
-
 		val, ok := obj.Fields[field]
 		if !ok {
 			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unknown field %s", field))
@@ -2826,15 +2909,16 @@ func evalErrorInfix(node *parser.InfixExpression, left ErrorValue, op string, ri
 	}
 }
 
-func evalPrefix(node *parser.PrefixExpression, operator string, right Value) (Value, error) {
+func (i *Interpreter) evalPrefix(node *parser.PrefixExpression, operator string, right Value) (Value, error) {
 	switch operator {
+
 	case "!":
 		rTruthy, err := isTruthy(right)
 		if err != nil {
 			return NilValue{}, NewRuntimeError(node, err.Error())
 		}
-
 		return BoolValue{V: !rTruthy}, nil
+
 	case "-":
 		switch v := right.(type) {
 		case IntValue:
@@ -2842,11 +2926,34 @@ func evalPrefix(node *parser.PrefixExpression, operator string, right Value) (Va
 		case FloatValue:
 			return FloatValue{V: -v.V}, nil
 		default:
-			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("invalid operand, %s, for unary '-'", right.String()))
+			return NilValue{}, NewRuntimeError(node, "invalid operand for unary '-'")
 		}
-	default:
-		return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unknown prefix operator: %s", operator))
+
+	case "&":
+		ident, ok := node.Right.(*parser.Identifier)
+		if !ok {
+			return NilValue{}, NewRuntimeError(node, "cannot take address of expression")
+		}
+		v, ok := i.Env.GetVar(ident.Value)
+		if !ok {
+			return NilValue{}, NewRuntimeError(node, "undefined variable")
+		}
+
+		ptr := &PointerValue{Target: v, ElemType: i.typeInfoFromValue(v.Value)}
+		return ptr, nil
+
+	case "*":
+		ptr, ok := right.(*PointerValue)
+		if !ok {
+			return NilValue{}, NewRuntimeError(node, "cannot dereference a non-pointer")
+		}
+		if ptr.Target == nil {
+			return NilValue{}, NewRuntimeError(node, "nil pointer dereference")
+		}
+		return ptr.Target.Value, nil
 	}
+
+	return NilValue{}, NewRuntimeError(node, "unknown prefix operator")
 }
 
 func isTruthy(val Value) (bool, error) {

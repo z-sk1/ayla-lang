@@ -37,9 +37,11 @@ const (
 	LTE    = "LTE"
 	GTE    = "GTE"
 
-	BANG = "!"
-	AND  = "AND"
-	OR   = "OR"
+	BANG      = "!"
+	AMPERSAND = "&"
+
+	AND = "AND"
+	OR  = "OR"
 
 	COMMA     = ","
 	SEMICOLON = ";"

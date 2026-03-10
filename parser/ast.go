@@ -137,6 +137,12 @@ type MultiAssignmentStatement struct {
 	Values []Expression
 }
 
+type PointerAssignmentStatement struct {
+	NodeBase
+	Pointer Expression
+	Value   Expression
+}
+
 type EnumStatement struct {
 	NodeBase
 	Name     *Identifier
@@ -204,6 +210,13 @@ type FuncType struct {
 }
 
 func (*FuncType) typeNode() {}
+
+type PointerType struct {
+	NodeBase
+	Base TypeNode
+}
+
+func (*PointerType) typeNode() {}
 
 type SpawnStatement struct {
 	NodeBase

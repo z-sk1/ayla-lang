@@ -31,7 +31,7 @@ func New(path string) *Interpreter {
 	dir := filepath.Dir(path)
 
 	env := &Environment{
-		store:    make(map[string]Variable),
+		store:    make(map[string]*Variable),
 		methods:  make(map[string]map[string]*Func),
 		builtins: make(map[string]*BuiltinFunc),
 		defers:   make([]*parser.FuncCall, 0),
@@ -46,6 +46,7 @@ func New(path string) *Interpreter {
 		Env:           env,
 		modules:       make(map[string]ModuleValue),
 		nativeModules: make(map[string]NativeLoader),
+		pointerCache:  make(map[*TypeInfo]*TypeInfo),
 		currentDir:    dir,
 	}
 
@@ -86,6 +87,7 @@ func NewWithEnv(env *Environment, path string) *Interpreter {
 		Env:           env,
 		modules:       make(map[string]ModuleValue),
 		nativeModules: make(map[string]NativeLoader),
+		pointerCache:  make(map[*TypeInfo]*TypeInfo),
 		currentDir:    dir,
 	}
 
@@ -118,7 +120,7 @@ func NewWithEnv(env *Environment, path string) *Interpreter {
 
 func NewEnvironment(parent *Environment) *Environment {
 	return &Environment{
-		store:    make(map[string]Variable),
+		store:    make(map[string]*Variable),
 		defers:   make([]*parser.FuncCall, 0),
 		builtins: parent.builtins,
 		parent:   parent,
@@ -137,8 +139,9 @@ func NewRuntimeError(node parser.Node, msg string) RuntimeError {
 
 func (e *Environment) Get(name string) (Value, bool, bool) {
 	e.mu.RLock()
-	defer e.mu.RUnlock()
 	v, ok := e.store[name]
+	e.mu.RUnlock()
+
 	if ok {
 		return v.Value, true, v.isConst
 	}
@@ -147,7 +150,7 @@ func (e *Environment) Get(name string) (Value, bool, bool) {
 		return e.parent.Get(name)
 	}
 
-	return nil, false, v.isConst
+	return nil, false, false
 }
 
 func (e *Environment) GetLocal(name string) (Value, bool, bool) {
@@ -159,28 +162,45 @@ func (e *Environment) GetLocal(name string) (Value, bool, bool) {
 		return v.Value, true, v.isConst
 	}
 
-	return nil, false, v.isConst
+	return nil, false, false
+}
+
+func (e *Environment) GetVar(name string) (*Variable, bool) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+
+	v, ok := e.store[name]
+	if ok {
+		return v, true
+	}
+
+	if e.parent != nil {
+		return e.parent.GetVar(name)
+	}
+
+	return nil, false
 }
 
 func (e *Environment) Define(name string, val Value, isConst bool) Value {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	e.store[name] = Variable{Value: val, Lifetime: -1, isConst: isConst}
+	e.store[name] = &Variable{Value: val, Lifetime: -1, isConst: isConst}
 	return val
 }
 
 func (e *Environment) DefineWithLifetime(name string, val Value, lifetime int, isConst bool) Value {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	e.store[name] = Variable{Value: val, Lifetime: lifetime, isConst: isConst}
+	e.store[name] = &Variable{Value: val, Lifetime: lifetime, isConst: isConst}
 	return val
 }
 
 func (e *Environment) Set(name string, val Value) Value {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+
 	if v, ok := e.store[name]; ok {
-		e.store[name] = Variable{Value: val, Lifetime: -1, isConst: v.isConst}
+		v.Value = val // update existing variable
 		return val
 	}
 
@@ -228,6 +248,21 @@ func (i *Interpreter) runDefers(env *Environment) error {
 	return nil
 }
 
+func (i *Interpreter) pointerTo(t *TypeInfo) *TypeInfo {
+	if pt, ok := i.pointerCache[t]; ok {
+		return pt
+	}
+
+	pt := &TypeInfo{
+		Name: "*" + t.Name,
+		Kind: TypePointer,
+		Elem: t,
+	}
+
+	i.pointerCache[t] = pt
+	return pt
+}
+
 func toFloat(v Value) (float64, bool) {
 	switch x := v.(type) {
 	case FloatValue:
@@ -265,6 +300,10 @@ func typesAssignable(from, to *TypeInfo) bool {
 		return true
 	}
 
+	if from.Kind == TypeNil && to.Kind == TypePointer {
+		return true
+	}
+
 	if to.Kind == TypeNamed {
 		return sameUnderlying(from, to)
 	}
@@ -274,6 +313,9 @@ func typesAssignable(from, to *TypeInfo) bool {
 	}
 
 	switch {
+
+	case from.Kind == TypePointer && to.Kind == TypePointer:
+		return typesIdentical(from.Elem, to.Elem)
 
 	case from.Kind == TypeArray && to.Kind == TypeArray:
 		return typesAssignable(from.Elem, to.Elem)
@@ -359,6 +401,9 @@ func typesIdentical(a, b *TypeInfo) bool {
 	case TypeString, TypeBool, TypeAny:
 		return true
 
+	case TypePointer:
+		return typesIdentical(a.Elem, b.Elem)
+
 	case TypeArray:
 		return typesIdentical(a.Elem, b.Elem)
 
@@ -426,9 +471,10 @@ func (i *Interpreter) promoteValueToType(v Value, ti *TypeInfo) Value {
 		}
 	}
 
-	switch v := v.(type) {
-	case ArrayValue:
-		if ti.Kind == TypeArray {
+	switch ti.Kind {
+	case TypeArray:
+		switch v := v.(type) {
+		case ArrayValue:
 			return ArrayValue{
 				Elements: v.Elements,
 				ElemType: ti.Elem,
@@ -436,6 +482,18 @@ func (i *Interpreter) promoteValueToType(v Value, ti *TypeInfo) Value {
 				Fixed:    v.Fixed,
 			}
 		}
+
+	case TypeFloat:
+		switch val := v.(type) {
+		case IntValue:
+			return FloatValue{V: float64(val.V)}
+		}
+	case TypeInt:
+		switch val := v.(type) {
+		case FloatValue:
+			return IntValue{V: int(val.V)}
+		}
+
 	}
 
 	return v

@@ -19,6 +19,7 @@ const (
 	TypeBool
 	TypeArray
 	TypeFixedArray
+	TypePointer
 	TypeFunc
 	TypeNil
 	TypeStruct
@@ -43,7 +44,7 @@ type TypeInfo struct {
 	Fields map[string]*TypeInfo
 
 	// arrays
-	Elem *TypeInfo
+	Elem *TypeInfo // arrays and pointers
 	Size int
 
 	// maps
@@ -90,6 +91,7 @@ const (
 	NIL         ValueType = "nil"
 	MODULE      ValueType = "module"
 	NATIVE      ValueType = "native"
+	POINTER     ValueType = "pointer"
 )
 
 type Value interface {
@@ -97,7 +99,7 @@ type Value interface {
 	String() string
 }
 
-type ControlSignal interface{}
+type ControlSignal any
 
 type SignalNone struct{}
 type SignalBreak struct{}
@@ -166,6 +168,22 @@ func (b BuiltinFunc) Type() ValueType {
 
 func (b BuiltinFunc) String() string {
 	return fmt.Sprintf("%s()", b.Name)
+}
+
+type PointerValue struct {
+	Target   *Variable
+	ElemType *TypeInfo
+}
+
+func (p *PointerValue) Type() ValueType {
+	return POINTER
+}
+
+func (p *PointerValue) String() string {
+	if p.Target == nil {
+		return "ptr(nil)"
+	}
+	return fmt.Sprintf("ptr(%p -> %v)", p.Target, p.Target.Value)
 }
 
 type IntValue struct {
@@ -396,6 +414,18 @@ func (i *Interpreter) resolveTypeNode(t parser.TypeNode) (*TypeInfo, error) {
 			return nil, NewRuntimeError(tn, fmt.Sprintf("unknown type '%s'", tn.Name.Value))
 		}
 		return tv.TypeInfo, nil
+
+	case *parser.PointerType:
+		base, err := i.resolveTypeNode(tn.Base)
+		if err != nil {
+			return nil, err
+		}
+
+		return &TypeInfo{
+			Name: fmt.Sprintf("*%s", base.Name),
+			Kind: TypePointer,
+			Elem: base,
+		}, nil
 
 	case *parser.RangeType:
 		baseTI, err := i.resolveTypeNode(tn.Base)
@@ -680,6 +710,11 @@ func (i *Interpreter) typeInfoFromValue(v Value) *TypeInfo {
 		return v.Enum
 	case NamedValue:
 		return v.TypeName
+	case *PointerValue:
+		if v.ElemType == nil {
+			panic("PointerValue ElemType is nil")
+		}
+		return i.pointerTo(v.ElemType)
 	default:
 		return i.typeEnv["nil"].TypeInfo
 	}
@@ -732,6 +767,11 @@ func (i *Interpreter) defaultValueFromTypeInfo(node parser.Node, ti *TypeInfo) (
 			Body:     make([]parser.Statement, 0),
 			Env:      i.Env,
 			TypeName: ti,
+		}, nil
+	case TypePointer:
+		return &PointerValue{
+			Target:   nil,
+			ElemType: ti,
 		}, nil
 	default:
 		return NilValue{}, NewRuntimeError(node, "cannot create default value for "+ti.Name)

@@ -276,6 +276,8 @@ func (l *Lexer) NextToken() token.Token {
 			ch := l.ch
 			l.readChar()
 			tok = token.Token{Type: token.AND, Literal: string(ch) + string(l.ch), Line: l.line, Column: l.column}
+		} else {
+			tok = token.Token{Type: token.AMPERSAND, Literal: "&", Line: l.line, Column: l.column}
 		}
 	case '|':
 		if l.peekChar() == '|' {

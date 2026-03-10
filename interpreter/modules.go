@@ -79,21 +79,27 @@ func argColor(node parser.Node, typeEnv map[string]TypeValue, args []Value, i in
 	return colorFromValue(sv)
 }
 
-func argVector2(node parser.Node, i *Interpreter, typeEnv map[string]TypeValue, args []Value, idx int, name string) (float32, float32, error) {
+func argVector2(node parser.Node, i *Interpreter, typeEnv map[string]TypeValue, args []Value, idx int, name string) (rl.Vector2, error) {
 	vecTI := typeEnv["Vector2"].TypeInfo
 
-	vecVal, ok := unwrapNamed(args[idx]).(*StructValue)
+	v := unwrapNamed(args[idx])
+
+	vecVal, ok := v.(*StructValue)
 	if !ok {
-		return 0, 0, NewRuntimeError(node, "gfx.DrawLine: first argument must be a gfx.Vector2")
+		return rl.Vector2{}, NewRuntimeError(node, name+": argument must be gfx.Vector2")
 	}
 
 	if !typesAssignable(i.typeInfoFromValue(vecVal), vecTI) {
-		return 0, 0, NewRuntimeError(node, "gfx.DrawLine: first argument must be a gfx.Vector2")
+		return rl.Vector2{}, NewRuntimeError(node, name+": argument must be gfx.Vector2")
 	}
 
-	x, y := unwrapVector2(vecVal)
+	x, _ := toFloat(vecVal.Fields["X"])
+	y, _ := toFloat(vecVal.Fields["Y"])
 
-	return x, y, nil
+	return rl.Vector2{
+		X: float32(x),
+		Y: float32(y),
+	}, nil
 }
 
 func colorFromValue(v Value) (rl.Color, error) {
@@ -185,6 +191,7 @@ func LoadMathModule(i *Interpreter) (ModuleValue, error) {
 	env.Define("Min", wrapFloat2("Min", math.Min), false)
 	env.Define("Pow", wrapFloat2("Pow", math.Pow), false)
 	env.Define("Remainder", wrapFloat2("Remainder", math.Remainder), false)
+	env.Define("Atan2", wrapFloat2("Atan2", math.Atan2), false)
 
 	// constants
 	env.Define("Pi", FloatValue{V: math.Pi}, true)
@@ -887,6 +894,13 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 			rl.InitWindow(int32(w), int32(h), title)
 			rl.SetTargetFPS(60)
 
+			rl.DrawTriangle(
+				rl.Vector2{X: 100, Y: 100},
+				rl.Vector2{X: 200, Y: 100},
+				rl.Vector2{X: 150, Y: 200},
+				rl.Red,
+			)
+
 			return NilValue{}, nil
 		},
 	}, false)
@@ -972,108 +986,131 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 
 	env.Define("DrawRect", &BuiltinFunc{
 		Name:  "DrawRect",
-		Arity: 5,
+		Arity: 3,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			xVal, err := argInt(node, args, 0, "gfx.DrawRect")
+			pv, err := argVector2(node, i, typeEnv, args, 0, "gfx.DrawRect")
 			if err != nil {
 				return NilValue{}, err
 			}
 
-			yVal, err := argInt(node, args, 1, "gfx.DrawRect")
+			sv, err := argVector2(node, i, typeEnv, args, 1, "gfx.DrawRect")
 			if err != nil {
 				return NilValue{}, err
 			}
 
-			wVal, err := argInt(node, args, 2, "gfx.DrawRect")
+			col, err := argColor(node, typeEnv, args, 2, "gfx.DrawRect")
 			if err != nil {
 				return NilValue{}, err
 			}
 
-			hVal, err := argInt(node, args, 3, "gfx.DrawRect")
+			rl.DrawRectangleV(pv, sv, col)
+			return NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("DrawRectLines", &BuiltinFunc{
+		Name:  "DrawRectLines",
+		Arity: 3,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			pv, err := argVector2(node, i, typeEnv, args, 0, "gfx.DrawRectLines")
 			if err != nil {
 				return NilValue{}, err
 			}
 
-			col, err := argColor(node, typeEnv, args, 4, "gfx.DrawRect")
+			sv, err := argVector2(node, i, typeEnv, args, 1, "gfx.DrawRectLines")
 			if err != nil {
 				return NilValue{}, err
 			}
 
-			x := int32(xVal)
-			y := int32(yVal)
-			w := int32(wVal)
-			h := int32(hVal)
+			col, err := argColor(node, typeEnv, args, 2, "gfx.DrawRectLines")
+			if err != nil {
+				return NilValue{}, err
+			}
 
-			rl.DrawRectangle(x, y, w, h, col)
+			rl.DrawRectangleLines(int32(pv.X), int32(pv.Y), int32(sv.X), int32(sv.Y), col)
 			return NilValue{}, nil
 		},
 	}, false)
 
 	env.Define("DrawCircle", &BuiltinFunc{
 		Name:  "DrawCircle",
-		Arity: 4,
+		Arity: 3,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			cxVal, err := argInt(node, args, 0, "gfx.DrawCircle")
+			pv, err := argVector2(node, i, typeEnv, args, 0, "gfx.DrawCircle")
 			if err != nil {
 				return NilValue{}, err
 			}
 
-			cyVal, err := argInt(node, args, 1, "gfx.DrawCircle")
+			rVal, err := argFloat(node, args, 1, "gfx.DrawCircle")
 			if err != nil {
 				return NilValue{}, err
 			}
 
-			rVal, err := argInt(node, args, 2, "gfx.DrawCircle")
+			col, err := argColor(node, typeEnv, args, 2, "gfx.DrawCircle")
 			if err != nil {
 				return NilValue{}, err
 			}
 
-			col, err := argColor(node, typeEnv, args, 3, "gfx.DrawCircle")
-			if err != nil {
-				return NilValue{}, err
-			}
-
-			cx := int32(cxVal)
-			cy := int32(cyVal)
 			r := float32(rVal)
 
-			rl.DrawCircle(cx, cy, r, col)
+			rl.DrawCircleV(pv, r, col)
+			return NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("DrawCircleLines", &BuiltinFunc{
+		Name:  "DrawCircleLines",
+		Arity: 3,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			pv, err := argVector2(node, i, typeEnv, args, 0, "gfx.DrawCircleLines")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			rVal, err := argFloat(node, args, 1, "gfx.DrawCircleLines")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			col, err := argColor(node, typeEnv, args, 2, "gfx.DrawCircleLines")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			r := float32(rVal)
+
+			rl.DrawCircleLinesV(pv, r, col)
 			return NilValue{}, nil
 		},
 	}, false)
 
 	env.Define("DrawText", &BuiltinFunc{
 		Name:  "DrawText",
-		Arity: 5,
+		Arity: 4,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
 			txtVal, err := argString(node, args, 0, "gfx.DrawText")
 			if err != nil {
 				return NilValue{}, err
 			}
 
-			xVal, err := argInt(node, args, 1, "gfx.DrawText")
+			pv, err := argVector2(node, i, typeEnv, args, 1, "gfx.DrawRect")
 			if err != nil {
 				return NilValue{}, err
 			}
 
-			yVal, err := argInt(node, args, 2, "gfx.DrawText")
+			fontVal, err := argInt(node, args, 2, "gfx.DrawText")
 			if err != nil {
 				return NilValue{}, err
 			}
 
-			fontVal, err := argInt(node, args, 3, "gfx.DrawText")
-			if err != nil {
-				return NilValue{}, err
-			}
-
-			col, err := argColor(node, typeEnv, args, 4, "gfx.DrawText")
+			col, err := argColor(node, typeEnv, args, 3, "gfx.DrawText")
 			if err != nil {
 				return NilValue{}, err
 			}
 
 			txt := txtVal
-			x := int32(xVal)
-			y := int32(yVal)
+			x := int32(pv.X)
+			y := int32(pv.Y)
 			font := int32(fontVal)
 
 			rl.DrawText(txt, x, y, font, col)
@@ -1085,12 +1122,12 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 		Name:  "DrawLine",
 		Arity: 3,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			x1, y1, err := argVector2(node, i, typeEnv, args, 0, "gfx.DrawLine")
+			pv, err := argVector2(node, i, typeEnv, args, 0, "gfx.DrawLine")
 			if err != nil {
 				return NilValue{}, err
 			}
 
-			x2, y2, err := argVector2(node, i, typeEnv, args, 1, "gfx.DrawLine")
+			sv, err := argVector2(node, i, typeEnv, args, 1, "gfx.DrawLine")
 			if err != nil {
 				return NilValue{}, err
 			}
@@ -1100,10 +1137,195 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 				return NilValue{}, err
 			}
 
-			rl.DrawLine(int32(x1), int32(y1), int32(x2), int32(y2), col)
+			rl.DrawLineV(pv, sv, col)
 			return NilValue{}, nil
 		},
 	}, false)
+
+	env.Define("DrawTriangle", &BuiltinFunc{
+		Name:  "DrawTriangle",
+		Arity: 4,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			pv1, err := argVector2(node, i, typeEnv, args, 0, "DrawTriangle")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			pv2, err := argVector2(node, i, typeEnv, args, 1, "DrawTriangle")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			pv3, err := argVector2(node, i, typeEnv, args, 2, "DrawTriangle")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			col, err := argColor(node, typeEnv, args, 3, "DrawTriangle")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			rl.DrawTriangle(pv1, pv3, pv2, col)
+			return NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("DrawTriangleLines", &BuiltinFunc{
+		Name:  "DrawTriangleLines",
+		Arity: 4,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			pv1, err := argVector2(node, i, typeEnv, args, 0, "DrawTriangle")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			pv2, err := argVector2(node, i, typeEnv, args, 1, "DrawTriangle")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			pv3, err := argVector2(node, i, typeEnv, args, 2, "DrawTriangle")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			col, err := argColor(node, typeEnv, args, 3, "DrawTriangle")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			rl.DrawTriangleLines(pv1, pv3, pv2, col)
+			return NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("KeyDown", &BuiltinFunc{
+		Name:  "KeyDown",
+		Arity: 1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			v, err := argInt(node, args, 0, "gfx.KeyDown")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			return BoolValue{V: rl.IsKeyDown(int32(v))}, nil
+		},
+	}, false)
+
+	env.Define("KeyPressed", &BuiltinFunc{
+		Name:  "KeyPressed",
+		Arity: 1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			v, err := argInt(node, args, 0, "gfx.KeyPressed")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			return BoolValue{V: rl.IsKeyPressed(int32(v))}, nil
+		},
+	}, false)
+
+	env.Define("KeyReleased", &BuiltinFunc{
+		Name:  "KeyReleased",
+		Arity: 1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			v, err := argInt(node, args, 0, "gfx.KeyReleased")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			return BoolValue{V: rl.IsKeyReleased(int32(v))}, nil
+		},
+	}, false)
+
+	env.Define("KeyUp", &BuiltinFunc{
+		Name:  "KeyUp",
+		Arity: 1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			v, err := argInt(node, args, 0, "gfx.KeyUp")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			return BoolValue{V: rl.IsKeyUp(int32(v))}, nil
+		},
+	}, false)
+
+	env.Define("MouseDown", &BuiltinFunc{
+		Name:  "MouseDown",
+		Arity: 1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			v, err := argInt(node, args, 0, "gfx.MouseDown")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			return BoolValue{V: rl.IsMouseButtonDown(rl.MouseButton((v)))}, nil
+		},
+	}, false)
+
+	env.Define("MousePressed", &BuiltinFunc{
+		Name:  "MousePressed",
+		Arity: 1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			v, err := argInt(node, args, 0, "gfx.MousePressed")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			return BoolValue{V: rl.IsMouseButtonPressed(rl.MouseButton(int32(v)))}, nil
+		},
+	}, false)
+
+	env.Define("MouseReleased", &BuiltinFunc{
+		Name:  "MouseReleased",
+		Arity: 1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			v, err := argInt(node, args, 0, "gfx.MouseReleased")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			return BoolValue{V: rl.IsMouseButtonReleased(rl.MouseButton(int32(v)))}, nil
+		},
+	}, false)
+
+	env.Define("MouseUp", &BuiltinFunc{
+		Name:  "MouseUp",
+		Arity: 1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			v, err := argInt(node, args, 0, "gfx.MouseUp")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			return BoolValue{V: rl.IsMouseButtonUp(rl.MouseButton(int32(v)))}, nil
+		},
+	}, false)
+
+	env.Define("MousePos", &BuiltinFunc{
+		Name:  "MousePos",
+		Arity: 0,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			return &StructValue{
+				TypeName: typeEnv["Vector2"].TypeInfo,
+				Fields: map[string]Value{
+					"X": FloatValue{V: float64(rl.GetMousePosition().X)},
+					"Y": FloatValue{V: float64(rl.GetMousePosition().Y)},
+				},
+			}, nil
+		},
+	}, false)
+
+	// consts
+	env.Define("MouseLeft", IntValue{V: int(rl.MouseButtonLeft)}, true)
+	env.Define("MouseRight", IntValue{V: int(rl.MouseButtonRight)}, true)
+
+	env.Define("KeyW", IntValue{V: rl.KeyW}, true)
+	env.Define("KeyA", IntValue{V: rl.KeyA}, true)
+	env.Define("KeyS", IntValue{V: rl.KeyS}, true)
+	env.Define("KeyD", IntValue{V: rl.KeyD}, true)
 
 	module := ModuleValue{
 		Name:    "gfx",
