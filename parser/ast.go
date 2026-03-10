@@ -127,20 +127,8 @@ type MultiConstStatement struct {
 
 type AssignmentStatement struct {
 	NodeBase
-	Name  *Identifier
-	Value Expression
-}
-
-type MultiAssignmentStatement struct {
-	NodeBase
-	Names  []*Identifier
-	Values []Expression
-}
-
-type PointerAssignmentStatement struct {
-	NodeBase
-	Pointer Expression
-	Value   Expression
+	Targets []Expression
+	Values  []Expression
 }
 
 type EnumStatement struct {
@@ -373,13 +361,6 @@ type IndexExpression struct {
 	Index Expression
 }
 
-type IndexAssignmentStatement struct {
-	NodeBase
-	Left  Expression
-	Index Expression
-	Value Expression
-}
-
 type TypeAssertExpression struct {
 	NodeBase
 	Expr Expression
@@ -424,13 +405,6 @@ type MemberExpression struct {
 	NodeBase
 	Left  Expression  // p
 	Field *Identifier // x
-}
-
-type MemberAssignmentStatement struct {
-	NodeBase
-	Object Expression  // p
-	Field  *Identifier // x
-	Value  Expression
 }
 
 type Identifier struct {

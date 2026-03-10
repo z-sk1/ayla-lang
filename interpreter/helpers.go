@@ -781,3 +781,141 @@ func rangeMismatch(src, dst *TypeInfo) bool {
 
 	return false
 }
+
+func (i *Interpreter) resolveAssignableTarget(expr parser.Expression) (Assignable, error) {
+
+	switch e := expr.(type) {
+
+	case *parser.Identifier:
+		v, ok := i.Env.GetVar(e.Value)
+		if !ok {
+			return nil, fmt.Errorf("undefined variable: %s", e.Value)
+		}
+
+		return VariableTarget{
+			Name: e.Value,
+			Var:  v,
+		}, nil
+
+	case *parser.MemberExpression:
+
+		objVal, err := i.EvalExpression(e.Left)
+		if err != nil {
+			return nil, err
+		}
+
+		// pointer auto deref
+		if ptr, ok := objVal.(*PointerValue); ok {
+			objVal = ptr.Target.Value
+		}
+
+		structVal, ok := objVal.(*StructValue)
+		if !ok {
+			return nil, fmt.Errorf("cannot assign field on non-struct")
+		}
+
+		if _, ok := structVal.Fields[e.Field.Value]; !ok {
+			return nil, fmt.Errorf("unknown struct field: %s", e.Field.Value)
+		}
+
+		structTI := structVal.TypeName
+		if structTI.Kind == TypeNamed {
+			structTI = structTI.Underlying
+		}
+
+		fieldType, ok := structTI.Fields[e.Field.Value]
+		if !ok {
+			return nil, fmt.Errorf("unknown struct field: %s", e.Field.Value)
+		}
+
+		return MemberTarget{
+			Struct:    structVal,
+			Field:     e.Field.Value,
+			FieldType: unwrapAlias(fieldType),
+		}, nil
+
+	case *parser.IndexExpression:
+
+		leftVal, err := i.EvalExpression(e.Left)
+		if err != nil {
+			return nil, err
+		}
+
+		indexVal, err := i.EvalExpression(e.Index)
+		if err != nil {
+			return nil, err
+		}
+
+		switch val := leftVal.(type) {
+
+		case MapValue:
+
+			keyType := unwrapAlias(i.typeInfoFromValue(indexVal))
+
+			if val.KeyType.Kind == TypeAny {
+
+				if !isComparableValue(indexVal) {
+					return nil, fmt.Errorf("value of this type cannot be used as map key")
+				}
+
+			} else {
+
+				if !typesAssignable(keyType, val.KeyType) {
+					return nil, fmt.Errorf(
+						"map index expected %s but got %s",
+						val.KeyType.Name,
+						keyType.Name,
+					)
+				}
+
+				if err := validateRange(e, indexVal, val.KeyType); err != nil {
+					return nil, err
+				}
+			}
+
+			return MapIndexTarget{
+				Map:       &val,
+				Key:       indexVal,
+				KeyType:   val.KeyType,
+				ValueType: val.ValueType,
+			}, nil
+
+		case ArrayValue:
+
+			idxVal, ok := indexVal.(IntValue)
+			if !ok {
+				return nil, fmt.Errorf("index must be int")
+			}
+
+			idx := idxVal.V
+
+			if idx < 0 || idx >= len(val.Elements) {
+				return nil, fmt.Errorf("index: %d out of bounds", idx)
+			}
+
+			return ArrayIndexTarget{
+				Array:    &val,
+				Index:    idx,
+				ElemType: val.ElemType,
+			}, nil
+		}
+
+	case *parser.PrefixExpression:
+		if e.Operator == "*" {
+			ptrVal, err := i.EvalExpression(e.Right)
+			if err != nil {
+				return nil, err
+			}
+
+			ptr, ok := ptrVal.(*PointerValue)
+			if !ok {
+				return nil, fmt.Errorf("cannot assign through non-pointer")
+			}
+
+			return PointerTarget{
+				Ptr: ptr,
+			}, nil
+		}
+	}
+	return nil, fmt.Errorf("invalid assignment target")
+}

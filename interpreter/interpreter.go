@@ -650,269 +650,51 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		return SignalNone{}, nil
 
 	case *parser.AssignmentStatement:
-		val, err := i.EvalExpression(stmt.Value)
-		if err != nil {
-			return SignalNone{}, err
-		}
+		values := make([]Value, 0, len(stmt.Values))
 
-		existingVal, ok, isConst := i.Env.Get(stmt.Name.Value)
-		if !ok {
-			return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("assignment to undefined variable: %s", stmt.Name.Value))
-		}
-
-		if isConst {
-			return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("cannot reassign to const: %s", stmt.Name.Value))
-		}
-
-		switch existingVal.(type) {
-		case UninitializedValue:
-			i.Env.Set(stmt.Name.Value, val)
-			return SignalNone{}, nil
-		}
-
-		expectedTI := unwrapAlias(i.typeInfoFromValue(existingVal))
-
-		v, err := i.assignWithType(stmt, val, expectedTI)
-		if err != nil {
-			return SignalNone{}, err
-		}
-
-		i.Env.Set(stmt.Name.Value, v)
-		return SignalNone{}, nil
-
-	case *parser.MultiAssignmentStatement:
-
-		var values []Value
-
-		if len(stmt.Values) == 1 {
-			val, err := i.EvalExpression(stmt.Values[0])
+		if len(stmt.Values) == 1 && len(stmt.Targets) > 1 {
+			v, err := i.EvalExpression(stmt.Values[0])
 			if err != nil {
 				return SignalNone{}, err
 			}
 
-			if tup, ok := val.(TupleValue); ok {
+			if tup, ok := v.(TupleValue); ok {
 				values = tup.Values
 			} else {
-				return SignalNone{}, NewRuntimeError(stmt, "multi assign expected multiple values")
+				return SignalNone{}, NewRuntimeError(stmt, "expected multiple values")
 			}
-		} else {
-			values = make([]Value, 0, len(stmt.Values))
 
-			for idx, expr := range stmt.Values {
+		} else {
+			for _, expr := range stmt.Values {
 				v, err := i.EvalExpression(expr)
 				if err != nil {
 					return SignalNone{}, err
 				}
-				if v, ok := v.(ErrorValue); ok {
-					return v, nil
-				}
-
-				values[idx] = v
+				values = append(values, v)
 			}
 		}
 
-		if len(stmt.Values) != len(stmt.Names) {
-			return SignalNone{}, NewRuntimeError(stmt,
-				fmt.Sprintf("expected %d values, got %d",
-					len(stmt.Names), len(stmt.Values)))
+		if len(values) != len(stmt.Targets) {
+			return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("expected '%d' values but got '%d'", len(stmt.Targets), len(values)))
 		}
 
-		var expectedTI *TypeInfo
+		targets := make([]Assignable, 0, len(stmt.Targets))
 
-		for idx, name := range stmt.Names {
-			_, ok, isConst := i.Env.Get(name.Value)
-			if !ok {
-				return SignalNone{}, NewRuntimeError(stmt,
-					fmt.Sprintf("unknown var: %s", name.Value))
-			}
-
-			if isConst {
-				return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("cannot assign to const: %s", name.Value))
-			}
-
-			v, err := i.assignWithType(stmt, values[idx], expectedTI)
+		for _, expr := range stmt.Targets {
+			t, err := i.resolveAssignableTarget(expr)
 			if err != nil {
 				return SignalNone{}, err
 			}
-
-			i.Env.Set(name.Value, v)
+			targets = append(targets, t)
 		}
 
-	case *parser.IndexAssignmentStatement:
-		leftVal, err := i.EvalExpression(stmt.Left)
-		if err != nil {
-			return NilValue{}, err
-		}
-
-		switch val := leftVal.(type) {
-		case MapValue:
-			key, err := i.EvalExpression(stmt.Index)
+		for idx := range targets {
+			err := targets[idx].Set(i, values[idx])
 			if err != nil {
 				return SignalNone{}, err
 			}
-
-			keyType := unwrapAlias(i.typeInfoFromValue(key))
-
-			if val.KeyType.Kind == TypeAny {
-				if !isComparableValue(key) {
-					return SignalNone{}, NewRuntimeError(stmt, "value of this type cannot be used as map key")
-				}
-			} else {
-				if !typesAssignable(keyType, val.KeyType) {
-					return SignalNone{}, NewRuntimeError(
-						stmt,
-						fmt.Sprintf("map index expected %s but got %s",
-							val.KeyType.Name, keyType.Name),
-					)
-				}
-
-				if err := validateRange(stmt, key, val.KeyType); err != nil {
-					return SignalNone{}, err
-				}
-			}
-
-			newVal, err := i.EvalExpression(stmt.Value)
-			if err != nil {
-				return SignalNone{}, err
-			}
-
-			valType := unwrapAlias(i.typeInfoFromValue(newVal))
-
-			if val.ValueType.Kind != TypeAny {
-				if !typesAssignable(valType, val.ValueType) {
-					return SignalNone{}, NewRuntimeError(
-						stmt,
-						fmt.Sprintf("map value expected %s but got %s",
-							val.ValueType.Name, valType.Name),
-					)
-				}
-
-				if err := validateRange(stmt, newVal, val.ValueType); err != nil {
-					return SignalNone{}, err
-				}
-			}
-
-			val.Entries[key] = newVal
-
-		case ArrayValue:
-			index, err := i.EvalExpression(stmt.Index)
-			if err != nil {
-				return SignalNone{}, err
-			}
-
-			idxVal, ok := index.(IntValue)
-			if !ok {
-				return SignalNone{}, NewRuntimeError(stmt, "index must be int")
-			}
-
-			idx := idxVal.V
-			if idx < 0 || idx >= len(val.Elements) {
-				return SignalNone{}, NewRuntimeError(stmt,
-					fmt.Sprintf("index: %d, out of bounds", idx))
-			}
-
-			newVal, err := i.EvalExpression(stmt.Value)
-			if err != nil {
-				return SignalNone{}, err
-			}
-
-			valType := unwrapAlias(i.typeInfoFromValue(newVal))
-
-			if val.ElemType.Kind != TypeAny {
-				if !typesAssignable(valType, val.ElemType) {
-					return SignalNone{}, NewRuntimeError(
-						stmt,
-						fmt.Sprintf("array element expected %s but got %s",
-							val.ElemType.Name, valType.Name),
-					)
-				}
-
-				if err := validateRange(stmt, newVal, val.ElemType); err != nil {
-					return SignalNone{}, err
-				}
-			}
-
-			val.Elements[idx] = newVal
-		}
-		return SignalNone{}, nil
-
-	case *parser.MemberAssignmentStatement:
-		objVal, err := i.EvalExpression(stmt.Object)
-		if err != nil {
-			return SignalNone{}, nil
 		}
 
-		// deref ptr value
-		if ptr, ok := objVal.(*PointerValue); ok {
-			objVal = ptr.Target.Value
-		}
-
-		structVal, ok := objVal.(*StructValue)
-		if !ok {
-			return SignalNone{}, NewRuntimeError(s, "cannot assign field on non-struct")
-		}
-
-		val, err := i.EvalExpression(stmt.Value)
-		if err != nil {
-			return SignalNone{}, err
-		}
-
-		if _, ok := structVal.Fields[stmt.Field.Value]; !ok {
-			return SignalNone{}, NewRuntimeError(s, fmt.Sprintf("unknown struct field: %s", stmt.Field.Value))
-		}
-
-		structTI := structVal.TypeName
-		if structTI.Kind == TypeNamed {
-			structTI = structTI.Underlying
-		}
-
-		expectedType, ok := structTI.Fields[stmt.Field.Value]
-		if !ok {
-			return SignalNone{}, NewRuntimeError(
-				s,
-				fmt.Sprintf("unknown struct field: %s", stmt.Field.Value),
-			)
-		}
-
-		actualTI := unwrapAlias(i.typeInfoFromValue(val))
-		expectedTI := unwrapAlias(expectedType)
-
-		if actualTI == nil || expectedTI == nil {
-			return SignalNone{}, NewRuntimeError(stmt,
-				fmt.Sprintf("invalid type info (expected=%v actual=%v)", expectedTI, actualTI))
-		}
-
-		if !typesAssignable(actualTI, expectedTI) {
-			return NilValue{}, NewRuntimeError(stmt,
-				fmt.Sprintf("field '%s' expects %v but got %v",
-					stmt.Field.Value, expectedType.Name, actualTI.Name))
-		}
-
-		structVal.Fields[stmt.Field.Value] = val
-		return SignalNone{}, nil
-
-	case *parser.PointerAssignmentStatement:
-		deref, ok := stmt.Pointer.(*parser.PrefixExpression)
-		if !ok || deref.Operator != "*" {
-			return SignalNone{}, NewRuntimeError(stmt, "invalid pointer assignment")
-		}
-
-		ptrVal, err := i.EvalExpression(deref.Right)
-		if err != nil {
-			return SignalNone{}, err
-		}
-
-		ptr, ok := ptrVal.(*PointerValue)
-		if !ok {
-			return SignalNone{}, NewRuntimeError(stmt, "cannot assign through non-pointer")
-		}
-
-		val, err := i.EvalExpression(stmt.Value)
-		if err != nil {
-			return SignalNone{}, err
-		}
-
-		ptr.Target.Value = val
 		return SignalNone{}, nil
 
 	case *parser.EnumStatement:
@@ -1174,43 +956,57 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 	case *parser.ForStatement:
 		loopEnv := NewEnvironment(i.Env)
 		oldEnv := i.Env
-		i.Env = loopEnv
 
-		i.EvalStatement(stmt.Init)
+		i.Env = loopEnv
+		fmt.Printf("Init stmt type: %T\n", stmt.Init)
+		_, err := i.EvalStatement(stmt.Init)
+		if err != nil {
+			return SignalNone{}, err
+		}
+
 		for {
+			i.Env = loopEnv
+
 			cond, err := i.EvalExpression(stmt.Condition)
 			if err != nil {
 				return SignalNone{}, err
 			}
 
-			truthy, err := isTruthy(cond)
-			if err != nil {
-				return SignalNone{}, NewRuntimeError(stmt, err.Error())
-			}
-
+			truthy, _ := isTruthy(cond)
 			if !truthy {
 				break
 			}
 
-			sig, err := i.EvalBlock(stmt.Body, false)
+			i.Env = loopEnv
+			sig, err := i.EvalStatements(stmt.Body)
 			if err != nil {
 				return SignalNone{}, err
 			}
 
 			switch sig.(type) {
 			case SignalBreak:
+				i.Env = oldEnv
 				return SignalNone{}, nil
 			case SignalContinue:
-				i.EvalStatement(stmt.Post)
+				i.Env = loopEnv
+				_, err := i.EvalStatement(stmt.Post)
+				if err != nil {
+					return SignalNone{}, err
+				}
 				continue
 			case SignalReturn:
+				i.Env = oldEnv
 				return sig, nil
 			}
-			i.EvalStatement(stmt.Post)
+
+			i.Env = loopEnv
+			_, err = i.EvalStatement(stmt.Post)
+			if err != nil {
+				return SignalNone{}, err
+			}
 		}
 
 		i.Env = oldEnv
-		return SignalNone{}, nil
 
 	case *parser.ForRangeStatement:
 		iterable, err := i.EvalExpression(stmt.Expr)
@@ -1444,12 +1240,12 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 			return v, nil
 		}
 
-		v, ok := i.Env.GetVar(expr.Value)
+		v, ok, _ := i.Env.Get(expr.Value)
 		if !ok {
 			return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("undefined variable: %s", expr.Value))
 		}
 
-		return v.Value, nil
+		return v, nil
 
 	case *parser.CompositeLiteral:
 		ti, err := i.resolveTypeNode(expr.Type)

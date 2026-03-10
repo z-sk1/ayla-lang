@@ -99,6 +99,151 @@ type Value interface {
 	String() string
 }
 
+type Assignable interface {
+	Set(*Interpreter, Value) error
+}
+
+type VariableTarget struct {
+	Name string
+	Var  *Variable
+}
+
+func (v VariableTarget) Set(i *Interpreter, val Value) error {
+	if v.Var.isConst {
+		return fmt.Errorf("cannot assign to const: %s", v.Name)
+	}
+
+	switch v.Var.Value.(type) {
+	case UninitializedValue:
+		v.Var.Value = val
+		return nil
+	}
+
+	expectedTI := unwrapAlias(i.typeInfoFromValue(v.Var.Value))
+
+	newVal, err := i.assignWithType(nil, val, expectedTI)
+	if err != nil {
+		return err
+	}
+
+	v.Var.Value = newVal
+	return nil
+}
+
+type MemberTarget struct {
+	Struct    *StructValue
+	Field     string
+	FieldType *TypeInfo
+}
+
+func (m MemberTarget) Set(i *Interpreter, val Value) error {
+	valType := unwrapAlias(i.typeInfoFromValue(val))
+
+	if !typesAssignable(valType, m.FieldType) {
+		return fmt.Errorf(
+			"field '%s' expects %s but got %s",
+			m.Field,
+			m.FieldType.Name,
+			valType.Name,
+		)
+	}
+
+	if err := validateRange(nil, val, m.FieldType); err != nil {
+		return err
+	}
+
+	m.Struct.Fields[m.Field] = val
+	return nil
+}
+
+type ArrayIndexTarget struct {
+	Array    *ArrayValue
+	Index    int
+	ElemType *TypeInfo
+}
+
+func (t ArrayIndexTarget) Set(i *Interpreter, val Value) error {
+	if t.Index < 0 || t.Index >= len(t.Array.Elements) {
+		return fmt.Errorf("index %d out of bounds", t.Index)
+	}
+
+	valType := unwrapAlias(i.typeInfoFromValue(val))
+
+	if t.ElemType.Kind != TypeAny {
+		if !typesAssignable(valType, t.ElemType) {
+			return fmt.Errorf(
+				"array element expected %s but got %s",
+				t.ElemType.Name,
+				valType.Name,
+			)
+		}
+
+		if err := validateRange(nil, val, t.ElemType); err != nil {
+			return err
+		}
+	}
+
+	t.Array.Elements[t.Index] = val
+	return nil
+}
+
+type MapIndexTarget struct {
+	Map       *MapValue
+	Key       Value
+	KeyType   *TypeInfo
+	ValueType *TypeInfo
+}
+
+func (t MapIndexTarget) Set(i *Interpreter, val Value) error {
+	keyType := unwrapAlias(i.typeInfoFromValue(t.Key))
+
+	if t.KeyType.Kind == TypeAny {
+		if !isComparableValue(t.Key) {
+			return fmt.Errorf("value of this type cannot be used as map key")
+		}
+	} else {
+		if !typesAssignable(keyType, t.KeyType) {
+			return fmt.Errorf(
+				"map index expected %s but got %s",
+				t.KeyType.Name,
+				keyType.Name,
+			)
+		}
+
+		if err := validateRange(nil, t.Key, t.KeyType); err != nil {
+			return err
+		}
+	}
+
+	valType := unwrapAlias(i.typeInfoFromValue(val))
+
+	if t.ValueType.Kind != TypeAny {
+		if !typesAssignable(valType, t.ValueType) {
+			return fmt.Errorf(
+				"map value expected %s but got %s",
+				t.ValueType.Name,
+				valType.Name,
+			)
+		}
+
+		if err := validateRange(nil, val, t.ValueType); err != nil {
+			return err
+		}
+	}
+
+	t.Map.Entries[t.Key] = val
+	return nil
+}
+
+type PointerTarget struct {
+	Ptr *PointerValue
+}
+
+func (p PointerTarget) Set(i *Interpreter, val Value) error {
+	p.Ptr.Target.Value = val
+	return nil
+}
+
 type ControlSignal any
 
 type SignalNone struct{}
