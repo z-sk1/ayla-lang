@@ -2575,9 +2575,11 @@ func (i *Interpreter) evalInfix(node *parser.InfixExpression, left Value, op str
 		return evalStringInfix(node, left.(StringValue), op, right.(StringValue))
 	case BOOL:
 		return evalBoolInfix(node, left.(BoolValue), op, right.(BoolValue))
+	case ENUM:
+		return evalIntInfix(node, IntValue{V: left.(EnumValue).Index}, op, IntValue{V: right.(EnumValue).Index})
 	}
 
-	return NilValue{}, NewRuntimeError(node, "unsupported operand types")
+	return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unsupported operand types: %s %s %s", i.typeInfoFromValue(left).Name, op, i.typeInfoFromValue(right).Name))
 }
 
 func evalIntInfix(node *parser.InfixExpression, left IntValue, op string, right IntValue) (Value, error) {

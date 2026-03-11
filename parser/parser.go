@@ -16,8 +16,9 @@ type Parser struct {
 	peekTok token.Token // lookahead 1
 	peekBuf []token.Token
 
-	errors []error
-	types  map[string]bool
+	errors  []error
+	types   map[string]bool
+	modules map[string]bool
 }
 
 type ParseError struct {
@@ -150,16 +151,44 @@ func (p *Parser) isTypeName(name string) bool {
 	return ok
 }
 
+func (p *Parser) isModule(name string) bool {
+	_, ok := p.modules[name]
+	return ok
+}
+
 func New(l *lexer.Lexer) *Parser {
 	p := &Parser{
-		l:     l,
-		types: make(map[string]bool),
+		l:       l,
+		types:   make(map[string]bool),
+		modules: make(map[string]bool),
 	}
 
 	p.nextToken()
 	p.nextToken()
 
 	return p
+}
+
+func (p *Parser) isTypeExpression(expr Expression) bool {
+	switch e := expr.(type) {
+
+	case *Identifier:
+		return p.isTypeName(e.Value)
+
+	case *MemberExpression:
+		var ok bool
+		var id *Identifier
+
+		id, ok = e.Left.(*Identifier)
+		if ok {
+			_, ok = p.modules[id.Value]
+		}
+
+		return ok
+
+	default:
+		return false
+	}
 }
 
 func (p *Parser) nextToken() {
@@ -233,7 +262,7 @@ func (p *Parser) consumeTerminators() {
 func (p *Parser) isType() bool {
 	return p.isTypeToken(p.peekTok.Type) ||
 		p.isTypeName(p.peekTok.Literal) ||
-		(p.peekTok.Type == token.IDENT && p.peekN(1).Type == token.DOT) ||
+		(p.peekTok.Type == token.IDENT && p.isTypeName(p.peekTok.Literal) && p.peekN(1).Type == token.DOT) ||
 		(p.peekTok.Type == token.ASTERISK && p.isPointerType())
 }
 
@@ -889,6 +918,8 @@ func (p *Parser) parseImportStatement() *ImportStatement {
 
 	p.nextToken()
 	stmt.Name = p.curTok.Literal
+
+	p.modules[stmt.Name] = true
 
 	return stmt
 }
@@ -1580,54 +1611,42 @@ func (p *Parser) parseSwitchStatement() *SwitchStatement {
 		NodeBase: NodeBase{Token: p.curTok},
 	}
 
-	// switch <expr>
 	p.nextToken()
 	stmt.Value = p.parseExpression(LOWEST)
+	fmt.Printf("choose expr: %#v\n", stmt.Value)
 
-	if p.curTok.Type != token.LBRACE {
-		p.nextToken()
-	}
-
-	if p.curTok.Type != token.LBRACE {
+	if p.peekTok.Type != token.LBRACE {
 		p.addError("expected '{' after switch expression")
 		return nil
 	}
 
-	p.nextToken()
+	p.nextToken() // {
+	p.nextToken() // first token inside
 
 	stmt.Cases = []*CaseClause{}
 
-	for {
+	for p.curTok.Type != token.EOF {
+
 		p.consumeTerminators()
+
 		switch p.curTok.Type {
 
 		case token.CASE:
 			clause := p.parseCaseClause()
-			if clause == nil {
-				return nil
-			}
 			stmt.Cases = append(stmt.Cases, clause)
-			p.nextToken()
 
 		case token.DEFAULT:
-			if stmt.Default != nil {
-				p.addError("multiple default clauses in switch")
-				return nil
-			}
 			stmt.Default = p.parseDefaultClause()
-			p.nextToken()
 
-		case token.RBRACE, token.EOF:
-			break
+		case token.RBRACE:
+			return stmt
 
 		default:
-			p.addError("expected 'when' or 'otherwise' in switch statement")
+			p.addError("expected 'when' or 'otherwise'")
 			return nil
 		}
 
-		if p.curTok.Type == token.RBRACE || p.curTok.Type == token.EOF {
-			break
-		}
+		p.nextToken()
 	}
 
 	return stmt
@@ -1638,7 +1657,7 @@ func (p *Parser) parseCaseClause() *CaseClause {
 		NodeBase: NodeBase{Token: p.curTok},
 	}
 
-	// case <expr>
+	// when <expr>
 	p.nextToken()
 	clause.Expr = p.parseExpression(LOWEST)
 
@@ -1646,12 +1665,13 @@ func (p *Parser) parseCaseClause() *CaseClause {
 		p.addError("expected '{' after case expression")
 		return nil
 	}
+
 	p.nextToken() // {
 	p.nextToken() // first stmt
 
 	clause.Body = []Statement{}
 
-	for p.curTok.Type != token.RBRACE {
+	for p.curTok.Type != token.RBRACE && p.curTok.Type != token.EOF {
 		stmt := p.parseStatement()
 		if stmt != nil {
 			clause.Body = append(clause.Body, stmt)
@@ -2340,7 +2360,7 @@ func (p *Parser) parseDotExpression(left Expression) Expression {
 		},
 	}
 
-	if p.peekTok.Type == token.LBRACE {
+	if p.peekTok.Type == token.LBRACE && p.isTypeExpression(member) {
 		p.nextToken()
 		return p.parseCompositeLiteral(p.exprToType(member))
 	}
@@ -2427,14 +2447,10 @@ func (p *Parser) parseCallExpression(callee Expression) Expression {
 }
 
 func (p *Parser) parseExpressionUntil(stop token.TokenType) Expression {
-	expr := p.parsePrimary()
+	expr := p.parseExpression(LOWEST)
 
-	for p.peekTok.Type != stop &&
-		p.peekTok.Type != token.NEWLINE &&
-		p.peekTok.Type != token.LBRACE {
-
-		p.nextToken()
-		expr = p.parseInfixExpression(expr)
+	if p.peekTok.Type == stop {
+		return expr
 	}
 
 	return expr
@@ -2444,7 +2460,6 @@ func (p *Parser) parseExpression(precedence int) Expression {
 	left := p.parsePrimary()
 	for precedence < p.peekPrecedence() {
 		switch p.peekTok.Type {
-
 		case token.LPAREN:
 			p.nextToken()
 			left = p.parseCallExpression(left)

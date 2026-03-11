@@ -755,21 +755,42 @@ func (i *Interpreter) resolveTypeNode(t parser.TypeNode) (*TypeInfo, error) {
 }
 
 func valuesEqual(a, b Value) bool {
-	if a.Type() != b.Type() {
-		return false
-	}
-
 	switch av := a.(type) {
+
 	case IntValue:
-		return av.V == b.(IntValue).V
+		bv, ok := b.(IntValue)
+		return ok && av.V == bv.V
+
 	case FloatValue:
-		return av.V == b.(FloatValue).V
+		bv, ok := b.(FloatValue)
+		return ok && av.V == bv.V
+
 	case StringValue:
-		return av.V == b.(StringValue).V
+		bv, ok := b.(StringValue)
+		return ok && av.V == bv.V
+
 	case BoolValue:
-		return av.V == b.(BoolValue).V
+		bv, ok := b.(BoolValue)
+		return ok && av.V == bv.V
+
+	case EnumValue:
+		switch bv := b.(type) {
+		case EnumValue:
+			return av.Index == bv.Index
+		case IntValue:
+			return av.Index == bv.V
+		default:
+			return false
+		}
+
+	case *PointerValue:
+		bv, ok := b.(*PointerValue)
+		return ok && av.Target == bv.Target
+
 	case NilValue:
-		return true
+		_, ok := b.(NilValue)
+		return ok
+
 	default:
 		return false
 	}
