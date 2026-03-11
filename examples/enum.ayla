@@ -1,7 +1,0 @@
-enum Color {
-    Red
-    Green
-    Blue
-}
-
-putln(Color)

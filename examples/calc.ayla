@@ -1,38 +1,38 @@
 fun add(x float, y float) {
-    back x + y;
+    back x + y
 }
 
 fun multiply(x, y) {
-    back x * y;
+    back x * y
 }
 
 fun subtract(x, y) {
-    back x - y;
+    back x - y
 }
 
 fun divide(x, y) {
-    back x / y;
+    back x / y
 }
 
-egg firstNum;
-egg oper;
-egg secondNum;
+egg firstNum
+egg oper
+egg secondNum
 
-putln("Firstnum");
-scanln(firstNum);
+putln("Firstnum")
+scanln(firstNum)
 
-putln("Operator");
-scanln(oper);
- 
-putln("Secondnum");
-scanln(secondNum);
+putln("Operator")
+scanln(oper)
+
+putln("Secondnum")
+scanln(secondNum)
 
 ayla oper == "+" {
-    putln(firstNum + oper + secondNum + "=" + toString(add(toFloat(firstNum), toFloat(secondNum))));
+    putln(firstNum + oper + secondNum + "=" + toString(add(toFloat(firstNum), toFloat(secondNum))))
 } elen ayla oper == "-" {
-    putln(firstNum + oper + secondNum + "=" + toString(subtract(toFloat(firstNum), toFloat(secondNum))));
+    putln(firstNum + oper + secondNum + "=" + toString(subtract(toFloat(firstNum), toFloat(secondNum))))
 } elen ayla oper == "*" {
-    putln(firstNum + oper + secondNum + "=" + toString(multiply(toFloat(firstNum), toFloat(secondNum))));
+    putln(firstNum + oper + secondNum + "=" + toString(multiply(toFloat(firstNum), toFloat(secondNum))))
 } elen ayla oper == "/" {
-    putln(firstNum + oper + secondNum + "=" + toString(divide(toFloat(firstNum), toFloat(secondNum))));
+    putln(firstNum + oper + secondNum + "=" + toString(divide(toFloat(firstNum), toFloat(secondNum))))
 }
