@@ -1377,7 +1377,6 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 	env.Define("KeyPeriod", IntValue{V: rl.KeyPeriod}, true)
 	env.Define("KeyComma", IntValue{V: rl.KeyComma}, true)
 	env.Define("KeySpace", IntValue{V: rl.KeySpace}, true)
-	env.Define("KeyRightControl", IntValue{V: rl.KeyRightControl}, true)
 	env.Define("KeyEnter", IntValue{V: rl.KeyEnter}, true)
 	env.Define("KeyCapsLock", IntValue{V: rl.KeyCapsLock}, true)
 	env.Define("KeyLeftShift", IntValue{V: rl.KeyLeftShift}, true)
@@ -1406,14 +1405,10 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 	env.Define("KeyPause", IntValue{V: rl.KeyPause}, true)
 	env.Define("KeyEnd", IntValue{V: rl.KeyEnd}, true)
 	env.Define("KeyHome", IntValue{V: rl.KeyHome}, true)
-	env.Define("KeyLAlt", IntValue{V: rl.KeyLeftAlt}, true)
 	env.Define("KeyLeftLAlt", IntValue{V: rl.KeyLeftAlt}, true)
 	env.Define("KeyRightAlt", IntValue{V: rl.KeyRightAlt}, true)
-	env.Define("KeyRAlt", IntValue{V: rl.KeyRightAlt}, true)
 	env.Define("KeyRightControl", IntValue{V: rl.KeyRightControl}, true)
 	env.Define("KeyLeftControl", IntValue{V: rl.KeyLeftControl}, true)
-	env.Define("KeyRControl", IntValue{V: rl.KeyRightControl}, true)
-	env.Define("KeyLControl", IntValue{V: rl.KeyLeftControl}, true)
 
 	module := ModuleValue{
 		Name:    "gfx",
