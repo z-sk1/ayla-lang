@@ -1,0 +1,79 @@
+import gfx
+import math
+
+rock (
+    Pink = gfx.NewColor(255, 0, 255, 255)
+)
+
+enum Direction {
+    Left
+    Right
+    Up
+    Down
+}
+
+type Player struct {
+    Pos gfx.Vector2
+    Dir Direction
+}
+
+fun (p *Player) updatePos() {
+    ayla gfx.KeyPressed(gfx.KeyW) {
+        p.Dir = Direction.Up
+    }
+
+    ayla gfx.KeyPressed(gfx.KeyS) {
+        p.Dir = Direction.Down
+    }
+
+    ayla gfx.KeyPressed(gfx.KeyA) {
+        p.Dir = Direction.Left
+    }
+
+    ayla gfx.KeyPressed(gfx.KeyD) {
+        p.Dir = Direction.Right
+    }
+
+    choose p.Dir {
+        when Direction.Right {
+            p.Pos.X = p.Pos.X + 5
+        }
+
+        when Direction.Left {
+            p.Pos.X = p.Pos.X - 5
+        }
+
+        when Direction.Up {
+            p.Pos.Y = p.Pos.Y - 5
+        }
+
+        when Direction.Down {
+            p.Pos.Y = p.Pos.Y + 5
+        }
+    }
+}
+
+fun (p *Player) draw() {
+    gfx.DrawRect(
+        p.Pos,
+        gfx.Vector2{X: 50, Y: 50},
+        Pink,
+    )
+}
+
+
+gfx.Init(1000, 1000, "Hiya")
+
+p := Player{
+    Pos: gfx.Vector2{X: 100, Y: 100},
+    Dir: Direction.Right,
+}
+
+why !gfx.ShouldClose() {
+    gfx.Clear()
+
+    p.updatePos()
+    p.draw()
+
+    gfx.Present()
+}

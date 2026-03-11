@@ -1,4 +1,6 @@
-egg key string 
+import time
+
+egg key string
 egg timer int
 egg running bool
 egg quit bool
@@ -23,7 +25,7 @@ why yes {
     ayla running {
         timer = timer + 1
         putln("Elapsed: ${timer}s")
-        wait(1000)
+        time.Sleep(1)
     } elen ayla quit {
         kitkat
     }

@@ -1,3 +1,5 @@
+import math
+
 egg A float = 0.0
 egg B float = 0.0
 
@@ -7,10 +9,10 @@ egg b [1760]int
 why yes {
 
     // Precompute trig of A and B
-    egg sinA = sin(A)
-    egg cosA = cos(A)
-    egg sinB = sin(B)
-    egg cosB = cos(B)
+    egg sinA = math.Sin(A)
+    egg cosA = math.Cos(A)
+    egg sinB = math.Sin(B)
+    egg cosB = math.Cos(B)
 
     // Clear buffers
     egg i int = 0
@@ -23,14 +25,14 @@ why yes {
     egg j int = 0
     why j < 314 {                 // 6.28 / 0.02 ≈ 314
         egg fj = float(j) * 0.02
-        egg sinFj = sin(fj)
-        egg cosFj = cos(fj)
+        egg sinFj = math.Sin(fj)
+        egg cosFj = math.Cos(fj)
 
         egg k int = 0
         why k < 90 {              // 6.28 / 0.07 ≈ 90
             egg fi = float(k) * 0.07
-            egg sinFi = sin(fi)
-            egg cosFi = cos(fi)
+            egg sinFi = math.Sin(fi)
+            egg cosFi = math.Cos(fi)
 
             egg h = cosFj + 2.0
             egg D = 1 / (sinFi * h * sinA + sinFj * cosA + 3)
@@ -44,7 +46,7 @@ why yes {
 
             ayla (y > 0) && (y < 22) && (x > 0) && (x < 79) && (D > z[o]) {
                 z[o] = D
-                b[o] = ord(".,-~:;=!*#$@1234567890+-=QWERTYUIOPASDFGHJKLZXCVBNM.,-~:;=!*#$@1234567890+-=QWERTYUIOPASDFGHJKLZXCVBNM.,-~:;=!*#$@1234567890+-=QWERTYUIOPASDFGHJKLZXCVBNM.,-~:;=!*#$@1234567890+-=QWERTYUIOPASDFGHJKLZXCVBNM.,-~:;=!*#$@1234567890+-=QWERTYUIOPASDFGHJKLZXCVBNM.,-~:;=!*#$@1234567890+-=QWERTYUIOPASDFGHJKLZXCVBNM.,-~:;=!*#$@1234567890+-=QWERTYUIOPASDFGHJKLZXCVBNM.,-~:;=!*#$@1234567890+-=QWERTYUIOPASDFGHJKLZXCVBNM.,-~:;=!*#$@1234567890+-=QWERTYUIOPASDFGHJKLZXCVBNM"[int(8 * D)])
+                b[o] = ord(".,-~:;=!#$@1234567890+-=QWERTYUIOPASDFGHJKLZXCVBNM.,-~:;=!#$@1234567890+-=QWERTYUIOPASDFGHJKLZXCVBNM.,-~:;=!#$@1234567890+-=QWERTYUIOPASDFGHJKLZXCVBNM.,-~:;=!#$@1234567890+-=QWERTYUIOPASDFGHJKLZXCVBNM.,-~:;=!#$@1234567890+-=QWERTYUIOPASDFGHJKLZXCVBNM.,-~:;=!#$@1234567890+-=QWERTYUIOPASDFGHJKLZXCVBNM.,-~:;=!#$@1234567890+-=QWERTYUIOPASDFGHJKLZXCVBNM.,-~:;=!#$@1234567890+-=QWERTYUIOPASDFGHJKLZXCVBNM.,-~:;=!#$@1234567890+-=QWERTYUIOPASDFGHJKLZXCVBNM"[int(8 D)])
             }
 
             k = k + 1
