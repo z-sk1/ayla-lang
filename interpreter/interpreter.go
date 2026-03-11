@@ -339,7 +339,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		} else {
 			values = make([]Value, 0, len(stmt.Values))
 
-			for idx, expr := range stmt.Values {
+			for _, expr := range stmt.Values {
 				v, err := i.EvalExpression(expr)
 				if err != nil {
 					return SignalNone{}, err
@@ -348,7 +348,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 					return v, nil
 				}
 
-				values[idx] = v
+				values = append(values, v)
 			}
 		}
 

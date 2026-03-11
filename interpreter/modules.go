@@ -1200,8 +1200,8 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 		},
 	}, false)
 
-	env.Define("KeyDown", &BuiltinFunc{
-		Name:  "KeyDown",
+	env.Define("IsKeyDown", &BuiltinFunc{
+		Name:  "IsKeyDown",
 		Arity: 1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
 			v, err := argInt(node, args, 0, "gfx.KeyDown")
@@ -1213,8 +1213,16 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 		},
 	}, false)
 
-	env.Define("KeyPressed", &BuiltinFunc{
-		Name:  "KeyPressed",
+	env.Define("GetKeyPressed", &BuiltinFunc{
+		Name:  "GetKeyPressed",
+		Arity: 0,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			return IntValue{V: int(rl.GetKeyPressed())}, nil
+		},
+	}, false)
+
+	env.Define("IsKeyPressed", &BuiltinFunc{
+		Name:  "IsKeyPressed",
 		Arity: 1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
 			v, err := argInt(node, args, 0, "gfx.KeyPressed")
@@ -1226,8 +1234,8 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 		},
 	}, false)
 
-	env.Define("KeyReleased", &BuiltinFunc{
-		Name:  "KeyReleased",
+	env.Define("IsKeyReleased", &BuiltinFunc{
+		Name:  "IsKeyReleased",
 		Arity: 1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
 			v, err := argInt(node, args, 0, "gfx.KeyReleased")
@@ -1239,8 +1247,8 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 		},
 	}, false)
 
-	env.Define("KeyUp", &BuiltinFunc{
-		Name:  "KeyUp",
+	env.Define("IsKeyUp", &BuiltinFunc{
+		Name:  "IsKeyUp",
 		Arity: 1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
 			v, err := argInt(node, args, 0, "gfx.KeyUp")
@@ -1252,8 +1260,8 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 		},
 	}, false)
 
-	env.Define("MouseDown", &BuiltinFunc{
-		Name:  "MouseDown",
+	env.Define("IsMouseDown", &BuiltinFunc{
+		Name:  "IsMouseDown",
 		Arity: 1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
 			v, err := argInt(node, args, 0, "gfx.MouseDown")
@@ -1265,8 +1273,8 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 		},
 	}, false)
 
-	env.Define("MousePressed", &BuiltinFunc{
-		Name:  "MousePressed",
+	env.Define("IsMousePressed", &BuiltinFunc{
+		Name:  "IsMousePressed",
 		Arity: 1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
 			v, err := argInt(node, args, 0, "gfx.MousePressed")
@@ -1278,8 +1286,8 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 		},
 	}, false)
 
-	env.Define("MouseReleased", &BuiltinFunc{
-		Name:  "MouseReleased",
+	env.Define("IsMouseReleased", &BuiltinFunc{
+		Name:  "IsMouseReleased",
 		Arity: 1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
 			v, err := argInt(node, args, 0, "gfx.MouseReleased")
@@ -1291,8 +1299,8 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 		},
 	}, false)
 
-	env.Define("MouseUp", &BuiltinFunc{
-		Name:  "MouseUp",
+	env.Define("IsMouseUp", &BuiltinFunc{
+		Name:  "IsMouseUp",
 		Arity: 1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
 			v, err := argInt(node, args, 0, "gfx.MouseUp")
@@ -1304,8 +1312,8 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 		},
 	}, false)
 
-	env.Define("MousePos", &BuiltinFunc{
-		Name:  "MousePos",
+	env.Define("GetMousePos", &BuiltinFunc{
+		Name:  "GetMousePos",
 		Arity: 0,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
 			return &StructValue{
