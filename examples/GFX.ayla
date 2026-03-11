@@ -18,19 +18,19 @@ type Player struct {
 }
 
 fun (p *Player) updatePos() {
-    ayla gfx.KeyPressed(gfx.KeyW) {
+    ayla gfx.KeyPressed(gfx.KeyUp) {
         p.Dir = Direction.Up
     }
 
-    ayla gfx.KeyPressed(gfx.KeyS) {
+    ayla gfx.KeyPressed(gfx.KeyDown) {
         p.Dir = Direction.Down
     }
 
-    ayla gfx.KeyPressed(gfx.KeyA) {
+    ayla gfx.KeyPressed(gfx.KeyLeft) {
         p.Dir = Direction.Left
     }
 
-    ayla gfx.KeyPressed(gfx.KeyD) {
+    ayla gfx.KeyPressed(gfx.KeyRight) {
         p.Dir = Direction.Right
     }
 

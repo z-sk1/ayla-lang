@@ -1348,6 +1348,10 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 	env.Define("KeyX", IntValue{V: rl.KeyX}, true)
 	env.Define("KeyY", IntValue{V: rl.KeyY}, true)
 	env.Define("KeyZ", IntValue{V: rl.KeyZ}, true)
+	env.Define("KeyUp", IntValue{V: rl.KeyUp}, true)
+	env.Define("KeyDown", IntValue{V: rl.KeyDown}, true)
+	env.Define("KeyLeft", IntValue{V: rl.KeyLeft}, true)
+	env.Define("KeyRight", IntValue{V: rl.KeyRight}, true)
 
 	module := ModuleValue{
 		Name:    "gfx",
