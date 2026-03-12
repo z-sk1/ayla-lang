@@ -1410,6 +1410,7 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 	env.Define("KeyRightAlt", IntValue{V: rl.KeyRightAlt}, true)
 	env.Define("KeyRightControl", IntValue{V: rl.KeyRightControl}, true)
 	env.Define("KeyLeftControl", IntValue{V: rl.KeyLeftControl}, true)
+	env.Define("AnotherEnterBecauseIwantedtoAddOneMore", IntValue{V: rl.KeyLeftControl}, true)
 
 	module := ModuleValue{
 		Name:    "gfx",
