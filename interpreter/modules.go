@@ -752,17 +752,18 @@ func LoadTimeModule(i *Interpreter) (ModuleValue, error) {
 		Name:  "Sleep",
 		Arity: 1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			v := unwrapNamed(args[0])
+			var seconds float64
 
-			switch v := v.(type) {
+			switch v := unwrapNamed(args[0]).(type) {
 			case IntValue:
-				time.Sleep(time.Duration(v.V) * time.Second)
+				seconds = float64(v.V)
 			case FloatValue:
-				time.Sleep(time.Duration(v.V) * time.Second)
+				seconds = v.V
 			default:
-				return NilValue{}, NewRuntimeError(node, "time.Sleep: argument must be int or float seconds")
+				return NilValue{}, NewRuntimeError(node, "Sleep: argument must be number")
 			}
 
+			time.Sleep(time.Duration(seconds * float64(time.Second)))
 			return NilValue{}, nil
 		},
 	}, false)

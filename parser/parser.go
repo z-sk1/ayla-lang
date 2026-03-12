@@ -2,6 +2,7 @@ package parser
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
@@ -18,7 +19,11 @@ type Parser struct {
 
 	errors  []error
 	types   map[string]bool
-	modules map[string]bool
+	modules map[string]*ModuleMeta
+}
+
+type ModuleMeta struct {
+	Types map[string]struct{}
 }
 
 type ParseError struct {
@@ -160,13 +165,72 @@ func New(l *lexer.Lexer) *Parser {
 	p := &Parser{
 		l:       l,
 		types:   make(map[string]bool),
-		modules: make(map[string]bool),
+		modules: make(map[string]*ModuleMeta),
 	}
 
 	p.nextToken()
 	p.nextToken()
 
 	return p
+}
+
+func readSourceFile(name string) (string, error) {
+	candidates := []string{
+		name,
+		name + ".ayl",
+		name + ".ayla",
+	}
+
+	for _, file := range candidates {
+		data, err := os.ReadFile(file)
+		if err == nil {
+			return string(data), nil
+		}
+	}
+
+	return "", fmt.Errorf("file not found: %s (.ayla or .ayl)", name)
+}
+
+func LoadModuleMeta(name string) *ModuleMeta {
+	switch name {
+	case "gfx":
+		return GFXModuleMeta()
+	}
+
+	src, err := readSourceFile(name)
+	if err != nil {
+		return nil
+	}
+
+	l := lexer.New(src)
+	p := New(l)
+	prog := p.ParseProgram()
+
+	return BuildModuleMeta(prog)
+}
+
+func GFXModuleMeta() *ModuleMeta {
+	return &ModuleMeta{
+		Types: map[string]struct{}{
+			"Vector2": {},
+			"Color":   {},
+		},
+	}
+}
+
+func BuildModuleMeta(prog []Statement) *ModuleMeta {
+	meta := &ModuleMeta{
+		Types: make(map[string]struct{}),
+	}
+
+	for _, stmt := range prog {
+		switch s := stmt.(type) {
+		case *TypeStatement:
+			meta.Types[s.Name.Value] = struct{}{}
+		}
+	}
+
+	return meta
 }
 
 func (p *Parser) isTypeExpression(expr Expression) bool {
@@ -176,13 +240,18 @@ func (p *Parser) isTypeExpression(expr Expression) bool {
 		return p.isTypeName(e.Value)
 
 	case *MemberExpression:
-		var ok bool
-		var id *Identifier
 
-		id, ok = e.Left.(*Identifier)
-		if ok {
-			_, ok = p.modules[id.Value]
+		id, ok := e.Left.(*Identifier)
+		if !ok {
+			return false
 		}
+
+		mod, ok := p.modules[id.Value]
+		if !ok {
+			return false
+		}
+
+		_, ok = mod.Types[e.Field.Value]
 
 		return ok
 
@@ -919,7 +988,9 @@ func (p *Parser) parseImportStatement() *ImportStatement {
 	p.nextToken()
 	stmt.Name = p.curTok.Literal
 
-	p.modules[stmt.Name] = true
+	if _, ok := p.modules[stmt.Name]; !ok {
+		p.modules[stmt.Name] = LoadModuleMeta(stmt.Name)
+	}
 
 	return stmt
 }
@@ -1612,16 +1683,20 @@ func (p *Parser) parseSwitchStatement() *SwitchStatement {
 	}
 
 	p.nextToken()
-	stmt.Value = p.parseExpression(LOWEST)
-	fmt.Printf("choose expr: %#v\n", stmt.Value)
 
-	if p.peekTok.Type != token.LBRACE {
-		p.addError("expected '{' after switch expression")
-		return nil
+	if p.curTok.Type == token.LBRACE {
+		stmt.Value = nil
+	} else {
+		stmt.Value = p.parseExpression(LOWEST)
+
+		if p.peekTok.Type != token.LBRACE {
+			p.addError("expected '{' after switch expression")
+			return nil
+		}
+
+		p.nextToken() // {
+		p.nextToken() // first token inside
 	}
-
-	p.nextToken() // {
-	p.nextToken() // first token inside
 
 	stmt.Cases = []*CaseClause{}
 
@@ -1657,9 +1732,17 @@ func (p *Parser) parseCaseClause() *CaseClause {
 		NodeBase: NodeBase{Token: p.curTok},
 	}
 
-	// when <expr>
+	// consume `when`
 	p.nextToken()
-	clause.Expr = p.parseExpression(LOWEST)
+
+	clause.Exprs = []Expression{}
+	clause.Exprs = append(clause.Exprs, p.parseExpression(LOWEST))
+
+	for p.peekTok.Type == token.COMMA {
+		p.nextToken() // ,
+		p.nextToken() // next expression
+		clause.Exprs = append(clause.Exprs, p.parseExpression(LOWEST))
+	}
 
 	if p.peekTok.Type != token.LBRACE {
 		p.addError("expected '{' after case expression")
@@ -1770,7 +1853,6 @@ func (p *Parser) parseMethodStatement() *MethodStatement {
 
 	if p.curTok.Type == token.LPAREN {
 		stmt.ReturnTypes = p.parseFuncReturnTypes()
-		p.nextToken()
 	} else {
 		stmt.ReturnTypes = nil
 	}
@@ -2683,7 +2765,7 @@ func (p *Parser) parsePrimary() Expression {
 	case token.IDENT:
 		ident := &Identifier{NodeBase: NodeBase{Token: p.curTok}, Value: p.curTok.Literal}
 
-		if p.peekTok.Type == token.LBRACE && p.isTypeName(ident.Value) {
+		if p.peekTok.Type == token.LBRACE && !p.peekTok.HadWhitespaceBefore {
 			typ := &IdentType{
 				NodeBase: NodeBase{Token: p.curTok},
 				Name:     ident,

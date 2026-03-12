@@ -297,8 +297,8 @@ type SwitchStatement struct {
 
 type CaseClause struct {
 	NodeBase
-	Expr Expression
-	Body []Statement
+	Exprs []Expression
+	Body  []Statement
 }
 
 type DefaultClause struct {

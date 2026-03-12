@@ -919,3 +919,33 @@ func (i *Interpreter) resolveAssignableTarget(expr parser.Expression) (Assignabl
 	}
 	return nil, fmt.Errorf("invalid assignment target")
 }
+
+func copyValue(v Value) Value {
+	switch val := v.(type) {
+
+	case *StructValue:
+		newFields := map[string]Value{}
+		for k, f := range val.Fields {
+			newFields[k] = copyValue(f)
+		}
+		return &StructValue{
+			TypeName: val.TypeName,
+			Fields:   newFields,
+		}
+
+	case ArrayValue:
+		newArr := make([]Value, len(val.Elements))
+		for i, e := range val.Elements {
+			newArr[i] = copyValue(e)
+		}
+		return ArrayValue{
+			Elements: newArr,
+			ElemType: val.ElemType,
+			Capacity: val.Capacity,
+			Fixed:    val.Fixed,
+		}
+
+	default:
+		return v
+	}
+}

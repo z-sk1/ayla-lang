@@ -221,7 +221,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			}
 
 			if lifetime.(IntValue).V > 0 {
-				i.Env.DefineWithLifetime(stmt.Name.Value, val, lifetime.(IntValue).V+1, false) // +1 because the var statement itself also decrements it
+				i.Env.DefineWithLifetime(stmt.Name.Value, copyValue(val), lifetime.(IntValue).V+1, false) // +1 because the var statement itself also decrements it
 				return SignalNone{}, nil
 			}
 		}
@@ -230,7 +230,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			return SignalNone{}, nil
 		}
 
-		i.Env.Define(stmt.Name.Value, val, false)
+		i.Env.Define(stmt.Name.Value, copyValue(val), false)
 		return SignalNone{}, nil
 
 	case *parser.VarStatementBlock:
@@ -264,7 +264,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			}
 
 			if lifetime.(IntValue).V > 0 {
-				i.Env.DefineWithLifetime(stmt.Name.Value, val, lifetime.(IntValue).V+1, false) // +1 because the var statement itself also decrements it
+				i.Env.DefineWithLifetime(stmt.Name.Value, copyValue(val), lifetime.(IntValue).V+1, false) // +1 because the var statement itself also decrements it
 				return SignalNone{}, nil
 			}
 		}
@@ -273,7 +273,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			return SignalNone{}, nil
 		}
 
-		i.Env.Define(stmt.Name.Value, val, false)
+		i.Env.Define(stmt.Name.Value, copyValue(val), false)
 		return SignalNone{}, nil
 
 	case *parser.MultiVarStatement:
@@ -313,10 +313,10 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 					}
 
 					if lifetime.(IntValue).V > 0 {
-						i.Env.DefineWithLifetime(name.Value, v, lifetime.(IntValue).V+1, false) // +1 because the var statement itself also decrements it
+						i.Env.DefineWithLifetime(name.Value, copyValue(v), lifetime.(IntValue).V+1, false) // +1 because the var statement itself also decrements it
 					}
 				} else {
-					i.Env.Define(name.Value, v, false)
+					i.Env.Define(name.Value, copyValue(v), false)
 				}
 			}
 
@@ -390,10 +390,10 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 
 				lifetime := lifetimeVal.(IntValue).V
 				if lifetime > 0 {
-					i.Env.DefineWithLifetime(name.Value, v, lifetime+1, false)
+					i.Env.DefineWithLifetime(name.Value, copyValue(v), lifetime+1, false)
 				}
 			} else {
-				i.Env.Define(name.Value, v, false)
+				i.Env.Define(name.Value, copyValue(v), false)
 			}
 		}
 
@@ -452,10 +452,10 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 
 				lifetime := lifetimeVal.(IntValue).V
 				if lifetime > 0 {
-					i.Env.DefineWithLifetime(name.Value, values[idx], lifetime+1, false)
+					i.Env.DefineWithLifetime(name.Value, copyValue(values[idx]), lifetime+1, false)
 				}
 			} else {
-				i.Env.Define(name.Value, values[idx], false)
+				i.Env.Define(name.Value, copyValue(values[idx]), false)
 			}
 		}
 
@@ -518,13 +518,13 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			}
 
 			if lifetime.(IntValue).V > 0 {
-				i.Env.DefineWithLifetime(stmt.Name.Value, val, lifetime.(IntValue).V+1, true) // +1 because the var statement itself also decrements it
+				i.Env.DefineWithLifetime(stmt.Name.Value, copyValue(val), lifetime.(IntValue).V+1, true) // +1 because the var statement itself also decrements it
 				return SignalNone{}, nil
 			}
 		}
 
 		// store const val
-		i.Env.Define(stmt.Name.Value, val, true)
+		i.Env.Define(stmt.Name.Value, copyValue(val), true)
 		return SignalNone{}, nil
 
 	case *parser.MultiConstStatement:
@@ -609,10 +609,10 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 
 				lifetime := lifetimeVal.(IntValue).V
 				if lifetime > 0 {
-					i.Env.DefineWithLifetime(name.Value, v, lifetime+1, true)
+					i.Env.DefineWithLifetime(name.Value, copyValue(v), lifetime+1, true)
 				}
 			} else {
-				i.Env.Define(name.Value, v, true)
+				i.Env.Define(name.Value, copyValue(v), true)
 			}
 		}
 
@@ -689,7 +689,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		}
 
 		for idx := range targets {
-			err := targets[idx].Set(i, values[idx])
+			err := targets[idx].Set(i, copyValue(values[idx]))
 			if err != nil {
 				return SignalNone{}, err
 			}
@@ -897,18 +897,32 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		return SignalNone{}, nil
 
 	case *parser.SwitchStatement:
-		switchVal, err := i.EvalExpression(stmt.Value)
-		if err != nil {
-			return SignalNone{}, err
-		}
+		var switchVal Value
+		var err error
 
-		for _, c := range stmt.Cases {
-			caseVal, err := i.EvalExpression(c.Expr)
+		if stmt.Value == nil {
+			switchVal = BoolValue{V: true}
+		} else {
+			switchVal, err = i.EvalExpression(stmt.Value)
 			if err != nil {
 				return SignalNone{}, err
 			}
+		}
 
-			if !valuesEqual(switchVal, caseVal) {
+		for _, c := range stmt.Cases {
+			matched := false
+			for _, expr := range c.Exprs {
+				caseVal, err := i.EvalExpression(expr)
+				if err != nil {
+					return SignalNone{}, err
+				}
+				if valuesEqual(switchVal, caseVal) {
+					matched = true
+					break
+				}
+			}
+
+			if !matched {
 				continue
 			}
 
@@ -1027,7 +1041,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 				}
 
 				if stmt.Value != nil && stmt.Value.Value != "_" {
-					i.Env.Define(stmt.Value.Value, elem, false)
+					i.Env.Define(stmt.Value.Value, copyValue(elem), false)
 				}
 
 				sig, err := i.EvalBlock(stmt.Body, false)
@@ -1057,7 +1071,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 				}
 
 				if stmt.Value != nil && stmt.Value.Value != "_" {
-					i.Env.Define(stmt.Value.Value, val, false)
+					i.Env.Define(stmt.Value.Value, copyValue(val), false)
 				}
 
 				sig, err := i.EvalBlock(stmt.Body, false)
@@ -1667,10 +1681,11 @@ func (i *Interpreter) evalStructLiteral(expr *parser.CompositeLiteral, typeInfo 
 		valueType = structType
 	}
 
-	return &StructValue{
+	v := &StructValue{
 		TypeName: valueType,
 		Fields:   fields,
-	}, nil
+	}
+	return copyValue(v), nil
 }
 
 func (i *Interpreter) evalArrayLiteral(expr *parser.CompositeLiteral, ti *TypeInfo) (Value, error) {
@@ -2234,7 +2249,7 @@ func (i *Interpreter) evalIndexExpression(node parser.Expression, left, idx Valu
 			}
 		}
 
-		return elem, nil
+		return copyValue(elem), nil
 
 	case TypeString:
 		idxVal, ok := idx.(IntValue)
@@ -2399,6 +2414,16 @@ func (i *Interpreter) evalSliceExpression(node parser.Expression, left, startVal
 }
 
 func (i *Interpreter) evalMemberExpression(node parser.Expression, left Value, field string) (Value, error) {
+	if ptr, ok := left.(*PointerValue); ok {
+		if ptr.Target == nil || ptr.Target.Value == nil {
+			return NilValue{}, NewRuntimeError(node, "nil pointer dereference")
+		}
+		left = ptr.Target.Value
+	}
+
+	if left == nil {
+		return NilValue{}, NewRuntimeError(node, "nil value in member expression")
+	}
 	recvType := unwrapAlias(i.typeInfoFromValue(left))
 	ptrType := i.pointerTo(recvType)
 
@@ -2429,13 +2454,6 @@ func (i *Interpreter) evalMemberExpression(node parser.Expression, left Value, f
 			Receiver: recv,
 			Func:     fn,
 		}, nil
-	}
-
-	if ptr, ok := left.(*PointerValue); ok {
-		if ptr.Target == nil {
-			return NilValue{}, NewRuntimeError(node, "nil pointer dereference")
-		}
-		left = ptr.Target.Value
 	}
 
 	switch obj := left.(type) {
