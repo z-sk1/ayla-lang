@@ -2,7 +2,6 @@ package parser
 
 import (
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 
@@ -17,9 +16,7 @@ type Parser struct {
 	peekTok token.Token // lookahead 1
 	peekBuf []token.Token
 
-	errors  []error
-	types   map[string]bool
-	modules map[string]*ModuleMeta
+	errors []error
 }
 
 type ModuleMeta struct {
@@ -144,6 +141,8 @@ func (p *Parser) isTypeToken(t token.TokenType) bool {
 		token.ERROR_TYPE,
 		token.LBRACKET,
 		token.FUNC,
+		token.IDENT,
+		token.STRUCT,
 		token.MAP:
 		return true
 	default:
@@ -151,113 +150,15 @@ func (p *Parser) isTypeToken(t token.TokenType) bool {
 	}
 }
 
-func (p *Parser) isTypeName(name string) bool {
-	_, ok := p.types[name]
-	return ok
-}
-
-func (p *Parser) isModule(name string) bool {
-	_, ok := p.modules[name]
-	return ok
-}
-
 func New(l *lexer.Lexer) *Parser {
 	p := &Parser{
-		l:       l,
-		types:   make(map[string]bool),
-		modules: make(map[string]*ModuleMeta),
+		l: l,
 	}
 
 	p.nextToken()
 	p.nextToken()
 
 	return p
-}
-
-func readSourceFile(name string) (string, error) {
-	candidates := []string{
-		name,
-		name + ".ayl",
-		name + ".ayla",
-	}
-
-	for _, file := range candidates {
-		data, err := os.ReadFile(file)
-		if err == nil {
-			return string(data), nil
-		}
-	}
-
-	return "", fmt.Errorf("file not found: %s (.ayla or .ayl)", name)
-}
-
-func LoadModuleMeta(name string) *ModuleMeta {
-	switch name {
-	case "gfx":
-		return GFXModuleMeta()
-	}
-
-	src, err := readSourceFile(name)
-	if err != nil {
-		return nil
-	}
-
-	l := lexer.New(src)
-	p := New(l)
-	prog := p.ParseProgram()
-
-	return BuildModuleMeta(prog)
-}
-
-func GFXModuleMeta() *ModuleMeta {
-	return &ModuleMeta{
-		Types: map[string]struct{}{
-			"Vector2": {},
-			"Color":   {},
-		},
-	}
-}
-
-func BuildModuleMeta(prog []Statement) *ModuleMeta {
-	meta := &ModuleMeta{
-		Types: make(map[string]struct{}),
-	}
-
-	for _, stmt := range prog {
-		switch s := stmt.(type) {
-		case *TypeStatement:
-			meta.Types[s.Name.Value] = struct{}{}
-		}
-	}
-
-	return meta
-}
-
-func (p *Parser) isTypeExpression(expr Expression) bool {
-	switch e := expr.(type) {
-
-	case *Identifier:
-		return p.isTypeName(e.Value)
-
-	case *MemberExpression:
-
-		id, ok := e.Left.(*Identifier)
-		if !ok {
-			return false
-		}
-
-		mod, ok := p.modules[id.Value]
-		if !ok {
-			return false
-		}
-
-		_, ok = mod.Types[e.Field.Value]
-
-		return ok
-
-	default:
-		return false
-	}
 }
 
 func (p *Parser) nextToken() {
@@ -330,8 +231,7 @@ func (p *Parser) consumeTerminators() {
 
 func (p *Parser) isType() bool {
 	return p.isTypeToken(p.peekTok.Type) ||
-		p.isTypeName(p.peekTok.Literal) ||
-		(p.peekTok.Type == token.IDENT && p.isTypeName(p.peekTok.Literal) && p.peekN(1).Type == token.DOT) ||
+		(p.peekTok.Type == token.IDENT && p.peekN(1).Type == token.DOT) ||
 		(p.peekTok.Type == token.ASTERISK && p.isPointerType())
 }
 
@@ -345,7 +245,6 @@ func (p *Parser) isPointerType() bool {
 	tok := p.peekN(i)
 
 	return p.isTypeToken(tok.Type) ||
-		p.isTypeName(tok.Literal) ||
 		(tok.Type == token.IDENT && p.peekN(i+1).Type == token.DOT)
 }
 
@@ -359,7 +258,6 @@ func (p *Parser) isPointerTypeM1() bool {
 	tok := p.peekN(i)
 
 	return p.isTypeToken(tok.Type) ||
-		p.isTypeName(tok.Literal) ||
 		(tok.Type == token.IDENT && p.peekN(i+1).Type == token.DOT)
 }
 
@@ -474,8 +372,15 @@ func (p *Parser) parseStatement() Statement {
 	}
 
 	if p.curTok.Type != token.NEWLINE {
-		p.addError(fmt.Sprintf("unexpected '%s'", p.curTok.Literal))
-		return nil
+		switch p.curTok.Type {
+		case token.RBRACE,
+			token.SEMICOLON,
+			token.COMMA,
+			token.RBRACKET,
+			token.RPAREN:
+			p.addError(fmt.Sprintf("unexpected '%s'", p.curTok.Literal))
+			return nil
+		}
 	}
 
 	return nil
@@ -988,10 +893,6 @@ func (p *Parser) parseImportStatement() *ImportStatement {
 	p.nextToken()
 	stmt.Name = p.curTok.Literal
 
-	if _, ok := p.modules[stmt.Name]; !ok {
-		p.modules[stmt.Name] = LoadModuleMeta(stmt.Name)
-	}
-
 	return stmt
 }
 
@@ -1039,8 +940,6 @@ func (p *Parser) parseTypeStatement() *TypeStatement {
 		Value:    p.curTok.Literal,
 	}
 
-	p.types[stmt.Name.Value] = true
-
 	p.nextToken()
 
 	if p.curTok.Type == token.ASSIGN {
@@ -1087,10 +986,6 @@ func (p *Parser) exprToType(expr Expression) TypeNode {
 }
 
 func (p *Parser) parseType() TypeNode {
-	if p.curTok.Type == token.RBRACE {
-		return nil
-	}
-
 	var base TypeNode
 
 	switch p.curTok.Type {
@@ -1263,41 +1158,47 @@ func (p *Parser) parseArrayType() TypeNode {
 }
 
 func (p *Parser) parseStructType() TypeNode {
+	tok := p.curTok
+
 	if p.peekTok.Type != token.LBRACE {
-		p.addError("expected '{' after identifier")
+		p.addError("expected '{' after struct")
 		return nil
 	}
-	p.nextToken()
+
+	p.nextToken() // {
+	p.nextToken() // first field or }
 
 	fields := []*StructField{}
-
-	// move to first field or }
-	p.nextToken()
 	p.consumeTerminators()
 
 	for p.curTok.Type != token.RBRACE {
+
 		if p.curTok.Type != token.IDENT {
 			p.addError("expected field name inside struct type")
 			return nil
 		}
+
 		fieldName := &Identifier{
 			NodeBase: NodeBase{Token: p.curTok},
 			Value:    p.curTok.Literal,
 		}
-		// type identifier
-		p.nextToken()
-		if !(p.isTypeToken(p.curTok.Type)) && p.curTok.Type != token.IDENT {
-			p.addError(fmt.Sprintf("expected type name after field name '%s'", fieldName.Value))
-			return nil
-		}
+
+		p.nextToken() // move to type
+
 		fieldType := p.parseType()
-		fields = append(fields, &StructField{Name: fieldName, Type: fieldType})
-		p.nextToken()
+
+		fields = append(fields, &StructField{
+			Name: fieldName,
+			Type: fieldType,
+		})
+
+		p.nextToken() // move past type
+
 		p.consumeTerminators()
 	}
 
 	return &StructType{
-		NodeBase: NodeBase{Token: p.curTok},
+		NodeBase: NodeBase{Token: tok},
 		Fields:   fields,
 	}
 }
@@ -1355,60 +1256,6 @@ func (p *Parser) parseFuncType() TypeNode {
 	}
 
 	return typ
-}
-
-func (p *Parser) parseAnonymousStructLiteral() Expression {
-	lit := &AnonymousStructLiteral{
-		NodeBase: NodeBase{Token: p.curTok},
-		Fields:   make(map[string]Expression),
-	}
-
-	p.nextToken() // move to '{'
-	p.nextToken() // move inside
-	p.consumeTerminators()
-
-	if p.curTok.Type == token.RBRACE {
-		return lit
-	}
-
-	for {
-		if p.curTok.Type != token.IDENT {
-			p.addError("expected field names in anonymous struct literal")
-			return nil
-		}
-
-		fieldName := p.curTok.Literal
-
-		if p.peekTok.Type != token.COLON {
-			p.addError("expected ':' after field name")
-			return nil
-		}
-
-		p.nextToken() // :
-		p.nextToken() // value
-		lit.Fields[fieldName] = p.parseExpression(LOWEST)
-		p.nextToken()
-
-		p.consumeTerminators()
-
-		if p.curTok.Type == token.COMMA {
-			p.nextToken()
-			p.consumeTerminators()
-			if p.curTok.Type == token.RBRACE {
-				break
-			}
-			continue
-		}
-
-		if p.curTok.Type == token.RBRACE {
-			break
-		}
-
-		p.addError("expected ',' or '}' after anonymous struct field")
-		return nil
-	}
-
-	return lit
 }
 
 func (p *Parser) parseCompositeLiteral(typ TypeNode) Expression {
@@ -1472,89 +1319,6 @@ func (p *Parser) parseCompositeLiteral(typ TypeNode) Expression {
 	}
 
 	return lit
-}
-
-func (p *Parser) parseIndexAssignment() *AssignmentStatement {
-	left := &Identifier{
-		NodeBase: NodeBase{Token: p.curTok},
-		Value:    p.curTok.Literal,
-	}
-
-	p.nextToken() // [
-	p.nextToken() // index
-
-	idx := p.parseExpression(LOWEST)
-
-	if p.peekTok.Type != token.RBRACKET {
-		p.addError("expected ']' to close index")
-		return nil
-	}
-
-	p.nextToken() // ]
-
-	indexExpr := &IndexExpression{
-		NodeBase: NodeBase{Token: p.curTok},
-		Left:     left,
-		Index:    idx,
-	}
-
-	if p.peekTok.Type != token.ASSIGN {
-		p.addError("expected '=' after index")
-		return nil
-	}
-
-	p.nextToken() // =
-	p.nextToken() // value
-
-	val := p.parseExpression(LOWEST)
-
-	return &AssignmentStatement{
-		NodeBase: NodeBase{Token: p.curTok},
-		Targets:  []Expression{indexExpr},
-		Values:   []Expression{val},
-	}
-}
-
-func (p *Parser) parseMemberAssignment() *AssignmentStatement {
-	obj := &Identifier{
-		NodeBase: NodeBase{Token: p.curTok},
-		Value:    p.curTok.Literal,
-	}
-
-	p.nextToken() // .
-	p.nextToken() // field
-
-	if p.curTok.Type != token.IDENT {
-		p.addError("expected field name after '.'")
-		return nil
-	}
-
-	field := &Identifier{
-		NodeBase: NodeBase{Token: p.curTok},
-		Value:    p.curTok.Literal,
-	}
-
-	memberExpr := &MemberExpression{
-		NodeBase: NodeBase{Token: p.curTok},
-		Left:     obj,
-		Field:    field,
-	}
-
-	if p.peekTok.Type != token.ASSIGN {
-		p.addError("expected '=' after member")
-		return nil
-	}
-
-	p.nextToken() // =
-	p.nextToken() // value
-
-	val := p.parseExpression(LOWEST)
-
-	return &AssignmentStatement{
-		NodeBase: NodeBase{Token: p.curTok},
-		Targets:  []Expression{memberExpr},
-		Values:   []Expression{val},
-	}
 }
 
 func (p *Parser) parseEnumStatement() *EnumStatement {
@@ -1905,7 +1669,7 @@ func (p *Parser) parseFuncParams() []*Param {
 			p.nextToken()
 		}
 
-		if !(p.isTypeToken(p.curTok.Type) || p.isTypeName(p.curTok.Literal) || (p.curTok.Type == token.IDENT && p.peekTok.Type == token.DOT) || (p.curTok.Type == token.ASTERISK && p.isPointerTypeM1())) {
+		if !(p.isTypeToken(p.curTok.Type) || (p.curTok.Type == token.IDENT && p.peekTok.Type == token.DOT) || (p.curTok.Type == token.ASTERISK && p.isPointerTypeM1())) {
 			p.addError("expected type after parameter name")
 			return nil
 		}
@@ -1956,7 +1720,7 @@ func (p *Parser) parseFuncReturnTypes() []TypeNode {
 		p.nextToken()
 
 		for p.curTok.Type != token.RPAREN {
-			if !(p.isTypeName(p.curTok.Literal) || p.isTypeToken(p.curTok.Type) || (p.curTok.Type == token.IDENT && p.peekTok.Type == token.DOT) || (p.curTok.Type == token.ASTERISK && p.isPointerTypeM1())) {
+			if !(p.isTypeToken(p.curTok.Type) || (p.curTok.Type == token.IDENT && p.peekTok.Type == token.DOT) || (p.curTok.Type == token.ASTERISK && p.isPointerTypeM1())) {
 				p.addError("expected return type")
 				return nil
 			}
@@ -2442,7 +2206,7 @@ func (p *Parser) parseDotExpression(left Expression) Expression {
 		},
 	}
 
-	if p.peekTok.Type == token.LBRACE && p.isTypeExpression(member) {
+	if p.peekTok.Type == token.LBRACE && !p.peekTok.HadWhitespaceBefore {
 		p.nextToken()
 		return p.parseCompositeLiteral(p.exprToType(member))
 	}
@@ -2760,7 +2524,14 @@ func (p *Parser) parsePrimary() Expression {
 		return nil
 
 	case token.STRUCT:
-		return p.parseAnonymousStructLiteral()
+		typ := p.parseType()
+
+		if p.peekTok.Type == token.LBRACE {
+			p.nextToken()
+			return p.parseCompositeLiteral(typ)
+		}
+
+		return typ
 
 	case token.IDENT:
 		ident := &Identifier{NodeBase: NodeBase{Token: p.curTok}, Value: p.curTok.Literal}

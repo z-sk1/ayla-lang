@@ -658,8 +658,15 @@ func (i *Interpreter) resolveTypeNode(t parser.TypeNode) (*TypeInfo, error) {
 			fields[f.Name.Value] = ft
 		}
 
+		fieldTypes := make([]string, 0)
+		for _, f := range fields {
+			fieldTypes = append(fieldTypes, f.Name)
+		}
+
+		name := fmt.Sprintf("struct{ %s }", strings.Join(fieldTypes, ", "))
+
 		return &TypeInfo{
-			Name:   "<anon>",
+			Name:   name,
 			Kind:   TypeStruct,
 			Fields: fields,
 		}, nil

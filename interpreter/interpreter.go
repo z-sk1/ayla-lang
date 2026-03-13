@@ -1268,45 +1268,6 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 		}
 		return i.evalCompositeLiteral(expr, ti)
 
-	case *parser.AnonymousStructLiteral:
-		fields := make(map[string]Value)
-		fieldTypes := make(map[string]*TypeInfo)
-
-		for name, e := range expr.Fields {
-			v, err := i.EvalExpression(e)
-			if err != nil {
-				return NilValue{}, err
-			}
-
-			if expected, ok := fieldTypes[name]; ok {
-				actualTI := unwrapAlias(i.typeInfoFromValue(v))
-				expectedTI := unwrapAlias(expected)
-
-				if !(typesAssignable(actualTI, expectedTI)) {
-					return NilValue{}, NewRuntimeError(
-						expr,
-						fmt.Sprintf(
-							"field '%s' expects '%s' but got '%s'",
-							name,
-							expected.Name,
-							actualTI.Name,
-						),
-					)
-				}
-			}
-
-			fields[name] = v
-			fieldTypes[name] = i.typeInfoFromValue(v)
-		}
-
-		return &StructValue{
-			TypeName: &TypeInfo{
-				Name:   "<anon>",
-				Fields: fieldTypes,
-			},
-			Fields: fields,
-		}, nil
-
 	case *parser.FuncLiteral:
 		paramTypes := make([]*TypeInfo, 0)
 		paramNames := make([]string, 0)
