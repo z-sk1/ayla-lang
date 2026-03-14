@@ -46,6 +46,15 @@ func argString(node parser.Node, args []Value, i int, name string) (string, erro
 	return iv.V, nil
 }
 
+func argBool(node parser.Node, args []Value, i int, name string) (bool, error) {
+	v := unwrapNamed(args[i])
+	iv, ok := v.(BoolValue)
+	if !ok {
+		return false, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be a boolean", name, i+1))
+	}
+	return iv.V, nil
+}
+
 func argStruct(node parser.Node, args []Value, i int, name, sname string) (*StructValue, error) {
 	v := unwrapNamed(args[i])
 	sv, ok := v.(*StructValue)
@@ -873,21 +882,35 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 		},
 	}
 
-	env.Define("Init", &BuiltinFunc{
+	env.Define("SetWindowFlag", &BuiltinFunc{
+		Name:  "SetWindowFlag",
+		Arity: 1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			flag, err := argInt(node, args, 0, "gfx.SetWindowFlag")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			rl.SetConfigFlags(uint32(flag))
+			return NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("InitWindow", &BuiltinFunc{
 		Name:  "Init",
 		Arity: 3,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			w, err := argInt(node, args, 0, "gfx.Init")
+			w, err := argInt(node, args, 0, "gfx.InitWindow")
 			if err != nil {
 				return NilValue{}, err
 			}
 
-			h, err := argInt(node, args, 1, "gfx.Init")
+			h, err := argInt(node, args, 1, "gfx.InitWindow")
 			if err != nil {
 				return NilValue{}, err
 			}
 
-			title, err := argString(node, args, 2, "gfx.Init")
+			title, err := argString(node, args, 2, "gfx.InitWindow")
 			if err != nil {
 				return NilValue{}, err
 			}
@@ -902,6 +925,20 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 				rl.Red,
 			)
 
+			return NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("SetTargetFPS", &BuiltinFunc{
+		Name:  "SetTargetFPS",
+		Arity: 1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			fps, err := argInt(node, args, 0, "gfx.SetTargetFPS")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			rl.SetTargetFPS(int32(fps))
 			return NilValue{}, nil
 		},
 	}, false)
@@ -945,6 +982,244 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 		Arity: 0,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
 			rl.EndDrawing()
+			return NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("SetWindowTitle", &BuiltinFunc{
+		Name:  "SetWindowTitle",
+		Arity: 1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			title, err := argString(node, args, 0, "gfx.SetWindowTitle")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			rl.SetWindowTitle(title)
+			return NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("SetWindowPos", &BuiltinFunc{
+		Name:  "SetWindowPos",
+		Arity: 2,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			x, err := argInt(node, args, 0, "gfx.SetWindowPos")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			y, err := argInt(node, args, 1, "gfx.SetWindowPos")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			rl.SetWindowPosition(x, y)
+			return NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("GetWindowPos", &BuiltinFunc{
+		Name:  "GetWindowPos",
+		Arity: 0,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			return &StructValue{
+				TypeName: typeEnv["Vector2"].TypeInfo,
+				Fields: map[string]Value{
+					"X": IntValue{int(rl.GetWindowPosition().X)},
+					"Y": IntValue{int(rl.GetWindowPosition().Y)},
+				},
+			}, nil
+		},
+	}, false)
+
+	env.Define("SetWindowSize", &BuiltinFunc{
+		Name:  "SetWindowSize",
+		Arity: 2,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			w, err := argInt(node, args, 0, "gfx.SetWindowSize")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			h, err := argInt(node, args, 1, "gfx.SetWindowSize")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			rl.SetWindowSize(w, h)
+			return NilValue{}, err
+		},
+	}, false)
+
+	env.Define("SetWindowMinSize", &BuiltinFunc{
+		Name:  "SetWindowMinSize",
+		Arity: 2,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			w, err := argInt(node, args, 0, "gfx.SetWindowMinSize")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			h, err := argInt(node, args, 1, "gfx.SetWindowMinSize")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			rl.SetWindowMinSize(w, h)
+			return NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("SetWindowMaxSize", &BuiltinFunc{
+		Name:  "SetWindowMaxSize",
+		Arity: 2,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			w, err := argInt(node, args, 0, "gfx.SetWindowMaxSize")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			h, err := argInt(node, args, 1, "gfx.SetWindowMaxSize")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			rl.SetWindowMaxSize(w, h)
+			return NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("GetWindowSize", &BuiltinFunc{
+		Name:  "GetWindowSize",
+		Arity: 0,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			return &StructValue{
+				TypeName: typeEnv["Vector2"].TypeInfo,
+				Fields: map[string]Value{
+					"X": IntValue{V: rl.GetScreenWidth()},
+					"Y": IntValue{V: rl.GetScreenHeight()},
+				},
+			}, nil
+		},
+	}, false)
+
+	env.Define("SetFullscreen", &BuiltinFunc{
+		Name:  "SetFullscreen",
+		Arity: 1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			enabled, err := argBool(node, args, 0, "gfx.SetFullscreen")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			if rl.IsWindowFullscreen() != enabled {
+				rl.ToggleFullscreen()
+			}
+
+			return NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("IsWindowFocused", &BuiltinFunc{
+		Name:  "IsWindowFocused",
+		Arity: 0,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			return BoolValue{V: rl.IsWindowFocused()}, nil
+		},
+	}, false)
+
+	env.Define("IsWindowMinimized", &BuiltinFunc{
+		Name:  "IsWindowMinimized",
+		Arity: 0,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			return BoolValue{V: rl.IsWindowMinimized()}, nil
+		},
+	}, false)
+
+	env.Define("IsWindowMaximized", &BuiltinFunc{
+		Name:  "IsWindowMaximized",
+		Arity: 0,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			return BoolValue{V: rl.IsWindowMaximized()}, nil
+		},
+	}, false)
+
+	env.Define("MinimizeWindow", &BuiltinFunc{
+		Name:  "MinimizeWindow",
+		Arity: 0,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			rl.MinimizeWindow()
+			return NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("MaximizeWindow", &BuiltinFunc{
+		Name:  "MaximizeWindow",
+		Arity: 0,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			rl.MaximizeWindow()
+			return NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("RestoreWindow", &BuiltinFunc{
+		Name:  "RestoreWindow",
+		Arity: 0,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			rl.RestoreWindow()
+			return NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("GetFPS", &BuiltinFunc{
+		Name:  "GetFPS",
+		Arity: 0,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			return IntValue{V: int(rl.GetFPS())}, nil
+		},
+	}, false)
+
+	env.Define("GetFrameTime", &BuiltinFunc{
+		Name:  "GetFrameTime",
+		Arity: 0,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			return FloatValue{V: float64(rl.GetFrameTime())}, nil
+		},
+	}, false)
+
+	env.Define("ShowCursor", &BuiltinFunc{
+		Name:  "ShowCursor",
+		Arity: 0,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			rl.ShowCursor()
+			return NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("HideCursor", &BuiltinFunc{
+		Name:  "HideCursor",
+		Arity: 0,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			rl.HideCursor()
+			return NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("LockCursor", &BuiltinFunc{
+		Name:  "LockCursor",
+		Arity: 0,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			rl.DisableCursor()
+			return NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("UnlockCursor", &BuiltinFunc{
+		Name:  "UnlockCursor",
+		Arity: 0,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			rl.EnableCursor()
 			return NilValue{}, nil
 		},
 	}, false)
@@ -1339,6 +1614,25 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 		},
 	}, false)
 
+	env.Define("SetMousePos", &BuiltinFunc{
+		Name:  "SetMousePos",
+		Arity: 2,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			x, err := argInt(node, args, 0, "gfx.SetMousePos")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			y, err := argInt(node, args, 1, "gfx.SetMousePos")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			rl.SetMousePosition(x, y)
+			return NilValue{}, nil
+		},
+	}, false)
+
 	env.Define("GetMousePos", &BuiltinFunc{
 		Name:  "GetMousePos",
 		Arity: 0,
@@ -1348,6 +1642,20 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 				Fields: map[string]Value{
 					"X": FloatValue{V: float64(rl.GetMousePosition().X)},
 					"Y": FloatValue{V: float64(rl.GetMousePosition().Y)},
+				},
+			}, nil
+		},
+	}, false)
+
+	env.Define("GetMouseDelta", &BuiltinFunc{
+		Name:  "GetMouseDelta",
+		Arity: 0,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			return &StructValue{
+				TypeName: typeEnv["Vector2"].TypeInfo,
+				Fields: map[string]Value{
+					"X": FloatValue{V: float64(rl.GetMouseDelta().X)},
+					"Y": FloatValue{V: float64(rl.GetMouseDelta().Y)},
 				},
 			}, nil
 		},
@@ -1436,7 +1744,16 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 	env.Define("KeyRightAlt", IntValue{V: rl.KeyRightAlt}, true)
 	env.Define("KeyRightControl", IntValue{V: rl.KeyRightControl}, true)
 	env.Define("KeyLeftControl", IntValue{V: rl.KeyLeftControl}, true)
-	env.Define("AnotherEnterBecauseIwantedtoAddOneMore", IntValue{V: rl.KeyLeftControl}, true)
+
+	env.Define("FlagWindowResizable", IntValue{V: rl.FlagWindowResizable}, true)
+	env.Define("FlagWindowFullscreen", IntValue{V: rl.FlagFullscreenMode}, true)
+	env.Define("FlagWindowMaximized", IntValue{V: rl.FlagWindowMaximized}, true)
+	env.Define("FlagWindowMinimized", IntValue{V: rl.FlagWindowMinimized}, true)
+	env.Define("FlagWindowAlwaysRun", IntValue{V: rl.FlagWindowAlwaysRun}, true)
+	env.Define("FlagWindowVsync", IntValue{V: rl.FlagVsyncHint}, true)
+	env.Define("FlagWindowHighDPI", IntValue{V: rl.FlagWindowHighdpi}, true)
+	env.Define("FlagWindowBorderless", IntValue{V: rl.FlagBorderlessWindowedMode}, true)
+	env.Define("FlagWindowMsaa4x", IntValue{V: rl.FlagMsaa4xHint}, true)
 
 	module := ModuleValue{
 		Name:    "gfx",
