@@ -232,13 +232,13 @@ func (p *Parser) consumeTerminators() {
 func (p *Parser) isType() bool {
 	return p.isTypeToken(p.peekTok.Type) ||
 		(p.peekTok.Type == token.IDENT && p.peekN(1).Type == token.DOT) ||
-		(p.peekTok.Type == token.ASTERISK && p.isPointerType())
+		(p.peekTok.Type == token.MUL && p.isPointerType())
 }
 
 func (p *Parser) isPointerType() bool {
 	i := 1
 
-	for p.peekN(i).Type == token.ASTERISK {
+	for p.peekN(i).Type == token.MUL {
 		i++
 	}
 
@@ -251,7 +251,7 @@ func (p *Parser) isPointerType() bool {
 func (p *Parser) isPointerTypeM1() bool {
 	i := 0
 
-	for p.peekN(i).Type == token.ASTERISK {
+	for p.peekN(i).Type == token.MUL {
 		i++
 	}
 
@@ -359,7 +359,7 @@ func (p *Parser) parseStatement() Statement {
 		return p.parseReturnStatement()
 	case token.DEFER:
 		return p.parseDeferStatement()
-	case token.IDENT, token.ASTERISK:
+	case token.IDENT, token.MUL:
 		if p.peekUntilAssign() == token.WALRUS {
 			if p.peekTok.Type == token.COMMA {
 				return p.parseMultiVarStatementNoKeyword()
@@ -989,7 +989,7 @@ func (p *Parser) parseType() TypeNode {
 	var base TypeNode
 
 	switch p.curTok.Type {
-	case token.ASTERISK:
+	case token.MUL:
 		p.nextToken()
 		base := p.parseType()
 
@@ -1657,7 +1657,7 @@ func (p *Parser) parseFuncParams() []*Param {
 		p.nextToken()
 
 		variadic := false
-		if p.curTok.Type == token.ELLIPSES {
+		if p.curTok.Type == token.ELLIPSIS {
 			variadic = true
 
 			if seenVariadic {
@@ -1669,7 +1669,7 @@ func (p *Parser) parseFuncParams() []*Param {
 			p.nextToken()
 		}
 
-		if !(p.isTypeToken(p.curTok.Type) || (p.curTok.Type == token.IDENT && p.peekTok.Type == token.DOT) || (p.curTok.Type == token.ASTERISK && p.isPointerTypeM1())) {
+		if !(p.isTypeToken(p.curTok.Type) || (p.curTok.Type == token.IDENT && p.peekTok.Type == token.DOT) || (p.curTok.Type == token.MUL && p.isPointerTypeM1())) {
 			p.addError("expected type after parameter name")
 			return nil
 		}
@@ -1720,7 +1720,7 @@ func (p *Parser) parseFuncReturnTypes() []TypeNode {
 		p.nextToken()
 
 		for p.curTok.Type != token.RPAREN {
-			if !(p.isTypeToken(p.curTok.Type) || (p.curTok.Type == token.IDENT && p.peekTok.Type == token.DOT) || (p.curTok.Type == token.ASTERISK && p.isPointerTypeM1())) {
+			if !(p.isTypeToken(p.curTok.Type) || (p.curTok.Type == token.IDENT && p.peekTok.Type == token.DOT) || (p.curTok.Type == token.MUL && p.isPointerTypeM1())) {
 				p.addError("expected return type")
 				return nil
 			}
@@ -2246,7 +2246,7 @@ func (p *Parser) parseArgList(end token.TokenType) []Expression {
 	for {
 		expr := p.parseExpression(LOWEST)
 
-		if p.peekTok.Type == token.ELLIPSES {
+		if p.peekTok.Type == token.ELLIPSIS {
 			p.nextToken()
 			expr = &SpreadExpression{
 				Expression: expr,
@@ -2318,7 +2318,7 @@ func (p *Parser) parseExpression(precedence int) Expression {
 			p.nextToken()
 			left = p.parseDotExpression(left)
 
-		case token.ELLIPSES:
+		case token.ELLIPSIS:
 			p.nextToken()
 			left = &SpreadExpression{
 				NodeBase:   NodeBase{Token: p.curTok},
@@ -2424,7 +2424,7 @@ func (p *Parser) parsePrimary() Expression {
 			Right:    right,
 		}
 
-	case token.MINUS:
+	case token.SUB:
 		operator := p.curTok.Literal
 		tok := p.curTok
 		p.nextToken()
@@ -2440,7 +2440,7 @@ func (p *Parser) parsePrimary() Expression {
 			Right:    right,
 		}
 
-	case token.AMPERSAND:
+	case token.AND:
 		operator := p.curTok.Literal
 		tok := p.curTok
 		p.nextToken()
@@ -2456,7 +2456,7 @@ func (p *Parser) parsePrimary() Expression {
 			Right:    right,
 		}
 
-	case token.ASTERISK:
+	case token.MUL:
 		operator := p.curTok.Literal
 		tok := p.curTok
 		p.nextToken()

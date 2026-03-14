@@ -882,11 +882,11 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 		},
 	}
 
-	env.Define("SetWindowFlag", &BuiltinFunc{
-		Name:  "SetWindowFlag",
+	env.Define("SetWindowFlags", &BuiltinFunc{
+		Name:  "SetWindowFlags",
 		Arity: 1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			flag, err := argInt(node, args, 0, "gfx.SetWindowFlag")
+			flag, err := argInt(node, args, 0, "gfx.SetWindowFlags")
 			if err != nil {
 				return NilValue{}, err
 			}

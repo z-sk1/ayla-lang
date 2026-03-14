@@ -30,10 +30,14 @@ func (n *NodeBase) Pos() (int, int) {
 const (
 	_ int = iota
 	LOWEST
-	OR          // ||
-	AND         // &&
+	LOR         // ||
+	LAND        // &&
+	BITOR       // |
+	BITXOR      // ^
+	BITAND      // &
 	EQUALS      // == !=
 	LESSGREATER // < >
+	SHIFT       // << >>
 	SUM         // + -
 	PRODUCT     // * /
 	PREFIX      // !x -z
@@ -44,29 +48,36 @@ const (
 )
 
 var precedences = map[token.TokenType]int{
-	token.OR:  OR,
-	token.AND: AND,
+	token.LOR:  LOR,
+	token.LAND: LAND,
 
-	token.EQ:     EQUALS,
-	token.NOT_EQ: EQUALS,
-	token.IN:     EQUALS,
+	token.OR:  BITOR,
+	token.XOR: BITXOR,
+	token.AND: BITAND,
+
+	token.EQ:  EQUALS,
+	token.NEQ: EQUALS,
+	token.IN:  EQUALS,
 
 	token.LT:  LESSGREATER,
 	token.GT:  LESSGREATER,
 	token.LTE: LESSGREATER,
 	token.GTE: LESSGREATER,
 
-	token.PLUS:  SUM,
-	token.MINUS: SUM,
+	token.SHL: SHIFT,
+	token.SHR: SHIFT,
 
-	token.ASTERISK: PRODUCT,
-	token.SLASH:    PRODUCT,
-	token.MOD:      PRODUCT,
+	token.PLUS: SUM,
+	token.SUB:  SUM,
+
+	token.MUL:   PRODUCT,
+	token.SLASH: PRODUCT,
+	token.MOD:   PRODUCT,
 
 	token.DOT:      MEMBER,
 	token.LPAREN:   CALL,
 	token.LBRACKET: INDEX,
-	token.ELLIPSES: POSTFIX,
+	token.ELLIPSIS: POSTFIX,
 }
 
 type VarStatement struct {

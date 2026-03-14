@@ -2606,6 +2606,16 @@ func evalIntInfix(node *parser.InfixExpression, left IntValue, op string, right 
 		}
 
 		return IntValue{V: left.V % right.V}, nil
+	case "|":
+		return IntValue{V: left.V | right.V}, nil
+	case "&":
+		return IntValue{V: left.V & right.V}, nil
+	case ">>":
+		return IntValue{V: left.V >> right.V}, nil
+	case "<<":
+		return IntValue{V: left.V << right.V}, nil
+	case "^":
+		return IntValue{V: left.V ^ right.V}, nil
 	case "==":
 		return BoolValue{V: left.V == right.V}, nil
 	case "!=":
