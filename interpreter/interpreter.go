@@ -133,6 +133,118 @@ func (i *Interpreter) loadModule(name string) (Value, error) {
 	return module, nil
 }
 
+func (i *Interpreter) RegisterForward(stmts []parser.Statement) error {
+	for _, stmt := range stmts {
+		switch stmt := stmt.(type) {
+		case *parser.ImportStatement:
+			if _, err := i.loadModule(stmt.Name); err != nil {
+				return err
+			}
+
+		case *parser.TypeStatement:
+			ti := &TypeInfo{
+				Name:  stmt.Name.Value,
+				Kind:  TypeNamed,
+				Alias: stmt.Alias,
+			}
+
+			i.typeEnv[stmt.Name.Value] = TypeValue{
+				TypeInfo: ti,
+			}
+
+		case *parser.EnumStatement:
+			if _, ok, _ := i.Env.Get(stmt.Name.Value); ok {
+				return NewRuntimeError(stmt, fmt.Sprintf("cannot redeclare enum: %s", stmt.Name.Value))
+			}
+
+			enumType := &TypeInfo{
+				Name:     stmt.Name.Value,
+				Kind:     TypeEnum,
+				Variants: make(map[string]int),
+			}
+
+			for idx, ident := range stmt.Variants {
+				name := ident.Value
+
+				if _, exists := enumType.Variants[name]; exists {
+					return NewRuntimeError(stmt, fmt.Sprintf("duplicate enum variant: %s", name))
+				}
+
+				enumType.Variants[name] = idx
+			}
+
+			i.typeEnv[stmt.Name.Value] = TypeValue{TypeInfo: enumType}
+
+		case *parser.FuncStatement:
+			paramTypes := make([]*TypeInfo, 0)
+			paramNames := make([]string, 0)
+
+			returnTypes := make([]*TypeInfo, 0)
+			returnNames := make([]string, 0)
+
+			err := i.checkFuncStatement(stmt)
+			if err != nil {
+				return err
+			}
+
+			for _, typ := range stmt.ReturnTypes {
+				ti, err := i.resolveTypeNode(typ)
+				if err != nil {
+					return err
+				}
+
+				ti = unwrapAlias(ti)
+
+				returnTypes = append(returnTypes, ti)
+				paramNames = append(paramNames, ti.Name)
+			}
+
+			for _, param := range stmt.Params {
+				ti, err := i.resolveTypeNode(param.Type)
+				if err != nil {
+					return err
+				}
+
+				ti = unwrapAlias(ti)
+
+				paramTypes = append(paramTypes, ti)
+				paramNames = append(paramNames, ti.Name)
+			}
+
+			typeInfo := &TypeInfo{
+				Name:    fmt.Sprintf("fun(%s) (%s)", strings.Join(paramNames, ", "), strings.Join(returnNames, ", ")),
+				Kind:    TypeFunc,
+				Returns: returnTypes,
+				Params:  paramTypes,
+			}
+
+			i.Env.Define(stmt.Name.Value, &Func{Params: stmt.Params, Body: stmt.Body, TypeName: typeInfo, Env: i.Env}, false)
+			return nil
+		}
+	}
+
+	return nil
+}
+
+func (i *Interpreter) ResolveTypes(stmts []parser.Statement) error {
+	for _, stmt := range stmts {
+		switch stmt := stmt.(type) {
+
+		case *parser.TypeStatement:
+			tv := i.typeEnv[stmt.Name.Value]
+			ti := tv.TypeInfo
+
+			underlying, err := i.resolveTypeNode(stmt.Type)
+			if err != nil {
+				return err
+			}
+
+			ti.Underlying = underlying
+		}
+	}
+	return nil
+}
+
 func (i *Interpreter) EvalStatements(stmts []parser.Statement) (ControlSignal, error) {
 	for _, s := range stmts {
 		sig, err := i.EvalStatement(s)
@@ -618,37 +730,6 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 
 		return SignalNone{}, nil
 
-	case *parser.ImportStatement:
-		val, err := i.loadModule(stmt.Name)
-		if err != nil {
-			return NilValue{}, NewRuntimeError(stmt, err.Error())
-		}
-
-		return val, nil
-
-	case *parser.TypeStatement:
-		underlying, err := i.resolveTypeNode(stmt.Type)
-		if err != nil {
-			return SignalNone{}, NewRuntimeError(stmt, err.Error())
-		}
-
-		ti := &TypeInfo{
-			Name:       stmt.Name.Value,
-			Kind:       TypeNamed,
-			Underlying: underlying,
-		}
-
-		if stmt.Alias {
-			ti.Alias = true
-			ti.Kind = underlying.Kind
-		}
-
-		i.typeEnv[stmt.Name.Value] = TypeValue{
-			TypeInfo: ti,
-		}
-
-		return SignalNone{}, nil
-
 	case *parser.AssignmentStatement:
 		values := make([]Value, 0, len(stmt.Values))
 
@@ -695,77 +776,6 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			}
 		}
 
-		return SignalNone{}, nil
-
-	case *parser.EnumStatement:
-		if _, ok, _ := i.Env.Get(stmt.Name.Value); ok {
-			return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("cannot redeclare enum: %s", stmt.Name.Value))
-		}
-
-		enumType := &TypeInfo{
-			Name:     stmt.Name.Value,
-			Kind:     TypeEnum,
-			Variants: make(map[string]int),
-		}
-
-		for idx, ident := range stmt.Variants {
-			name := ident.Value
-
-			if _, exists := enumType.Variants[name]; exists {
-				return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("duplicate enum variant: %s", name))
-			}
-
-			enumType.Variants[name] = idx
-		}
-
-		i.typeEnv[stmt.Name.Value] = TypeValue{TypeInfo: enumType}
-
-		return SignalNone{}, nil
-
-	case *parser.FuncStatement:
-		paramTypes := make([]*TypeInfo, 0)
-		paramNames := make([]string, 0)
-
-		returnTypes := make([]*TypeInfo, 0)
-		returnNames := make([]string, 0)
-
-		err := i.checkFuncStatement(stmt)
-		if err != nil {
-			return SignalNone{}, err
-		}
-
-		for _, typ := range stmt.ReturnTypes {
-			ti, err := i.resolveTypeNode(typ)
-			if err != nil {
-				return SignalNone{}, err
-			}
-
-			ti = unwrapAlias(ti)
-
-			returnTypes = append(returnTypes, ti)
-			paramNames = append(paramNames, ti.Name)
-		}
-
-		for _, param := range stmt.Params {
-			ti, err := i.resolveTypeNode(param.Type)
-			if err != nil {
-				return SignalNone{}, err
-			}
-
-			ti = unwrapAlias(ti)
-
-			paramTypes = append(paramTypes, ti)
-			paramNames = append(paramNames, ti.Name)
-		}
-
-		typeInfo := &TypeInfo{
-			Name:    fmt.Sprintf("fun(%s) (%s)", strings.Join(paramNames, ", "), strings.Join(returnNames, ", ")),
-			Kind:    TypeFunc,
-			Returns: returnTypes,
-			Params:  paramTypes,
-		}
-
-		i.Env.Define(stmt.Name.Value, &Func{Params: stmt.Params, Body: stmt.Body, TypeName: typeInfo, Env: i.Env}, false)
 		return SignalNone{}, nil
 
 	case *parser.MethodStatement:

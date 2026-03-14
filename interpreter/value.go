@@ -3,6 +3,7 @@ package interpreter
 import (
 	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -920,9 +921,19 @@ func (i *Interpreter) defaultValueFromTypeInfo(node parser.Node, ti *TypeInfo) (
 
 		return ArrayValue{Elements: make([]Value, ti.Size), ElemType: ti.Elem, Capacity: ti.Size, Fixed: true}, nil
 	case TypeStruct:
+		fields := make(map[string]Value)
+		for k, t := range ti.Fields {
+			zero, err := i.defaultValueFromTypeInfo(node, t)
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			fields[k] = zero
+		}
+
 		return &StructValue{
 			TypeName: ti,
-			Fields:   map[string]Value{},
+			Fields:   fields,
 		}, nil
 	case TypeMap:
 		if ti.Key == nil || ti.Value == nil {
@@ -941,11 +952,35 @@ func (i *Interpreter) defaultValueFromTypeInfo(node parser.Node, ti *TypeInfo) (
 			Env:      i.Env,
 			TypeName: ti,
 		}, nil
+	case TypeEnum:
+		if len(ti.Variants) == 0 {
+			return NilValue{}, NewRuntimeError(node, "enum has no variants")
+		}
+
+		var (
+			name string
+			idx  = math.MaxInt
+		)
+
+		for n, i := range ti.Variants {
+			if i < idx {
+				name = n
+				idx = i
+			}
+		}
+
+		return EnumValue{
+			Enum:    ti,
+			Variant: name,
+			Index:   idx,
+		}, nil
 	case TypePointer:
 		return &PointerValue{
 			Target:   nil,
 			ElemType: ti,
 		}, nil
+	case TypeNamed:
+		return i.defaultValueFromTypeInfo(node, ti.Underlying)
 	default:
 		return NilValue{}, NewRuntimeError(node, "cannot create default value for "+ti.Name)
 	}

@@ -985,6 +985,32 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 		},
 	}, false)
 
+	env.Define("NewVector2", &BuiltinFunc{
+		Name:  "NewVector2",
+		Arity: 2,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			x, err := argFloat(node, args, 0, "gfx.NewVector2")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			y, err := argFloat(node, args, 1, "gfx.NewVector2")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			vec := &StructValue{
+				TypeName: typeEnv["Vector2"].TypeInfo,
+				Fields: map[string]Value{
+					"X": FloatValue{V: x},
+					"Y": FloatValue{V: y},
+				},
+			}
+
+			return vec, nil
+		},
+	}, false)
+
 	env.Define("DrawRect", &BuiltinFunc{
 		Name:  "DrawRect",
 		Arity: 3,

@@ -131,6 +131,16 @@ func run() {
 
 	interp := interpreter.New(filename)
 
+	if err := interp.RegisterForward(program); err != nil {
+		fmt.Printf("\n%s: %v\n", filename, err)
+		return
+	}
+
+	if err := interp.ResolveTypes(program); err != nil {
+		fmt.Printf("\n%s: %v\n", filename, err)
+		return
+	}
+
 	sig, err := interp.EvalStatements(program)
 
 	if err != nil {
