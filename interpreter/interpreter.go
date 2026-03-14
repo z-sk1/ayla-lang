@@ -2550,6 +2550,14 @@ func (i *Interpreter) evalInfix(node *parser.InfixExpression, left Value, op str
 		return evalFloatInfix(node, left.(FloatValue), op, FloatValue{V: float64(right.(IntValue).V)})
 	}
 
+	if left.Type() == POINTER && right.Type() == NIL {
+		return evalNilInfix(node, op, left.(*PointerValue))
+	}
+
+	if left.Type() == NIL && right.Type() == POINTER {
+		return evalNilInfix(node, op, right.(*PointerValue))
+	}
+
 	// type mismatch check
 	if left.Type() != right.Type() {
 		return NilValue{}, NewRuntimeError(node, fmt.Sprintf("type mismatch: '%s' %s '%s'", left.Type(), op, right.Type()))
@@ -2565,7 +2573,13 @@ func (i *Interpreter) evalInfix(node *parser.InfixExpression, left Value, op str
 	case BOOL:
 		return evalBoolInfix(node, left.(BoolValue), op, right.(BoolValue))
 	case ENUM:
-		return evalIntInfix(node, IntValue{V: left.(EnumValue).Index}, op, IntValue{V: right.(EnumValue).Index})
+		return evalEnumInfix(node, left.(EnumValue), op, right.(EnumValue))
+	case POINTER:
+		return evalPointerInfix(node, left.(*PointerValue), op, right.(*PointerValue))
+	case STRUCT:
+		return evalStructInfix(node, left.(*StructValue), op, right.(*StructValue))
+	case ARR:
+		return evalArrayInfix(node, left.(ArrayValue), op, right.(ArrayValue))
 	}
 
 	return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unsupported operand types: %s %s %s", i.typeInfoFromValue(left).Name, op, i.typeInfoFromValue(right).Name))
@@ -2692,7 +2706,106 @@ func evalErrorInfix(node *parser.InfixExpression, left ErrorValue, op string, ri
 	case "!=":
 		return BoolValue{V: left.V.Error() != re.V.Error()}, nil
 	default:
-		return NilValue{}, NewRuntimeError(node, "invalid operator for error")
+		return NilValue{}, NewRuntimeError(node, fmt.Sprintf("invalid operator: error %s error", op))
+	}
+}
+
+func evalEnumInfix(node *parser.InfixExpression, left EnumValue, op string, right EnumValue) (Value, error) {
+	// Ensure both enums are the same type
+	if left.Enum != right.Enum {
+		return NilValue{}, NewRuntimeError(
+			node,
+			fmt.Sprintf("cannot compare different enums: %s and %s", left.Enum.Name, right.Enum.Name),
+		)
+	}
+
+	switch op {
+	case "==":
+		return BoolValue{V: left.Index == right.Index}, nil
+	case "!=":
+		return BoolValue{V: left.Index != right.Index}, nil
+	case "<":
+		return BoolValue{V: left.Index < right.Index}, nil
+	case ">":
+		return BoolValue{V: left.Index > right.Index}, nil
+	case "<=":
+		return BoolValue{V: left.Index <= right.Index}, nil
+	case ">=":
+		return BoolValue{V: left.Index >= right.Index}, nil
+	default:
+		return NilValue{}, NewRuntimeError(
+			node,
+			fmt.Sprintf("invalid operator: %s %s %s", left.Enum.Name, op, right.Enum.Name),
+		)
+	}
+}
+
+func evalPointerInfix(node *parser.InfixExpression, left Value, op string, right Value) (Value, error) {
+	switch op {
+	case "==":
+		return BoolValue{V: left.(*PointerValue).Target == right.(*PointerValue).Target}, nil
+	case "!=":
+		return BoolValue{V: left.(*PointerValue).Target != right.(*PointerValue).Target}, nil
+	default:
+		return NilValue{}, NewRuntimeError(node, fmt.Sprintf("invalid operator: %s %s %s", left.String(), op, left.String()))
+	}
+}
+
+func evalArrayInfix(node *parser.InfixExpression, left ArrayValue, op string, right ArrayValue) (Value, error) {
+	switch op {
+	case "==":
+		if len(left.Elements) != len(right.Elements) {
+			return BoolValue{V: false}, nil
+		}
+
+		for i := 0; i < len(left.Elements); i++ {
+			if !valuesEqual(left.Elements[i], right.Elements[i]) {
+				return BoolValue{V: false}, nil
+			}
+		}
+
+		return BoolValue{V: true}, nil
+	case "!=":
+		res, err := evalArrayInfix(node, left, "==", right)
+		if err != nil {
+			return NilValue{}, err
+		}
+
+		return BoolValue{V: !res.(BoolValue).V}, nil
+	default:
+		return NilValue{}, NewRuntimeError(node, fmt.Sprintf("invalid operator: %s %s %s", left.String(), op, right.String()))
+	}
+}
+
+func evalStructInfix(node *parser.InfixExpression, left *StructValue, op string, right *StructValue) (Value, error) {
+	switch op {
+	case "==":
+		if left.TypeName != right.TypeName {
+			return BoolValue{V: false}, nil
+		}
+
+		for k, lv := range left.Fields {
+			rv := right.Fields[k]
+
+			if !valuesEqual(lv, rv) {
+				return BoolValue{V: false}, nil
+			}
+		}
+
+		return BoolValue{V: true}, nil
+
+	case "!=":
+		res, err := evalStructInfix(node, left, "==", right)
+		if err != nil {
+			return NilValue{}, err
+		}
+		return BoolValue{V: !res.(BoolValue).V}, nil
+
+	default:
+		return NilValue{}, NewRuntimeError(
+			node,
+			fmt.Sprintf("invalid operator: %s %s %s", left.String(), op, right.String()),
+		)
 	}
 }
 

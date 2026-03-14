@@ -430,10 +430,10 @@ func (s *StructValue) Type() ValueType {
 
 func (s *StructValue) String() string {
 	if s.TypeName == nil {
-		return "struct"
+		return fmt.Sprintf("struct{%v}", s.Fields)
 	}
 
-	return "struct " + s.TypeName.Name
+	return fmt.Sprintf("%s{%v}", s.TypeName.Name, s.Fields)
 }
 
 type MapValue struct {
