@@ -56,9 +56,13 @@ var compoundOps = map[token.TokenType]string{
 	token.SUB_ASSIGN:   "-",
 	token.MUL_ASSIGN:   "*",
 	token.SLASH_ASSIGN: "/",
+	token.MOD_ASSIGN:   "%",
 
-	token.INC: "+",
-	token.DEC: "-",
+	token.AND_ASSIGN: "&",
+	token.OR_ASSIGN:  "|",
+	token.XOR_ASSIGN: "^",
+	token.SHL_ASSIGN: "<<",
+	token.SHR_ASSIGN: ">>",
 }
 
 func fileExists(path string) bool {

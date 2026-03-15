@@ -181,6 +181,14 @@ func (l *Lexer) skipMultiLineComment() {
 	}
 }
 
+func (l *Lexer) match(ch byte) bool {
+	if l.peekChar() == ch {
+		l.readChar()
+		return true
+	}
+	return false
+}
+
 func (l *Lexer) NextToken() token.Token {
 	hadWhiteSpace := l.skipWhitespace()
 
@@ -191,8 +199,7 @@ func (l *Lexer) NextToken() token.Token {
 		tok = token.Token{Type: token.NEWLINE, Literal: "NEWLINE", Line: l.line, Column: l.column, HadWhitespaceBefore: hadWhiteSpace}
 
 	case '=':
-		if l.peekChar() == '=' {
-			l.readChar()
+		if l.match('=') {
 			tok = token.Token{Type: token.EQ, Literal: "==", Line: l.line, Column: l.column, HadWhitespaceBefore: hadWhiteSpace}
 		} else {
 			tok = token.Token{Type: token.ASSIGN, Literal: "=", Line: l.line, Column: l.column, HadWhitespaceBefore: hadWhiteSpace}
@@ -201,8 +208,7 @@ func (l *Lexer) NextToken() token.Token {
 		if l.peekChar() == '+' {
 			l.readChar()
 			tok = token.Token{Type: token.INC, Literal: "++", Line: l.line, Column: l.column, HadWhitespaceBefore: hadWhiteSpace}
-		} else if l.peekChar() == '=' {
-			l.readChar()
+		} else if l.match('=') {
 			tok = token.Token{Type: token.PLUS_ASSIGN, Literal: "+=", Line: l.line, Column: l.column, HadWhitespaceBefore: hadWhiteSpace}
 		} else {
 			tok = token.Token{Type: token.PLUS, Literal: "+", Line: l.line, Column: l.column, HadWhitespaceBefore: hadWhiteSpace}
@@ -212,8 +218,7 @@ func (l *Lexer) NextToken() token.Token {
 		if l.peekChar() == '-' {
 			l.readChar()
 			tok = token.Token{Type: token.DEC, Literal: "--", Line: l.line, Column: l.column, HadWhitespaceBefore: hadWhiteSpace}
-		} else if l.peekChar() == '=' {
-			l.readChar()
+		} else if l.match('=') {
 			tok = token.Token{Type: token.SUB_ASSIGN, Literal: "-=", Line: l.line, Column: l.column, HadWhitespaceBefore: hadWhiteSpace}
 		} else {
 			tok = token.Token{Type: token.SUB, Literal: "-", Line: l.line, Column: l.column, HadWhitespaceBefore: hadWhiteSpace}
@@ -228,8 +233,7 @@ func (l *Lexer) NextToken() token.Token {
 		} else if l.peekChar() == '*' {
 			l.skipMultiLineComment()
 			return l.NextToken()
-		} else if l.peekChar() == '=' {
-			l.readChar()
+		} else if l.match('=') {
 			tok = token.Token{Type: token.SLASH_ASSIGN, Literal: "/=", Line: l.line, Column: l.column, HadWhitespaceBefore: hadWhiteSpace}
 		} else {
 			tok = token.Token{Type: token.SLASH, Literal: "/", Line: l.line, Column: l.column, HadWhitespaceBefore: hadWhiteSpace}
@@ -242,8 +246,7 @@ func (l *Lexer) NextToken() token.Token {
 	case ',':
 		tok = token.Token{Type: token.COMMA, Literal: ",", Line: l.line, Column: l.column, HadWhitespaceBefore: hadWhiteSpace}
 	case ':':
-		if l.peekChar() == '=' {
-			l.readChar()
+		if l.match('=') {
 			tok = token.Token{Type: token.WALRUS, Literal: ":=", Line: l.line, Column: l.column, HadWhitespaceBefore: hadWhiteSpace}
 		} else {
 			tok = token.Token{Type: token.COLON, Literal: ":", Line: l.line, Column: l.column, HadWhitespaceBefore: hadWhiteSpace}
@@ -257,67 +260,78 @@ func (l *Lexer) NextToken() token.Token {
 			return l.readFloatStartingWithDot(hadWhiteSpace)
 		}
 
-		if l.peekChar() == '.' {
-			if l.peekSecondChar() == '.' {
-				l.readChar()
-				l.readChar()
+		if l.match('.') {
+			if l.match('.') {
 				tok = token.Token{Type: token.ELLIPSIS, Literal: "...", Line: line, Column: col, HadWhitespaceBefore: hadWhiteSpace}
 			} else {
-				l.readChar()
 				tok = token.Token{Type: token.DUODOT, Literal: "..", Line: line, Column: col, HadWhitespaceBefore: hadWhiteSpace}
 			}
 		} else {
 			tok = token.Token{Type: token.DOT, Literal: ".", Line: line, Column: col, HadWhitespaceBefore: hadWhiteSpace}
 		}
 	case '*':
-		if l.peekChar() == '=' {
-			l.readChar()
+		if l.match('=') {
 			tok = token.Token{Type: token.MUL_ASSIGN, Literal: "*=", Line: l.line, Column: l.column, HadWhitespaceBefore: hadWhiteSpace}
 		} else {
 			tok = token.Token{Type: token.MUL, Literal: "*", Line: l.line, Column: l.column, HadWhitespaceBefore: hadWhiteSpace}
 		}
 	case '%':
-		tok = token.Token{Type: token.MOD, Literal: "%", Line: l.line, Column: l.column, HadWhitespaceBefore: hadWhiteSpace}
+		if l.match('=') {
+			tok = token.Token{Type: token.MOD_ASSIGN, Literal: "%=", Line: l.line, Column: l.column, HadWhitespaceBefore: hadWhiteSpace}
+		} else {
+			tok = token.Token{Type: token.MOD, Literal: "%", Line: l.line, Column: l.column, HadWhitespaceBefore: hadWhiteSpace}
+		}
 	case '<':
-		if l.peekChar() == '=' {
-			l.readChar()
+		if l.match('=') {
 			tok = token.Token{Type: token.LTE, Literal: "<=", Line: l.line, Column: l.column, HadWhitespaceBefore: hadWhiteSpace}
-		} else if l.peekChar() == '<' {
-			l.readChar()
-			tok = token.Token{Type: token.SHL, Literal: "<<", Line: l.line, Column: l.column, HadWhitespaceBefore: hadWhiteSpace}
+		} else if l.match('<') {
+			if l.match('=') {
+				tok = token.Token{Type: token.SHL_ASSIGN, Literal: "<<=", Line: l.line, Column: l.column, HadWhitespaceBefore: hadWhiteSpace}
+			} else {
+				tok = token.Token{Type: token.SHL, Literal: "<<", Line: l.line, Column: l.column, HadWhitespaceBefore: hadWhiteSpace}
+			}
 		} else {
 			tok = token.Token{Type: token.LT, Literal: "<", Line: l.line, Column: l.column, HadWhitespaceBefore: hadWhiteSpace}
 		}
 	case '>':
-		if l.peekChar() == '=' {
-			l.readChar()
+		if l.match('=') {
 			tok = token.Token{Type: token.GTE, Literal: ">=", Line: l.line, Column: l.column, HadWhitespaceBefore: hadWhiteSpace}
-		} else if l.peekChar() == '>' {
-			l.readChar()
-			tok = token.Token{Type: token.SHR, Literal: ">>", Line: l.line, Column: l.column, HadWhitespaceBefore: hadWhiteSpace}
+		} else if l.match('>') {
+			if l.match('=') {
+				tok = token.Token{Type: token.SHR_ASSIGN, Literal: ">>=", Line: l.line, Column: l.column, HadWhitespaceBefore: hadWhiteSpace}
+			} else {
+				tok = token.Token{Type: token.SHR, Literal: ">>", Line: l.line, Column: l.column, HadWhitespaceBefore: hadWhiteSpace}
+			}
 		} else {
 			tok = token.Token{Type: token.GT, Literal: ">", Line: l.line, Column: l.column, HadWhitespaceBefore: hadWhiteSpace}
 		}
 	case '!':
-		if l.peekChar() == '=' {
-			l.readChar()
+		if l.match('=') {
 			tok = token.Token{Type: token.NEQ, Literal: "!=", Line: l.line, Column: l.column, HadWhitespaceBefore: hadWhiteSpace}
 		} else {
 			tok = token.Token{Type: token.BANG, Literal: "!", Line: l.line, Column: l.column, HadWhitespaceBefore: hadWhiteSpace}
 		}
 	case '&':
-		if l.peekChar() == '&' {
-			l.readChar()
+		if l.match('&') {
 			tok = token.Token{Type: token.LAND, Literal: "&&", Line: l.line, Column: l.column, HadWhitespaceBefore: hadWhiteSpace}
+		} else if l.match('=') {
+			tok = token.Token{Type: token.AND_ASSIGN, Literal: "&=", Line: l.line, Column: l.column, HadWhitespaceBefore: hadWhiteSpace}
 		} else {
 			tok = token.Token{Type: token.AND, Literal: "&", Line: l.line, Column: l.column, HadWhitespaceBefore: hadWhiteSpace}
 		}
 	case '|':
-		if l.peekChar() == '|' {
-			l.readChar()
+		if l.match('|') {
 			tok = token.Token{Type: token.LOR, Literal: "||", Line: l.line, Column: l.column, HadWhitespaceBefore: hadWhiteSpace}
+		} else if l.match('=') {
+			tok = token.Token{Type: token.OR_ASSIGN, Literal: "|=", Line: l.line, Column: l.column, HadWhitespaceBefore: hadWhiteSpace}
 		} else {
 			tok = token.Token{Type: token.OR, Literal: "|", Line: l.line, Column: l.column, HadWhitespaceBefore: hadWhiteSpace}
+		}
+	case '^':
+		if l.match('=') {
+			tok = token.Token{Type: token.XOR_ASSIGN, Literal: "^=", Line: l.line, Column: l.column, HadWhitespaceBefore: hadWhiteSpace}
+		} else {
+			tok = token.Token{Type: token.XOR, Literal: "^", Line: l.line, Column: l.column, HadWhitespaceBefore: hadWhiteSpace}
 		}
 	case 0:
 		tok = token.Token{Type: token.EOF, Literal: "", Line: l.line, Column: l.column, HadWhitespaceBefore: hadWhiteSpace}

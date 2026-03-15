@@ -157,7 +157,13 @@ func (p *Parser) isAssignToken(t token.TokenType) bool {
 		token.PLUS_ASSIGN,
 		token.SUB_ASSIGN,
 		token.MUL_ASSIGN,
-		token.SLASH_ASSIGN:
+		token.SLASH_ASSIGN,
+		token.MOD_ASSIGN,
+		token.AND_ASSIGN,
+		token.OR_ASSIGN,
+		token.XOR_ASSIGN,
+		token.SHL_ASSIGN,
+		token.SHR_ASSIGN:
 		return true
 	default:
 		return false
