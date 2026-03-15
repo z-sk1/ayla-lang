@@ -11,6 +11,7 @@ import (
 
 	"github.com/z-sk1/ayla-lang/lexer"
 	"github.com/z-sk1/ayla-lang/parser"
+	"github.com/z-sk1/ayla-lang/token"
 )
 
 type Environment struct {
@@ -48,6 +49,13 @@ type Variable struct {
 	Value    Value
 	Lifetime int
 	isConst  bool
+}
+
+var compoundOps = map[token.TokenType]string{
+	token.PLUS_ASSIGN:  "+",
+	token.SUB_ASSIGN:   "-",
+	token.MUL_ASSIGN:   "*",
+	token.SLASH_ASSIGN: "/",
 }
 
 func fileExists(path string) bool {
@@ -770,9 +778,33 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		}
 
 		for idx := range targets {
-			err := targets[idx].Set(i, copyValue(values[idx]))
-			if err != nil {
-				return SignalNone{}, err
+			if op, ok := compoundOps[stmt.Op]; ok {
+				cur, err := targets[idx].Get(i)
+				if err != nil {
+					return SignalNone{}, err
+				}
+
+				res, err := i.evalInfix(
+					&parser.InfixExpression{
+						NodeBase: stmt.NodeBase,
+						Left:     stmt.Targets[idx],
+						Right:    stmt.Values[idx],
+						Operator: op,
+					},
+					cur,
+					op,
+					values[idx],
+				)
+				if err != nil {
+					return SignalNone{}, err
+				}
+
+				err = targets[idx].Set(i, res)
+			} else {
+				err := targets[idx].Set(i, copyValue(values[idx]))
+				if err != nil {
+					return SignalNone{}, err
+				}
 			}
 		}
 
@@ -2598,7 +2630,7 @@ func evalIntInfix(node *parser.InfixExpression, left IntValue, op string, right 
 			return NilValue{}, NewRuntimeError(node, "undefined: division by zero")
 		}
 
-		return FloatValue{V: float64(left.V) / float64(right.V)}, nil
+		return IntValue{V: left.V / right.V}, nil
 
 	case "%":
 		if right.V == 0 {

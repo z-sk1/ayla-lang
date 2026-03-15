@@ -150,6 +150,20 @@ func (p *Parser) isTypeToken(t token.TokenType) bool {
 	}
 }
 
+func (p *Parser) isAssignToken(t token.TokenType) bool {
+	switch t {
+	case
+		token.ASSIGN,
+		token.PLUS_ASSIGN,
+		token.SUB_ASSIGN,
+		token.MUL_ASSIGN,
+		token.SLASH_ASSIGN:
+		return true
+	default:
+		return false
+	}
+}
+
 func New(l *lexer.Lexer) *Parser {
 	p := &Parser{
 		l: l,
@@ -900,7 +914,8 @@ func (p *Parser) parseAssignOrExprStatement() Statement {
 
 	exprs := p.parseExpressionList()
 
-	if p.peekTok.Type == token.ASSIGN {
+	if p.isAssignToken(p.peekTok.Type) {
+		op := p.peekTok.Type
 		p.nextToken() // =
 		p.nextToken()
 
@@ -909,6 +924,7 @@ func (p *Parser) parseAssignOrExprStatement() Statement {
 		return &AssignmentStatement{
 			NodeBase: NodeBase{Token: p.curTok},
 			Targets:  exprs,
+			Op:       op,
 			Values:   values,
 		}
 	}

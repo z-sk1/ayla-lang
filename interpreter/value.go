@@ -102,6 +102,7 @@ type Value interface {
 
 type Assignable interface {
 	Set(*Interpreter, Value) error
+	Get(*Interpreter) (Value, error)
 }
 
 type VariableTarget struct {
@@ -131,6 +132,15 @@ func (v VariableTarget) Set(i *Interpreter, val Value) error {
 	return nil
 }
 
+func (v VariableTarget) Get(i *Interpreter) (Value, error) {
+	val, ok, _ := i.Env.Get(v.Name)
+	if !ok {
+		return NilValue{}, fmt.Errorf("undefined variable: %s", v.Name)
+	}
+
+	return val, nil
+}
+
 type MemberTarget struct {
 	Struct    *StructValue
 	Field     string
@@ -157,35 +167,52 @@ func (m MemberTarget) Set(i *Interpreter, val Value) error {
 	return nil
 }
 
+func (m MemberTarget) Get(i *Interpreter) (Value, error) {
+	val, ok := m.Struct.Fields[m.Field]
+	if !ok {
+		return NilValue{}, fmt.Errorf("unknown field %s", m.Field)
+	}
+
+	return val, nil
+}
+
 type ArrayIndexTarget struct {
 	Array    *ArrayValue
 	Index    int
 	ElemType *TypeInfo
 }
 
-func (t ArrayIndexTarget) Set(i *Interpreter, val Value) error {
-	if t.Index < 0 || t.Index >= len(t.Array.Elements) {
-		return fmt.Errorf("index %d out of bounds", t.Index)
+func (a ArrayIndexTarget) Set(i *Interpreter, val Value) error {
+	if a.Index < 0 || a.Index >= len(a.Array.Elements) {
+		return fmt.Errorf("index %d out of bounds", a.Index)
 	}
 
 	valType := unwrapAlias(i.typeInfoFromValue(val))
 
-	if t.ElemType.Kind != TypeAny {
-		if !typesAssignable(valType, t.ElemType) {
+	if a.ElemType.Kind != TypeAny {
+		if !typesAssignable(valType, a.ElemType) {
 			return fmt.Errorf(
 				"array element expected %s but got %s",
-				t.ElemType.Name,
+				a.ElemType.Name,
 				valType.Name,
 			)
 		}
 
-		if err := validateRange(nil, val, t.ElemType); err != nil {
+		if err := validateRange(nil, val, a.ElemType); err != nil {
 			return err
 		}
 	}
 
-	t.Array.Elements[t.Index] = val
+	a.Array.Elements[a.Index] = val
 	return nil
+}
+
+func (a ArrayIndexTarget) Get(i *Interpreter) (Value, error) {
+	if a.Index < 0 || a.Index >= len(a.Array.Elements) {
+		return NilValue{}, fmt.Errorf("index %d out of bounds", a.Index)
+	}
+
+	return a.Array.Elements[a.Index], nil
 }
 
 type MapIndexTarget struct {
@@ -195,45 +222,53 @@ type MapIndexTarget struct {
 	ValueType *TypeInfo
 }
 
-func (t MapIndexTarget) Set(i *Interpreter, val Value) error {
-	keyType := unwrapAlias(i.typeInfoFromValue(t.Key))
+func (m MapIndexTarget) Set(i *Interpreter, val Value) error {
+	keyType := unwrapAlias(i.typeInfoFromValue(m.Key))
 
-	if t.KeyType.Kind == TypeAny {
-		if !isComparableValue(t.Key) {
+	if m.KeyType.Kind == TypeAny {
+		if !isComparableValue(m.Key) {
 			return fmt.Errorf("value of this type cannot be used as map key")
 		}
 	} else {
-		if !typesAssignable(keyType, t.KeyType) {
+		if !typesAssignable(keyType, m.KeyType) {
 			return fmt.Errorf(
-				"map index expected %s but got %s",
-				t.KeyType.Name,
+				"map key expected %s but got %s",
+				m.KeyType.Name,
 				keyType.Name,
 			)
 		}
 
-		if err := validateRange(nil, t.Key, t.KeyType); err != nil {
+		if err := validateRange(nil, m.Key, m.KeyType); err != nil {
 			return err
 		}
 	}
 
 	valType := unwrapAlias(i.typeInfoFromValue(val))
 
-	if t.ValueType.Kind != TypeAny {
-		if !typesAssignable(valType, t.ValueType) {
+	if m.ValueType.Kind != TypeAny {
+		if !typesAssignable(valType, m.ValueType) {
 			return fmt.Errorf(
 				"map value expected %s but got %s",
-				t.ValueType.Name,
+				m.ValueType.Name,
 				valType.Name,
 			)
 		}
 
-		if err := validateRange(nil, val, t.ValueType); err != nil {
+		if err := validateRange(nil, val, m.ValueType); err != nil {
 			return err
 		}
 	}
 
-	t.Map.Entries[t.Key] = val
+	m.Map.Entries[m.Key] = val
 	return nil
+}
+
+func (m MapIndexTarget) Get(i *Interpreter) (Value, error) {
+	if val, ok := m.Map.Entries[m.Key]; ok {
+		return val, nil
+	}
+
+	return NilValue{}, fmt.Errorf("unknown key: '%s'", m.Key.String())
 }
 
 type PointerTarget struct {
@@ -243,6 +278,10 @@ type PointerTarget struct {
 func (p PointerTarget) Set(i *Interpreter, val Value) error {
 	p.Ptr.Target.Value = val
 	return nil
+}
+
+func (p PointerTarget) Get(i *Interpreter) (Value, error) {
+	return p.Ptr.Target.Value, nil
 }
 
 type ControlSignal any

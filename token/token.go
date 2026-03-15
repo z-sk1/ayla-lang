@@ -29,6 +29,14 @@ const (
 	MUL    = "*"
 	MOD    = "%"
 
+	PLUS_ASSIGN  = "+="
+	SUB_ASSIGN   = "-="
+	SLASH_ASSIGN = "/="
+	MUL_ASSIGN   = "*="
+
+	INC = "++"
+	DEC = "--"
+
 	EQ  = "=="
 	NEQ = "!="
 	LT  = "<"

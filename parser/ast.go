@@ -139,6 +139,7 @@ type MultiConstStatement struct {
 type AssignmentStatement struct {
 	NodeBase
 	Targets []Expression
+	Op      token.TokenType
 	Values  []Expression
 }
 
