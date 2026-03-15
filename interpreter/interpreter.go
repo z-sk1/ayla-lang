@@ -56,6 +56,9 @@ var compoundOps = map[token.TokenType]string{
 	token.SUB_ASSIGN:   "-",
 	token.MUL_ASSIGN:   "*",
 	token.SLASH_ASSIGN: "/",
+
+	token.INC: "+",
+	token.DEC: "-",
 }
 
 func fileExists(path string) bool {
@@ -1014,7 +1017,6 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		oldEnv := i.Env
 
 		i.Env = loopEnv
-		fmt.Printf("Init stmt type: %T\n", stmt.Init)
 		_, err := i.EvalStatement(stmt.Init)
 		if err != nil {
 			return SignalNone{}, err
@@ -1529,6 +1531,14 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 
 		return i.evalPrefix(expr, expr.Operator, right)
 
+	case *parser.PostfixExpression:
+		left, err := i.EvalExpression(expr.Left)
+		if err != nil {
+			return NilValue{}, err
+		}
+
+		return i.evalPostfix(expr, left, expr.Operator)
+
 	case *parser.GroupedExpression:
 		return i.EvalExpression(expr.Expression)
 
@@ -1986,9 +1996,9 @@ func (i *Interpreter) evalArgs(args []parser.Expression) ([]Value, error) {
 	var values []Value
 
 	for _, arg := range args {
-		if spread, ok := arg.(*parser.SpreadExpression); ok {
+		if spread, ok := arg.(*parser.PostfixExpression); ok && spread.Operator == "..." {
 
-			v, err := i.EvalExpression(spread.Expression)
+			v, err := i.EvalExpression(spread.Left)
 			if err != nil {
 				return nil, err
 			}
@@ -2851,8 +2861,8 @@ func evalStructInfix(node *parser.InfixExpression, left *StructValue, op string,
 	}
 }
 
-func (i *Interpreter) evalPrefix(node *parser.PrefixExpression, operator string, right Value) (Value, error) {
-	switch operator {
+func (i *Interpreter) evalPrefix(node *parser.PrefixExpression, op string, right Value) (Value, error) {
+	switch op {
 
 	case "!":
 		rTruthy, err := isTruthy(right)
@@ -2895,7 +2905,53 @@ func (i *Interpreter) evalPrefix(node *parser.PrefixExpression, operator string,
 		return ptr.Target.Value, nil
 	}
 
-	return NilValue{}, NewRuntimeError(node, "unknown prefix operator")
+	return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unknown prefix operator: %s", node.Operator))
+}
+
+func (i *Interpreter) evalPostfix(node *parser.PostfixExpression, left Value, op string) (Value, error) {
+	switch op {
+	case "++", "--":
+		target, err := i.resolveAssignableTarget(node.Left)
+		if err != nil {
+			return NilValue{}, err
+		}
+
+		cur, err := target.Get(i)
+		if err != nil {
+			return NilValue{}, err
+		}
+
+		one := IntValue{V: 1}
+
+		var infixOp string
+		if op == "++" {
+			infixOp = "+"
+		} else {
+			infixOp = "-"
+		}
+
+		res, err := i.evalInfix(
+			&parser.InfixExpression{
+				NodeBase: node.NodeBase,
+				Operator: infixOp,
+			},
+			cur,
+			infixOp,
+			one,
+		)
+		if err != nil {
+			return NilValue{}, err
+		}
+
+		err = target.Set(i, res)
+		if err != nil {
+			return NilValue{}, err
+		}
+
+		return cur, nil
+	}
+
+	return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unknown postfix operator: %s", node.Operator))
 }
 
 func isTruthy(val Value) (bool, error) {

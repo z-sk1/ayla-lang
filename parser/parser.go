@@ -2262,13 +2262,6 @@ func (p *Parser) parseArgList(end token.TokenType) []Expression {
 	for {
 		expr := p.parseExpression(LOWEST)
 
-		if p.peekTok.Type == token.ELLIPSIS {
-			p.nextToken()
-			expr = &SpreadExpression{
-				Expression: expr,
-			}
-		}
-
 		list = append(list, expr)
 
 		p.consumeTerminators()
@@ -2334,11 +2327,12 @@ func (p *Parser) parseExpression(precedence int) Expression {
 			p.nextToken()
 			left = p.parseDotExpression(left)
 
-		case token.ELLIPSIS:
+		case token.ELLIPSIS, token.INC, token.DEC:
 			p.nextToken()
-			left = &SpreadExpression{
-				NodeBase:   NodeBase{Token: p.curTok},
-				Expression: left,
+			left = &PostfixExpression{
+				NodeBase: NodeBase{Token: p.curTok},
+				Left:     left,
+				Operator: p.curTok.Literal,
 			}
 
 		case token.IN:

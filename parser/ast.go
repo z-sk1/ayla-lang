@@ -77,7 +77,10 @@ var precedences = map[token.TokenType]int{
 	token.DOT:      MEMBER,
 	token.LPAREN:   CALL,
 	token.LBRACKET: INDEX,
+
 	token.ELLIPSIS: POSTFIX,
+	token.INC:      POSTFIX,
+	token.DEC:      POSTFIX,
 }
 
 type VarStatement struct {
@@ -453,7 +456,8 @@ type InExpression struct {
 	Right Expression
 }
 
-type SpreadExpression struct {
+type PostfixExpression struct {
 	NodeBase
-	Expression Expression
+	Left     Expression
+	Operator string
 }
