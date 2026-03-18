@@ -5,11 +5,26 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strconv"
 	"strings"
 
 	"github.com/z-sk1/ayla-lang/parser"
 )
+
+type Error struct {
+	Message string
+}
+
+func (e Error) Error() string {
+	return e.Message
+}
+
+func (e Error) Type() ValueType {
+	return ERROR
+}
+
+func (e Error) String() string {
+	return e.Message
+}
 
 func initBuiltinTypes(typeEnv map[string]TypeValue) {
 	typeEnv["int"] = TypeValue{
@@ -61,7 +76,16 @@ func initBuiltinTypes(typeEnv map[string]TypeValue) {
 	typeEnv["error"] = TypeValue{
 		TypeInfo: &TypeInfo{
 			Name: "error",
-			Kind: TypeError,
+			Kind: TypeInterface,
+			Methods: map[string]*Func{
+				"Error": &Func{
+					TypeName: &TypeInfo{
+						Kind:    TypeFunc,
+						Params:  []*TypeInfo{},
+						Returns: []*TypeInfo{typeEnv["string"].TypeInfo},
+					},
+				},
+			},
 		},
 	}
 }
@@ -79,141 +103,16 @@ func (i *Interpreter) registerNativeModules() {
 func (i *Interpreter) registerBuiltins() {
 	env := i.Env
 
-	env.builtins["toInt"] = &BuiltinFunc{
-		Name:  "toInt",
-		Arity: 1,
-		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			v := args[0]
-			v = unwrapNamed(v)
-
-			switch v.Type() {
-			case INT:
-				return TupleValue{Values: []Value{IntValue{V: v.(IntValue).V}, NilValue{}}}, nil
-			case FLOAT:
-				return TupleValue{Values: []Value{IntValue{V: int(v.(FloatValue).V)}, NilValue{}}}, nil
-			case BOOL:
-				if v.(BoolValue).V {
-					return TupleValue{Values: []Value{IntValue{V: 1}, NilValue{}}}, nil
-				}
-				return TupleValue{Values: []Value{IntValue{V: 0}, NilValue{}}}, nil
-			case STRING:
-				n, err := strconv.Atoi(v.(StringValue).V)
-				if err != nil {
-					return TupleValue{Values: []Value{NilValue{}, ErrorValue{
-						V: NewRuntimeError(node, fmt.Sprintf("could not parse string to int: %s", err.Error())),
-					}}}, nil
-				}
-				return TupleValue{Values: []Value{IntValue{V: n}, NilValue{}}}, nil
-			default:
-				return TupleValue{Values: []Value{NilValue{}, ErrorValue{
-					V: NewRuntimeError(node, "unsupported toInt() parse"),
-				}}}, nil
-			}
-		},
-	}
-
-	env.builtins["toFloat"] = &BuiltinFunc{
-		Name:  "toFloat",
-		Arity: 1,
-		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			v := args[0]
-			v = unwrapNamed(v)
-
-			switch v.Type() {
-			case FLOAT:
-				return TupleValue{Values: []Value{FloatValue{V: v.(FloatValue).V}, NilValue{}}}, nil
-			case INT:
-				return TupleValue{Values: []Value{FloatValue{V: float64(v.(IntValue).V)}, NilValue{}}}, nil
-			case BOOL:
-				if v.(BoolValue).V {
-					return TupleValue{Values: []Value{FloatValue{V: 1.0}, NilValue{}}}, nil
-				}
-				return TupleValue{Values: []Value{FloatValue{V: 0.0}, NilValue{}}}, nil
-			case STRING:
-				n, err := strconv.ParseFloat(v.(StringValue).V, 64)
-				if err != nil {
-					return TupleValue{Values: []Value{NilValue{}, ErrorValue{
-						V: NewRuntimeError(node, "could not convert string to float"),
-					}}}, nil
-				}
-				return TupleValue{Values: []Value{FloatValue{V: n}, NilValue{}}}, nil
-			default:
-				return TupleValue{Values: []Value{NilValue{}, ErrorValue{
-					V: NewRuntimeError(node, "unsupported toFloat() parse"),
-				}}}, nil
-			}
-		},
-	}
-
-	env.builtins["toString"] = &BuiltinFunc{
-		Name:  "toString",
-		Arity: 1,
-		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			v := args[0]
-			v = unwrapNamed(v)
-
-			switch v.Type() {
-			case INT,
-				FLOAT,
-				STRING,
-				BOOL,
-				ARR,
-				STRUCT,
-				TUPLE,
-				NIL:
-				return TupleValue{Values: []Value{StringValue{V: v.String()}}}, nil
-			default:
-				return TupleValue{Values: []Value{NilValue{}, ErrorValue{
-					V: NewRuntimeError(node, "unsupported toString() parse"),
-				}}}, nil
-			}
-
-		},
-	}
-
-	env.builtins["toBool"] = &BuiltinFunc{
-		Name:  "toBool",
-		Arity: 1,
-		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			v := args[0]
-			v = unwrapNamed(v)
-
-			switch v.Type() {
-			case BOOL:
-				return TupleValue{Values: []Value{BoolValue{V: v.(BoolValue).V}, NilValue{}}}, nil
-			case INT:
-				return TupleValue{Values: []Value{BoolValue{V: v.(IntValue).V != 0}, NilValue{}}}, nil
-			case FLOAT:
-				return TupleValue{Values: []Value{BoolValue{V: v.(FloatValue).V != 0}, NilValue{}}}, nil
-			case STRING:
-				s := strings.ToLower(v.(StringValue).V)
-				if s == "true" || s == "yes" || s == "1" {
-					return TupleValue{Values: []Value{BoolValue{V: true}, NilValue{}}}, nil
-				}
-				if s == "false" || s == "no" || s == "0" || s == "" {
-					return TupleValue{Values: []Value{BoolValue{V: false}, NilValue{}}}, nil
-				}
-				return TupleValue{Values: []Value{NilValue{}, ErrorValue{
-					V: NewRuntimeError(node, "unsupported toBool() parse"),
-				}}}, nil
-			default:
-				return TupleValue{Values: []Value{NilValue{}, ErrorValue{
-					V: NewRuntimeError(node, "unsupported toBool() parse"),
-				}}}, nil
-			}
-		},
-	}
-
 	env.builtins["ord"] = &BuiltinFunc{
 		Name:  "ord",
 		Arity: 1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			s, ok := args[0].(StringValue)
-			if !ok {
-				return NilValue{}, NewRuntimeError(node, "ord expects string")
+			s, err := argString(node, args, 0, "ord")
+			if err != nil {
+				return NilValue{}, err
 			}
 
-			r := []rune(s.V)
+			r := []rune(s)
 			if len(r) != 1 {
 				return NilValue{}, NewRuntimeError(node, "ord expects single character")
 			}
@@ -226,16 +125,12 @@ func (i *Interpreter) registerBuiltins() {
 		Name:  "chr",
 		Arity: 1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			if len(args) != 1 {
-				return NilValue{}, NewRuntimeError(node, "chr expects 1 argument")
+			v, err := argInt(node, args, 0, "chr")
+			if err != nil {
+				return NilValue{}, err
 			}
 
-			v, ok := args[0].(IntValue)
-			if !ok {
-				return NilValue{}, NewRuntimeError(node, "chr expects int")
-			}
-
-			return StringValue{V: string(rune(v.V))}, nil
+			return StringValue{V: string(rune(v))}, nil
 		},
 	}
 
@@ -253,7 +148,7 @@ func (i *Interpreter) registerBuiltins() {
 			case MAP:
 				return IntValue{V: len(v.(MapValue).Entries)}, nil
 			default:
-				return NilValue{}, NewRuntimeError(node, fmt.Sprintf("len() not supported for type %s", string(v.Type())))
+				return NilValue{}, NewRuntimeError(node, fmt.Sprintf("len: type %s not supported", i.typeInfoFromValue(v).Name))
 			}
 		},
 	}
@@ -268,7 +163,7 @@ func (i *Interpreter) registerBuiltins() {
 			case ARR:
 				return IntValue{V: cap(v.(ArrayValue).Elements)}, nil
 			default:
-				return NilValue{}, NewRuntimeError(node, fmt.Sprintf("cap() not supported for type %s", string(v.Type())))
+				return NilValue{}, NewRuntimeError(node, fmt.Sprintf("cap: type %s not supported", i.typeInfoFromValue(v).Name))
 			}
 		},
 	}
@@ -278,12 +173,12 @@ func (i *Interpreter) registerBuiltins() {
 		Arity: -1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
 			if len(args) < 1 {
-				return NilValue{}, NewRuntimeError(node, "make() requires atleast a type arg")
+				return NilValue{}, NewRuntimeError(node, "make: expected at least one argument")
 			}
 
-			typeVal, ok := args[0].(TypeValue)
-			if !ok {
-				return NilValue{}, NewRuntimeError(node, "make([]T, len [, cap]) required")
+			typeVal, err := argType(node, args, 0, "make")
+			if err != nil {
+				return NilValue{}, err
 			}
 
 			ti := typeVal.TypeInfo
@@ -291,18 +186,27 @@ func (i *Interpreter) registerBuiltins() {
 			switch ti.Kind {
 			case TypeArray:
 				if len(args) < 2 {
-					return NilValue{}, NewRuntimeError(node, "make([]T, len [, cap]) required")
+					return NilValue{}, NewRuntimeError(node, "make: expected second argument, length, for arrays")
 				}
 
-				length := args[1].(IntValue).V
+				length, err := argInt(node, args, 1, "make")
+				if err != nil {
+					return NilValue{}, err
+				}
+
 				capacity := length
 
 				if len(args) == 3 {
-					capacity = args[2].(IntValue).V
+					var err error
+					capacity, err = argInt(node, args, 2, "make")
+
+					if err != nil {
+						return NilValue{}, err
+					}
 				}
 
 				if capacity < length {
-					return NilValue{}, NewRuntimeError(node, "capacity must be >= length")
+					return NilValue{}, NewRuntimeError(node, "make: capacity must be >= length")
 				}
 
 				elements := make([]Value, length)
@@ -330,7 +234,7 @@ func (i *Interpreter) registerBuiltins() {
 					ValueType: ti.Value,
 				}, nil
 			default:
-				return NilValue{}, NewRuntimeError(node, "make() only supports slices and maps")
+				return NilValue{}, NewRuntimeError(node, "make: slices, arrays and maps are only supported")
 			}
 		},
 	}
@@ -339,16 +243,17 @@ func (i *Interpreter) registerBuiltins() {
 		Name:  "append",
 		Arity: -1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			slice, ok := args[0].(ArrayValue)
-			if !ok {
-				return NilValue{}, NewRuntimeError(node, "append([]T, ...T) required")
+			slice, err := argArray(node, args, 0, "append")
+			if err != nil {
+				return NilValue{}, err
 			}
+
 			elemType := slice.ElemType
 
 			for idx, arg := range args[1:] {
 				argType := i.typeInfoFromValue(arg)
 				if !typesAssignable(argType, elemType) {
-					return NilValue{}, NewRuntimeError(node, fmt.Sprintf("arg %d expected '%s' but got '%s'", idx, elemType.Name, argType.Name))
+					return NilValue{}, NewRuntimeError(node, fmt.Sprintf("append: arg %d expected '%s' but got '%s'", idx, elemType.Name, argType.Name))
 				}
 
 				slice.Elements = append(slice.Elements, arg)
@@ -377,7 +282,7 @@ func (i *Interpreter) registerBuiltins() {
 			}
 
 			if isConst {
-				return NilValue{}, NewRuntimeError(node, "delete: map must not be a const")
+				return NilValue{}, NewRuntimeError(node, "delete: cannot assign to a constant")
 			}
 
 			expectedTI := args[0].(MapValue).KeyType
@@ -424,8 +329,29 @@ func (i *Interpreter) registerBuiltins() {
 			}
 
 			for _, v := range args {
+				ti := unwrapAlias(i.typeInfoFromValue(v))
+
+				if ti != nil && typesAssignable(ti, i.typeEnv["error"].TypeInfo) {
+					method, ok := i.Env.GetMethod(ti, "Error")
+					if ok {
+						receiver := v
+						if iv, ok := v.(InterfaceValue); ok {
+							receiver = iv.Value
+						}
+
+						res, err := i.callFunction(method, []Value{receiver}, node)
+						if err != nil {
+							return NilValue{}, err
+						}
+
+						fmt.Print(res.String())
+						continue
+					}
+				}
+
 				fmt.Print(v.String())
 			}
+
 			return NilValue{}, nil
 		},
 	}
@@ -434,11 +360,31 @@ func (i *Interpreter) registerBuiltins() {
 		Name:  "putln",
 		Arity: -1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-
-			for i, v := range args {
-				if i > 0 {
+			for idx, v := range args {
+				if idx > 0 {
 					fmt.Print(" ")
 				}
+
+				ti := unwrapAlias(i.typeInfoFromValue(v))
+
+				if ti != nil && typesAssignable(ti, i.typeEnv["error"].TypeInfo) {
+					method, ok := i.Env.GetMethod(ti, "Error")
+					if ok {
+						receiver := v
+						if iv, ok := v.(InterfaceValue); ok {
+							receiver = iv.Value
+						}
+
+						res, err := i.callFunction(method, []Value{receiver}, node)
+						if err != nil {
+							return NilValue{}, err
+						}
+
+						fmt.Print(res.String())
+						continue
+					}
+				}
+
 				fmt.Print(v.String())
 			}
 
@@ -452,15 +398,13 @@ func (i *Interpreter) registerBuiltins() {
 		Arity: -1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
 			if len(args) == 0 {
-				return NilValue{}, NewRuntimeError(node, "putf(format string, t ...thing) expected")
+				return NilValue{}, NewRuntimeError(node, "putf: expected at least one argument")
 			}
 
-			formatVal, ok := args[0].(StringValue)
-			if !ok {
-				return NilValue{}, NewRuntimeError(node, "putf(format string, t... thing) expected")
+			format, err := argString(node, args, 0, "putf")
+			if err != nil {
+				return NilValue{}, err
 			}
-
-			format := formatVal.V
 
 			goArgs := []any{}
 			for _, v := range args[1:] {
@@ -492,8 +436,10 @@ func (i *Interpreter) registerBuiltins() {
 			switch v := args[0].(type) {
 			case StringValue:
 				msg = v.V
-			case ErrorValue:
-				msg = v.V.Error()
+			case InterfaceValue:
+				if typesAssignable(v.TypeInfo, i.typeEnv["error"].TypeInfo) {
+					msg = v.Value.(Error).Error()
+				}
 			default:
 				msg = v.String()
 			}
@@ -507,15 +453,13 @@ func (i *Interpreter) registerBuiltins() {
 		Arity: -1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
 			if len(args) == 0 {
-				return NilValue{}, NewRuntimeError(node, "explodef(format string, t ...thing) expected")
+				return NilValue{}, NewRuntimeError(node, "explodef: expected at least one argument")
 			}
 
-			formatVal, ok := args[0].(StringValue)
-			if !ok {
-				return NilValue{}, NewRuntimeError(node, "explodef(format string, t... thing) expected")
+			format, err := argString(node, args, 0, "explodef")
+			if err != nil {
+				return NilValue{}, err
 			}
-
-			format := formatVal.V
 
 			goArgs := []any{}
 			for _, v := range args[1:] {
@@ -543,11 +487,6 @@ func (i *Interpreter) registerBuiltins() {
 		Name:  "scanln",
 		Arity: -1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-
-			if len(node.Args) == 0 {
-				return NilValue{}, NewRuntimeError(node, "scanln(t ...thing) expected")
-			}
-
 			reader := bufio.NewReader(os.Stdin)
 			line, err := reader.ReadString('\n')
 			if err != nil && err != io.EOF {
@@ -556,31 +495,24 @@ func (i *Interpreter) registerBuiltins() {
 
 			fields := strings.Fields(line)
 
-			if len(fields) < len(node.Args) {
-				return NilValue{}, NewRuntimeError(node, "not enough input values")
+			if len(fields) < len(args) {
+				return NilValue{}, NewRuntimeError(node, "scanln: not enough input values")
 			}
 
-			for idx := 0; idx < len(node.Args) && idx < len(fields); idx++ {
-				arg := node.Args[idx]
-
-				ident, ok := arg.(*parser.Identifier)
+			for idx := 0; idx < len(args) && idx < len(fields); idx++ {
+				ass, ok := args[idx].(Assignable)
 				if !ok {
-					return NilValue{}, NewRuntimeError(node, "scanln: first argument expects a variable name")
+					return NilValue{}, NewRuntimeError(node, "scanln: assignable values expected")
 				}
 
-				varName := ident.Value
-				val, ok, isConst := i.Env.Get(varName)
-				if !ok {
-					return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unknown var: %s", varName))
-				}
-
-				if isConst {
-					return NilValue{}, NewRuntimeError(node, fmt.Sprintf("cannot assign to const: %s", varName))
+				val, err := ass.Get(i)
+				if err != nil {
+					return NilValue{}, NewRuntimeError(node, err.Error())
 				}
 
 				input := fields[idx]
 
-				err := i.Env.assignInput(node, varName, val, input)
+				err = i.assignInput(node, ass, val, input, "scanln")
 				if err != nil {
 					return NilValue{}, err
 				}
@@ -595,39 +527,29 @@ func (i *Interpreter) registerBuiltins() {
 		Arity: -1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
 
-			if len(node.Args) == 0 {
-				return NilValue{}, NewRuntimeError(node, "scan(t ...thing) expected")
-			}
+			reader := bufio.NewReader(os.Stdin)
 
-			for _, arg := range node.Args {
-
-				ident, ok := arg.(*parser.Identifier)
+			for _, arg := range args {
+				ass, ok := arg.(Assignable)
 				if !ok {
-					return NilValue{}, NewRuntimeError(node, "scan(t ...thing) expected")
+					return NilValue{}, NewRuntimeError(node, "scan: assignable values expected")
 				}
 
-				varName := ident.Value
-
-				val, ok, isConst := i.Env.Get(varName)
-				if !ok {
-					return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unknown var: %s", varName))
-				}
-
-				if isConst {
-					return NilValue{}, NewRuntimeError(node, fmt.Sprintf("cannot assign to const: %s", varName))
+				val, err := ass.Get(i)
+				if err != nil {
+					return NilValue{}, NewRuntimeError(node, err.Error())
 				}
 
 				var input string
-				_, err := fmt.Scan(&input)
-
+				_, err = fmt.Fscan(reader, &input)
 				if err != nil {
 					if err == io.EOF {
-						return NilValue{}, NewRuntimeError(node, "unexpected end of input")
+						return NilValue{}, NewRuntimeError(node, "scan: unexpected end of input")
 					}
-					return NilValue{}, err
+					return NilValue{}, NewRuntimeError(node, fmt.Sprintf("scan: %s", err.Error()))
 				}
 
-				err = i.Env.assignInput(node, varName, val, input)
+				err = i.assignInput(node, ass, val, input, "scan")
 				if err != nil {
 					return NilValue{}, err
 				}
@@ -642,79 +564,74 @@ func (i *Interpreter) registerBuiltins() {
 		Arity: -1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
 
-			if len(args) == 0 {
-				return NilValue{}, NewRuntimeError(node, "scanf: atleast 2 arguments expected")
+			if len(args) < 2 {
+				return NilValue{}, NewRuntimeError(node, "scanf: format and variables required")
 			}
 
-			formatVal, ok := args[0].(StringValue)
-			if !ok {
-				return NilValue{}, NewRuntimeError(node, "scanf: first argument must be a string")
+			format, err := argString(node, args, 0, "scanf")
+			if err != nil {
+				return NilValue{}, err
 			}
-
-			_ = formatVal.V // ignore format for now
 
 			reader := bufio.NewReader(os.Stdin)
-			line, _ := reader.ReadString('\n')
 
-			fields := strings.Fields(line)
-			vars := node.Args[1:]
+			var scanArgs []any
+			var setters []func()
 
-			if len(fields) < len(vars) {
-				return NilValue{}, NewRuntimeError(node, "not enough input values")
-			}
+			for _, arg := range args[1:] {
 
-			for idx, arg := range vars {
-
-				ident, ok := arg.(*parser.Identifier)
+				ass, ok := arg.(Assignable)
 				if !ok {
-					return NilValue{}, NewRuntimeError(node, "scanf(format string, t ...thing) expected")
+					return NilValue{}, NewRuntimeError(node, "scanf: assignable value expected")
 				}
 
-				varName := ident.Value
-
-				val, ok, isConst := i.Env.Get(varName)
-				if !ok {
-					return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unknown var: %s", varName))
+				val, err := ass.Get(i)
+				if err != nil {
+					return NilValue{}, err
 				}
-
-				if isConst {
-					return NilValue{}, NewRuntimeError(node, fmt.Sprintf("cannot assign to const: %s", varName))
-				}
-
-				input := fields[idx]
 
 				switch val.(type) {
 
 				case IntValue:
-					n, err := strconv.Atoi(input)
-					if err != nil {
-						return NilValue{}, NewRuntimeError(node, "invalid int input")
-					}
-					i.Env.Set(varName, IntValue{V: n})
+					var v int
+					scanArgs = append(scanArgs, &v)
+					setters = append(setters, func() {
+						ass.Set(i, IntValue{V: v})
+					})
 
 				case FloatValue:
-					f, err := strconv.ParseFloat(input, 64)
-					if err != nil {
-						return NilValue{}, NewRuntimeError(node, "invalid float input")
-					}
-					i.Env.Set(varName, FloatValue{V: f})
+					var v float64
+					scanArgs = append(scanArgs, &v)
+					setters = append(setters, func() {
+						ass.Set(i, FloatValue{V: v})
+					})
 
 				case BoolValue:
-					b, err := strconv.ParseBool(input)
-					if err != nil {
-						return NilValue{}, NewRuntimeError(node, "invalid bool input")
-					}
-					i.Env.Set(varName, BoolValue{V: b})
+					var v bool
+					scanArgs = append(scanArgs, &v)
+					setters = append(setters, func() {
+						ass.Set(i, BoolValue{V: v})
+					})
 
 				case StringValue:
-					i.Env.Set(varName, StringValue{V: input})
-
-				case UninitializedValue, NilValue:
-					return NilValue{}, NewRuntimeError(node, "variable must have a type before scan")
+					var v string
+					scanArgs = append(scanArgs, &v)
+					setters = append(setters, func() {
+						ass.Set(i, StringValue{V: v})
+					})
 
 				default:
-					return NilValue{}, NewRuntimeError(node, "unsupported type")
+					return NilValue{}, NewRuntimeError(node, "scanf: unsupported type")
 				}
+			}
+
+			_, err = fmt.Fscanf(reader, format, scanArgs...)
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			for _, set := range setters {
+				set()
 			}
 
 			return NilValue{}, nil
@@ -725,21 +642,14 @@ func (i *Interpreter) registerBuiltins() {
 		Name:  "scankey",
 		Arity: 1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			ident, ok := node.Args[0].(*parser.Identifier)
+			ass, ok := args[0].(Assignable)
 			if !ok {
-				return NilValue{}, NewRuntimeError(node, "scankey expects a variable")
+				return NilValue{}, NewRuntimeError(node, "scankey: first argument must be an assignable value")
 			}
 
-			varName := ident.Value
-
-			// is it const?
-			v, ok, isConst := i.Env.Get(varName)
-			if ok {
-				if isConst {
-					return NilValue{}, NewRuntimeError(node, fmt.Sprintf("cannot assign to const: %s", varName))
-				}
-			} else {
-				return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unknown var: %s", varName))
+			v, err := ass.Get(i)
+			if err != nil {
+				return NilValue{}, NewRuntimeError(node, err.Error())
 			}
 
 			ch, err := readKey()
@@ -757,10 +667,10 @@ func (i *Interpreter) registerBuiltins() {
 			case TypeInt:
 				newVal = IntValue{V: int(ch)}
 			default:
-				return NilValue{}, NewRuntimeError(node, fmt.Sprintf("scankey only supports int or string variables, got %s", string(v.Type())))
+				return NilValue{}, NewRuntimeError(node, "scankey: unsupported type")
 			}
 
-			i.Env.Set(varName, newVal)
+			ass.Set(i, newVal)
 			return NilValue{}, nil
 		},
 	}

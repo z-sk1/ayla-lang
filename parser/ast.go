@@ -206,8 +206,16 @@ type MapType struct {
 
 func (*MapType) typeNode() {}
 
+type InterfaceType struct {
+	NodeBase
+	Methods []*FuncType
+}
+
+func (*InterfaceType) typeNode() {}
+
 type FuncType struct {
 	NodeBase
+	Name    *Identifier
 	Params  []TypeNode
 	Returns []TypeNode
 }

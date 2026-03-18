@@ -143,6 +143,7 @@ func (p *Parser) isTypeToken(t token.TokenType) bool {
 		token.FUNC,
 		token.IDENT,
 		token.STRUCT,
+		token.INTERFACE,
 		token.MAP:
 		return true
 	default:
@@ -1071,6 +1072,9 @@ func (p *Parser) parseType() TypeNode {
 	case token.STRUCT:
 		base = p.parseStructType()
 
+	case token.INTERFACE:
+		base = p.parseInterfaceType()
+
 	case token.LBRACKET:
 		base = p.parseArrayType()
 
@@ -1177,6 +1181,63 @@ func (p *Parser) parseArrayType() TypeNode {
 	at.Elem = p.parseType()
 
 	return at
+}
+
+func (p *Parser) parseInterfaceType() TypeNode {
+	tok := p.curTok
+
+	if p.peekTok.Type != token.LBRACE {
+		p.addError("expected '{' after interface")
+		return nil
+	}
+
+	p.nextToken() // {
+	p.nextToken() // method
+
+	methods := []*FuncType{}
+	p.consumeTerminators()
+
+	for p.curTok.Type != token.RBRACE {
+
+		if p.curTok.Type != token.IDENT {
+			p.addError("expected method name inside interface type")
+			return nil
+		}
+
+		methodName := &Identifier{
+			NodeBase: NodeBase{Token: p.curTok},
+			Value:    p.curTok.Literal,
+		}
+
+		p.nextToken() // (
+		if p.curTok.Type != token.LPAREN {
+			p.addError("expected '(' after method name")
+			return nil
+		}
+
+		methodParams := p.parseTypeList(token.RPAREN)
+		var methodReturns []TypeNode = nil
+
+		if p.peekTok.Type == token.LPAREN {
+			p.nextToken() // (
+			methodReturns = p.parseTypeList(token.RPAREN)
+		}
+
+		methods = append(methods, &FuncType{
+			NodeBase: NodeBase{Token: p.curTok},
+			Name:     methodName,
+			Params:   methodParams,
+			Returns:  methodReturns,
+		})
+
+		p.nextToken()
+		p.consumeTerminators()
+	}
+
+	return &InterfaceType{
+		NodeBase: NodeBase{Token: tok},
+		Methods:  methods,
+	}
 }
 
 func (p *Parser) parseStructType() TypeNode {

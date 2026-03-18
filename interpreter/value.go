@@ -1,7 +1,6 @@
 package interpreter
 
 import (
-	"errors"
 	"fmt"
 	"math"
 	"sort"
@@ -26,16 +25,18 @@ const (
 	TypeStruct
 	TypeMap
 	TypeEnum
+	TypeInterface
 	TypeNamed
-	TypeError
 	TypeAny
 )
 
 type TypeInfo struct {
-	Name       string
-	Kind       TypeKind
-	Underlying *TypeInfo
-	Alias      bool
+	Name        string
+	Kind        TypeKind
+	Underlying  *TypeInfo
+	Alias       bool
+	Methods     map[string]*Func
+	MethodTypes map[string]*TypeInfo
 
 	// boundaries
 	Min *float64
@@ -93,6 +94,7 @@ const (
 	MODULE      ValueType = "module"
 	NATIVE      ValueType = "native"
 	POINTER     ValueType = "pointer"
+	INTERFACE   ValueType = "interface"
 )
 
 type Value interface {
@@ -125,7 +127,7 @@ func (v VariableTarget) Set(i *Interpreter, val Value) error {
 
 	newVal, err := i.assignWithType(nil, val, expectedTI)
 	if err != nil {
-		return err
+		return fmt.Errorf("%s", err.Error())
 	}
 
 	v.Var.Value = newVal
@@ -371,6 +373,18 @@ func (p *PointerValue) String() string {
 	return fmt.Sprintf("ptr(%p -> %v)", p.Target, p.Target.Value)
 }
 
+type UntypedValue struct {
+	Value Value
+}
+
+func (u UntypedValue) Type() ValueType {
+	return u.Value.Type()
+}
+
+func (u UntypedValue) String() string {
+	return u.Value.String()
+}
+
 type IntValue struct {
 	V int
 }
@@ -423,16 +437,17 @@ func (b BoolValue) String() string {
 	return "no"
 }
 
-type ErrorValue struct {
-	V error
+type InterfaceValue struct {
+	TypeInfo *TypeInfo
+	Value    Value
 }
 
-func (e ErrorValue) Type() ValueType {
-	return ERROR
+func (i InterfaceValue) Type() ValueType {
+	return INTERFACE
 }
 
-func (e ErrorValue) String() string {
-	return e.V.Error()
+func (i InterfaceValue) String() string {
+	return i.TypeInfo.Name
 }
 
 type ArrayValue struct {
@@ -711,6 +726,23 @@ func (i *Interpreter) resolveTypeNode(t parser.TypeNode) (*TypeInfo, error) {
 			Fields: fields,
 		}, nil
 
+	case *parser.InterfaceType:
+		methods := make(map[string]*TypeInfo)
+
+		for _, m := range tn.Methods {
+			fnType, err := i.resolveTypeNode(m)
+			if err != nil {
+				return nil, err
+			}
+
+			methods[m.Name.Value] = fnType
+		}
+
+		return &TypeInfo{
+			Kind:        TypeInterface,
+			MethodTypes: methods,
+		}, nil
+
 	case *parser.ArrayType:
 		elemTI, err := i.resolveTypeNode(tn.Elem)
 		if err != nil {
@@ -877,6 +909,8 @@ func valueTypeOf(ti *TypeInfo) ValueType {
 
 func (i *Interpreter) typeInfoFromValue(v Value) *TypeInfo {
 	switch v := v.(type) {
+	case UntypedValue:
+		return i.typeInfoFromValue(v.Value)
 	case IntValue:
 		return i.typeEnv["int"].TypeInfo
 	case FloatValue:
@@ -885,8 +919,6 @@ func (i *Interpreter) typeInfoFromValue(v Value) *TypeInfo {
 		return i.typeEnv["string"].TypeInfo
 	case BoolValue:
 		return i.typeEnv["bool"].TypeInfo
-	case ErrorValue:
-		return i.typeEnv["error"].TypeInfo
 	case ArrayValue:
 		if v.Fixed {
 			return &TypeInfo{
@@ -919,6 +951,8 @@ func (i *Interpreter) typeInfoFromValue(v Value) *TypeInfo {
 		return v.TypeName
 	case *Func:
 		return v.TypeName
+	case InterfaceValue:
+		return i.typeInfoFromValue(v.Value)
 	case EnumValue:
 		return v.Enum
 	case NamedValue:
@@ -945,8 +979,6 @@ func (i *Interpreter) defaultValueFromTypeInfo(node parser.Node, ti *TypeInfo) (
 		return StringValue{V: ""}, nil
 	case TypeBool:
 		return BoolValue{V: false}, nil
-	case TypeError:
-		return ErrorValue{V: errors.New("")}, nil
 	case TypeArray:
 		if ti.Elem == nil {
 			return NilValue{}, NewRuntimeError(node, "array type missing element type")
@@ -1018,6 +1050,8 @@ func (i *Interpreter) defaultValueFromTypeInfo(node parser.Node, ti *TypeInfo) (
 			Target:   nil,
 			ElemType: ti,
 		}, nil
+	case TypeInterface:
+		return NilValue{}, nil
 	case TypeNamed:
 		return i.defaultValueFromTypeInfo(node, ti.Underlying)
 	default:

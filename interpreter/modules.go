@@ -22,6 +22,7 @@ func expectArgsRange(node parser.Node, args []Value, startRange, endRange int, n
 
 func argInt(node parser.Node, args []Value, i int, name string) (int, error) {
 	v := unwrapNamed(args[i])
+	v = unwrapUntyped(v)
 	iv, ok := v.(IntValue)
 	if !ok {
 		return 0, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be an int", name, i+1))
@@ -30,7 +31,7 @@ func argInt(node parser.Node, args []Value, i int, name string) (int, error) {
 }
 
 func argFloat(node parser.Node, args []Value, i int, name string) (float64, error) {
-	v, ok := toFloat(unwrapNamed(args[i]))
+	v, ok := toFloat(unwrapUntyped(unwrapNamed(args[i])))
 	if !ok {
 		return 0, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be an float", name, i+1))
 	}
@@ -39,6 +40,7 @@ func argFloat(node parser.Node, args []Value, i int, name string) (float64, erro
 
 func argString(node parser.Node, args []Value, i int, name string) (string, error) {
 	v := unwrapNamed(args[i])
+	v = unwrapUntyped(v)
 	iv, ok := v.(StringValue)
 	if !ok {
 		return "", NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be a string", name, i+1))
@@ -48,6 +50,7 @@ func argString(node parser.Node, args []Value, i int, name string) (string, erro
 
 func argBool(node parser.Node, args []Value, i int, name string) (bool, error) {
 	v := unwrapNamed(args[i])
+	v = unwrapUntyped(v)
 	iv, ok := v.(BoolValue)
 	if !ok {
 		return false, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be a boolean", name, i+1))
@@ -62,6 +65,24 @@ func argStruct(node parser.Node, args []Value, i int, name, sname string) (*Stru
 		return nil, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be a %s", name, i+1, sname))
 	}
 	return sv, nil
+}
+
+func argType(node parser.Node, args []Value, i int, name string) (TypeValue, error) {
+	v := unwrapNamed(args[i])
+	tv, ok := v.(TypeValue)
+	if !ok {
+		return TypeValue{}, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be a type signature", name, i+1))
+	}
+	return tv, nil
+}
+
+func argPointer(node parser.Node, args []Value, i int, name string) (*PointerValue, error) {
+	v := unwrapNamed(args[i])
+	pv, ok := v.(*PointerValue)
+	if !ok {
+		return &PointerValue{}, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be a pointer", name, i+1))
+	}
+	return pv, nil
 }
 
 func argArray(node parser.Node, args []Value, i int, name string) (ArrayValue, error) {
@@ -102,8 +123,8 @@ func argVector2(node parser.Node, i *Interpreter, typeEnv map[string]TypeValue, 
 		return rl.Vector2{}, NewRuntimeError(node, name+": argument must be gfx.Vector2")
 	}
 
-	x, _ := toFloat(vecVal.Fields["X"])
-	y, _ := toFloat(vecVal.Fields["Y"])
+	x, _ := toFloat(unwrapUntyped(vecVal.Fields["X"]))
+	y, _ := toFloat(unwrapUntyped(vecVal.Fields["Y"]))
 
 	return rl.Vector2{
 		X: float32(x),
@@ -327,6 +348,37 @@ func LoadRandModule(i *Interpreter) (ModuleValue, error) {
 func LoadFSModule(i *Interpreter) (ModuleValue, error) {
 	env := NewEnvironment(i.Env)
 
+	env.Define("Create", &BuiltinFunc{
+		Name:  "Create",
+		Arity: 1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			path, err := argString(node, args, 0, "fs.Create")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			dir := filepath.Dir(path)
+
+			err = os.MkdirAll(dir, 0755)
+			if err != nil {
+				return InterfaceValue{
+					TypeInfo: i.typeEnv["error"].TypeInfo,
+					Value:    Error{Message: err.Error()},
+				}, nil
+			}
+
+			_, err = os.Create(path)
+			if err != nil {
+				return InterfaceValue{
+					TypeInfo: i.typeEnv["error"].TypeInfo,
+					Value:    Error{Message: err.Error()},
+				}, nil
+			}
+
+			return NilValue{}, nil
+		},
+	}, false)
+
 	env.Define("Write", &BuiltinFunc{
 		Name:  "Write",
 		Arity: 2,
@@ -343,7 +395,10 @@ func LoadFSModule(i *Interpreter) (ModuleValue, error) {
 
 			err = os.WriteFile(path, []byte(content), 0644)
 			if err != nil {
-				return ErrorValue{V: NewRuntimeError(node, err.Error())}, nil
+				return InterfaceValue{
+					TypeInfo: i.typeEnv["error"].TypeInfo,
+					Value:    Error{Message: err.Error()},
+				}, nil
 			}
 
 			return NilValue{}, nil
@@ -362,8 +417,9 @@ func LoadFSModule(i *Interpreter) (ModuleValue, error) {
 				return TupleValue{
 					Values: []Value{
 						NilValue{},
-						ErrorValue{
-							V: NewRuntimeError(node, err.Error()),
+						InterfaceValue{
+							TypeInfo: i.typeEnv["error"].TypeInfo,
+							Value:    Error{Message: err.Error()},
 						},
 					},
 				}, nil
@@ -404,8 +460,9 @@ func LoadFSModule(i *Interpreter) (ModuleValue, error) {
 
 			return TupleValue{Values: []Value{
 				NilValue{},
-				ErrorValue{
-					V: NewRuntimeError(node, err.Error()),
+				InterfaceValue{
+					TypeInfo: i.typeEnv["error"].TypeInfo,
+					Value:    Error{Message: err.Error()},
 				},
 			}}, nil
 		},
@@ -432,16 +489,18 @@ func LoadFSModule(i *Interpreter) (ModuleValue, error) {
 			)
 
 			if err != nil {
-				return ErrorValue{
-					V: NewRuntimeError(node, err.Error()),
+				return InterfaceValue{
+					TypeInfo: i.typeEnv["error"].TypeInfo,
+					Value:    Error{Message: err.Error()},
 				}, nil
 			}
 			defer file.Close()
 
 			_, err = file.WriteString(data)
 			if err != nil {
-				return ErrorValue{
-					V: NewRuntimeError(node, err.Error()),
+				return InterfaceValue{
+					TypeInfo: i.typeEnv["error"].TypeInfo,
+					Value:    Error{Message: err.Error()},
 				}, nil
 			}
 
@@ -481,8 +540,9 @@ func LoadFSModule(i *Interpreter) (ModuleValue, error) {
 				return TupleValue{
 					Values: []Value{
 						NilValue{},
-						ErrorValue{
-							V: NewRuntimeError(node, err.Error()),
+						InterfaceValue{
+							TypeInfo: i.typeEnv["error"].TypeInfo,
+							Value:    Error{Message: err.Error()},
 						},
 					},
 				}, nil
@@ -516,8 +576,9 @@ func LoadFSModule(i *Interpreter) (ModuleValue, error) {
 
 			err = os.MkdirAll(path, 0755)
 			if err != nil {
-				return ErrorValue{
-					V: NewRuntimeError(node, err.Error()),
+				return InterfaceValue{
+					TypeInfo: i.typeEnv["error"].TypeInfo,
+					Value:    Error{Message: err.Error()},
 				}, nil
 			}
 
@@ -539,8 +600,9 @@ func LoadFSModule(i *Interpreter) (ModuleValue, error) {
 				return TupleValue{
 					Values: []Value{
 						NilValue{},
-						ErrorValue{
-							V: NewRuntimeError(node, err.Error()),
+						InterfaceValue{
+							TypeInfo: i.typeEnv["error"].TypeInfo,
+							Value:    Error{Message: err.Error()},
 						},
 					},
 				}, nil
@@ -579,8 +641,9 @@ func LoadFSModule(i *Interpreter) (ModuleValue, error) {
 				return TupleValue{
 					Values: []Value{
 						NilValue{},
-						ErrorValue{
-							V: NewRuntimeError(node, err.Error()),
+						InterfaceValue{
+							TypeInfo: i.typeEnv["error"].TypeInfo,
+							Value:    Error{Message: err.Error()},
 						},
 					},
 				}, nil
@@ -604,8 +667,9 @@ func LoadFSModule(i *Interpreter) (ModuleValue, error) {
 				return TupleValue{
 					Values: []Value{
 						NilValue{},
-						ErrorValue{
-							V: NewRuntimeError(node, err.Error()),
+						InterfaceValue{
+							TypeInfo: i.typeEnv["error"].TypeInfo,
+							Value:    Error{Message: err.Error()},
 						},
 					},
 				}, nil
@@ -634,8 +698,9 @@ func LoadFSModule(i *Interpreter) (ModuleValue, error) {
 				return TupleValue{
 					Values: []Value{
 						NilValue{},
-						ErrorValue{
-							V: NewRuntimeError(node, err.Error()),
+						InterfaceValue{
+							TypeInfo: i.typeEnv["error"].TypeInfo,
+							Value:    Error{Message: err.Error()},
 						},
 					},
 				}, nil
@@ -664,8 +729,9 @@ func LoadFSModule(i *Interpreter) (ModuleValue, error) {
 				return TupleValue{
 					Values: []Value{
 						NilValue{},
-						ErrorValue{
-							V: NewRuntimeError(node, err.Error()),
+						InterfaceValue{
+							TypeInfo: i.typeEnv["error"].TypeInfo,
+							Value:    Error{Message: err.Error()},
 						},
 					},
 				}, nil
@@ -696,8 +762,9 @@ func LoadFSModule(i *Interpreter) (ModuleValue, error) {
 
 			err = os.Rename(old, new)
 			if err != nil {
-				return ErrorValue{
-					V: NewRuntimeError(node, err.Error()),
+				return InterfaceValue{
+					TypeInfo: i.typeEnv["error"].TypeInfo,
+					Value:    Error{Message: err.Error()},
 				}, nil
 			}
 
@@ -721,24 +788,27 @@ func LoadFSModule(i *Interpreter) (ModuleValue, error) {
 
 			in, err := os.Open(src)
 			if err != nil {
-				return ErrorValue{
-					V: NewRuntimeError(node, err.Error()),
+				return InterfaceValue{
+					TypeInfo: i.typeEnv["error"].TypeInfo,
+					Value:    Error{Message: err.Error()},
 				}, nil
 			}
 			defer in.Close()
 
 			out, err := os.Create(dst)
 			if err != nil {
-				return ErrorValue{
-					V: NewRuntimeError(node, err.Error()),
+				return InterfaceValue{
+					TypeInfo: i.typeEnv["error"].TypeInfo,
+					Value:    Error{Message: err.Error()},
 				}, nil
 			}
 			defer out.Close()
 
 			_, err = io.Copy(out, in)
 			if err != nil {
-				return ErrorValue{
-					V: NewRuntimeError(node, err.Error()),
+				return InterfaceValue{
+					TypeInfo: i.typeEnv["error"].TypeInfo,
+					Value:    Error{Message: err.Error()},
 				}, nil
 			}
 

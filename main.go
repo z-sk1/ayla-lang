@@ -141,15 +141,11 @@ func run() {
 		return
 	}
 
-	sig, err := interp.EvalStatements(program)
+	_, err = interp.EvalStatements(program)
 
 	if err != nil {
 		fmt.Printf("\n%s: %v\n", filename, err)
 		return
-	}
-
-	if ev, ok := sig.(interpreter.ErrorValue); ok {
-		fmt.Printf("\n%s: %v\n", filename, ev.V)
 	}
 
 	var elapsed time.Duration

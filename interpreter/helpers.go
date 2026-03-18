@@ -32,7 +32,6 @@ func New(path string) *Interpreter {
 
 	env := &Environment{
 		store:    make(map[string]*Variable),
-		methods:  make(map[string]map[string]*Func),
 		builtins: make(map[string]*BuiltinFunc),
 		defers:   make([]*parser.FuncCall, 0),
 		mu:       sync.RWMutex{},
@@ -214,21 +213,25 @@ func (e *Environment) Set(name string, val Value) Value {
 func (e *Environment) SetMethod(typ *TypeInfo, name string, fn *Func) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	if e.methods[typ.Name] == nil {
-		e.methods[typ.Name] = map[string]*Func{}
+
+	if typ.Methods == nil {
+		typ.Methods = make(map[string]*Func)
 	}
-	e.methods[typ.Name][name] = fn
+
+	typ.Methods[name] = fn
+
+	if typ.MethodTypes == nil {
+		typ.MethodTypes = make(map[string]*TypeInfo)
+	}
+
+	typ.MethodTypes[name] = fn.TypeName
 }
 
 func (e *Environment) GetMethod(typ *TypeInfo, name string) (*Func, bool) {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	for env := e; env != nil; env = env.parent {
-		if m := env.methods[typ.Name]; m != nil {
-			if fn, ok := m[name]; ok {
-				return fn, true
-			}
-		}
+	if fn, ok := typ.Methods[name]; ok {
+		return fn, ok
 	}
 	return nil, false
 }
@@ -282,6 +285,14 @@ func typesAssignable(from, to *TypeInfo) bool {
 		return false
 	}
 
+	if typesIdentical(from, to) {
+		return true
+	}
+
+	if to.Kind == TypeInterface {
+		return implementsInterface(from, to)
+	}
+
 	if from.Kind == to.Kind && (from.Kind == TypeInt || from.Kind == TypeFloat) {
 		if from.Min == nil && from.Max == nil {
 			return true
@@ -292,10 +303,6 @@ func typesAssignable(from, to *TypeInfo) bool {
 		}
 	}
 
-	if typesIdentical(from, to) {
-		return true
-	}
-
 	if to.Kind == TypeAny {
 		return true
 	}
@@ -304,11 +311,10 @@ func typesAssignable(from, to *TypeInfo) bool {
 		return true
 	}
 
-	if to.Kind == TypeNamed {
-		return sameUnderlying(from, to)
-	}
-
 	if from.Kind == TypeNamed {
+		if to.Kind == TypeInterface {
+			return implementsInterface(from, to)
+		}
 		return typesIdentical(from, to)
 	}
 
@@ -456,8 +462,25 @@ func typesIdentical(a, b *TypeInfo) bool {
 }
 
 func (i *Interpreter) promoteValueToType(v Value, ti *TypeInfo) Value {
-	ti = unwrapAlias(ti)
 
+	switch val := v.(type) {
+
+	case UntypedValue:
+		base := val.Value
+
+		converted := i.promoteValueToType(base, ti)
+
+		if ti.Kind == TypeNamed {
+			return NamedValue{
+				TypeName: ti,
+				Value:    converted,
+			}
+		}
+
+		return converted
+	}
+
+	ti = unwrapAlias(ti)
 	actual := i.typeInfoFromValue(v)
 
 	if actual == ti {
@@ -472,6 +495,7 @@ func (i *Interpreter) promoteValueToType(v Value, ti *TypeInfo) Value {
 	}
 
 	switch ti.Kind {
+
 	case TypeArray:
 		switch v := v.(type) {
 		case ArrayValue:
@@ -493,10 +517,30 @@ func (i *Interpreter) promoteValueToType(v Value, ti *TypeInfo) Value {
 		case FloatValue:
 			return IntValue{V: int(val.V)}
 		}
+	case TypeInterface:
+		return InterfaceValue{
+			TypeInfo: ti,
+			Value:    v,
+		}
 
 	}
 
 	return v
+}
+
+func implementsInterface(ti, iface *TypeInfo) bool {
+	for name, expected := range iface.MethodTypes {
+
+		actual, ok := ti.MethodTypes[name]
+		if !ok {
+			return false
+		}
+
+		if !typesAssignable(actual, expected) {
+			return false
+		}
+	}
+	return true
 }
 
 func unwrapNamed(v Value) Value {
@@ -514,6 +558,13 @@ func unwrapAlias(t *TypeInfo) *TypeInfo {
 		t = t.Underlying
 	}
 	return t
+}
+
+func unwrapUntyped(v Value) Value {
+	if v, ok := v.(UntypedValue); ok {
+		return v.Value
+	}
+	return v
 }
 
 func capacityFromType(ti *TypeInfo, elems []Value) int {
@@ -545,38 +596,35 @@ func readKey() (rune, error) {
 	return rune(buf[0]), err
 }
 
-func (env *Environment) assignInput(node parser.Node, varName string, val Value, input string) error {
+func (i *Interpreter) assignInput(node parser.Node, ass Assignable, val Value, input string, name string) error {
 	switch val.(type) {
 
 	case IntValue:
 		n, err := strconv.Atoi(input)
 		if err != nil {
-			return NewRuntimeError(node, "invalid int input")
+			return NewRuntimeError(node, "%s: invalid int input")
 		}
-		env.Set(varName, IntValue{V: n})
+		ass.Set(i, IntValue{V: n})
 
 	case FloatValue:
 		f, err := strconv.ParseFloat(input, 64)
 		if err != nil {
-			return NewRuntimeError(node, "invalid float input")
+			return NewRuntimeError(node, "%s: invalid float input")
 		}
-		env.Set(varName, FloatValue{V: f})
+		ass.Set(i, FloatValue{V: f})
 
 	case BoolValue:
 		b, err := strconv.ParseBool(input)
 		if err != nil {
-			return NewRuntimeError(node, "invalid bool input")
+			return NewRuntimeError(node, "%s: invalid bool input")
 		}
-		env.Set(varName, BoolValue{V: b})
+		ass.Set(i, BoolValue{V: b})
 
 	case StringValue:
-		env.Set(varName, StringValue{V: input})
-
-	case UninitializedValue, NilValue:
-		return NewRuntimeError(node, "variable must have a type before scan")
+		ass.Set(i, StringValue{V: input})
 
 	default:
-		return NewRuntimeError(node, "unsupported type for scan")
+		return NewRuntimeError(node, "%s: unsupported type")
 	}
 
 	return nil
@@ -690,18 +738,23 @@ func (i *Interpreter) assignWithType(node parser.Node, v Value, expected *TypeIn
 	}
 
 	expected = unwrapAlias(expected)
-	actual := unwrapAlias(i.typeInfoFromValue(v))
 
-	// special case: []thing absorbs array elem types
-	if expected.Kind == TypeArray && expected.Elem.Kind == TypeAny {
-		if arr, ok := v.(ArrayValue); ok {
-			arr.ElemType = expected.Elem
-			v = arr
-			actual = expected
-		}
+	// promote literals first
+	if uv, ok := v.(UntypedValue); ok {
+		v = i.promoteValueToType(uv, expected)
 	}
 
+	actual := unwrapAlias(i.typeInfoFromValue(v))
+
 	if !typesAssignable(actual, expected) {
+		if node == nil {
+			return NilValue{}, fmt.Errorf(
+				"type mismatch: expected '%s' but got '%s'",
+				expected.Name,
+				actual.Name,
+			)
+		}
+
 		return NilValue{}, NewRuntimeError(
 			node,
 			fmt.Sprintf(

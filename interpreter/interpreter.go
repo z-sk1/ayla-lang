@@ -1,7 +1,6 @@
 package interpreter
 
 import (
-	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -16,7 +15,6 @@ import (
 
 type Environment struct {
 	store    map[string]*Variable
-	methods  map[string]map[string]*Func
 	builtins map[string]*BuiltinFunc
 	defers   []*parser.FuncCall
 
@@ -158,9 +156,11 @@ func (i *Interpreter) RegisterForward(stmts []parser.Statement) error {
 
 		case *parser.TypeStatement:
 			ti := &TypeInfo{
-				Name:  stmt.Name.Value,
-				Kind:  TypeNamed,
-				Alias: stmt.Alias,
+				Name:        stmt.Name.Value,
+				Kind:        TypeNamed,
+				Alias:       stmt.Alias,
+				Methods:     make(map[string]*Func),
+				MethodTypes: make(map[string]*TypeInfo),
 			}
 
 			i.typeEnv[stmt.Name.Value] = TypeValue{
@@ -268,7 +268,7 @@ func (i *Interpreter) EvalStatements(stmts []parser.Statement) (ControlSignal, e
 		}
 
 		switch sig.(type) {
-		case SignalReturn, SignalBreak, SignalContinue, ErrorValue:
+		case SignalReturn, SignalBreak, SignalContinue:
 			return sig, nil
 		}
 
@@ -470,9 +470,6 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 				v, err := i.EvalExpression(expr)
 				if err != nil {
 					return SignalNone{}, err
-				}
-				if v, ok := v.(ErrorValue); ok {
-					return v, nil
 				}
 
 				values = append(values, v)
@@ -690,9 +687,6 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 				if err != nil {
 					return SignalNone{}, err
 				}
-				if v, ok := v.(ErrorValue); ok {
-					return v, nil
-				}
 
 				values[idx] = v
 			}
@@ -810,7 +804,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			} else {
 				err := targets[idx].Set(i, copyValue(values[idx]))
 				if err != nil {
-					return SignalNone{}, err
+					return SignalNone{}, NewRuntimeError(stmt.Targets[idx], err.Error())
 				}
 			}
 		}
@@ -1258,16 +1252,16 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 
 	switch expr := e.(type) {
 	case *parser.IntLiteral:
-		return IntValue{V: expr.Value}, nil
+		return UntypedValue{IntValue{V: expr.Value}}, nil
 
 	case *parser.FloatLiteral:
-		return FloatValue{V: expr.Value}, nil
+		return UntypedValue{FloatValue{V: expr.Value}}, nil
 
 	case *parser.StringLiteral:
-		return StringValue{V: expr.Value}, nil
+		return UntypedValue{StringValue{V: expr.Value}}, nil
 
 	case *parser.BoolLiteral:
-		return BoolValue{V: expr.Value}, nil
+		return UntypedValue{BoolValue{V: expr.Value}}, nil
 
 	case *parser.NilLiteral:
 		return NilValue{}, nil
@@ -1286,9 +1280,6 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 		leftVal, err := i.EvalExpression(expr.Left)
 		if err != nil {
 			return NilValue{}, err
-		}
-		if v, ok := leftVal.(ErrorValue); ok {
-			return v, nil
 		}
 
 		return i.evalMemberExpression(expr, leftVal, expr.Field.Value)
@@ -1325,9 +1316,7 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 
 		err := i.checkFuncLiteral(expr)
 		if err != nil {
-			return ErrorValue{
-				V: err,
-			}, nil
+			return NilValue{}, err
 		}
 
 		for _, typ := range expr.ReturnTypes {
@@ -1376,24 +1365,15 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 		if err != nil {
 			return NilValue{}, err
 		}
-		if v, ok := left.(ErrorValue); ok {
-			return v, nil
-		}
 
 		index, err := i.EvalExpression(expr.Index)
 		if err != nil {
 			return NilValue{}, err
 		}
-		if v, ok := index.(ErrorValue); ok {
-			return v, nil
-		}
 
 		val, err := i.evalIndexExpression(expr, left, index)
 		if err != nil {
 			return NilValue{}, err
-		}
-		if v, ok := val.(ErrorValue); ok {
-			return v, nil
 		}
 
 		return val, nil
@@ -1403,32 +1383,20 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 		if err != nil {
 			return NilValue{}, err
 		}
-		if v, ok := left.(ErrorValue); ok {
-			return v, nil
-		}
 
 		start, err := i.EvalExpression(expr.Start)
 		if err != nil {
 			return NilValue{}, err
-		}
-		if v, ok := start.(ErrorValue); ok {
-			return v, nil
 		}
 
 		end, err := i.EvalExpression(expr.End)
 		if err != nil {
 			return NilValue{}, err
 		}
-		if v, ok := end.(ErrorValue); ok {
-			return v, nil
-		}
 
 		val, err := i.evalSliceExpression(expr, left, start, end)
 		if err != nil {
 			return NilValue{}, err
-		}
-		if v, ok := val.(ErrorValue); ok {
-			return v, nil
 		}
 
 		return val, nil
@@ -1551,16 +1519,10 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 		if err != nil {
 			return NilValue{}, err
 		}
-		if v, ok := elem.(ErrorValue); ok {
-			return v, nil
-		}
 
 		set, err := i.EvalExpression(expr.Right)
 		if err != nil {
 			return NilValue{}, err
-		}
-		if v, ok := set.(ErrorValue); ok {
-			return v, nil
 		}
 
 		switch s := set.(type) {
@@ -1790,16 +1752,10 @@ func (i *Interpreter) evalMapLiteral(expr *parser.CompositeLiteral, expected *Ty
 	if err != nil {
 		return NilValue{}, err
 	}
-	if v, ok := k0.(ErrorValue); ok {
-		return v, nil
-	}
 
 	v0, err := i.EvalExpression(expr.Pairs[0].Value)
 	if err != nil {
 		return NilValue{}, err
-	}
-	if v, ok := v0.(ErrorValue); ok {
-		return v, nil
 	}
 
 	keyTI := unwrapAlias(i.typeInfoFromValue(k0))
@@ -1827,9 +1783,6 @@ func (i *Interpreter) evalMapLiteral(expr *parser.CompositeLiteral, expected *Ty
 		k, err := i.EvalExpression(e.Key)
 		if err != nil {
 			return NilValue{}, err
-		}
-		if v, ok := k.(ErrorValue); ok {
-			return v, nil
 		}
 
 		v, err := i.EvalExpression(e.Value)
@@ -1895,10 +1848,6 @@ func (i *Interpreter) evalTypeCast(target *TypeInfo, arg parser.Expression, node
 	case TypeInt:
 		var val int
 
-		if v, ok := v.(ErrorValue); ok {
-			return v, nil
-		}
-
 		switch v := v.(type) {
 		case IntValue:
 			val = v.V
@@ -1911,10 +1860,6 @@ func (i *Interpreter) evalTypeCast(target *TypeInfo, arg parser.Expression, node
 		return IntValue{V: val}, nil
 	case TypeFloat:
 		var val float64
-
-		if v, ok := v.(ErrorValue); ok {
-			return v, nil
-		}
 
 		switch v := v.(type) {
 		case IntValue:
@@ -1930,17 +1875,10 @@ func (i *Interpreter) evalTypeCast(target *TypeInfo, arg parser.Expression, node
 		if s, ok := v.(StringValue); ok {
 			return s, nil
 		}
-		if v, ok := v.(ErrorValue); ok {
-			return v, nil
-		}
 
 		return NilValue{}, NewRuntimeError(node, fmt.Sprintf("string cast does not support %s, try the function toString to parse other types", string(v.Type())))
 	case TypeBool:
 		var val bool
-
-		if v, ok := v.(ErrorValue); ok {
-			return v, nil
-		}
 
 		switch v := v.(type) {
 		case BoolValue:
@@ -1955,24 +1893,14 @@ func (i *Interpreter) evalTypeCast(target *TypeInfo, arg parser.Expression, node
 		if a, ok := v.(ArrayValue); ok {
 			return a, nil
 		}
-		if v, ok := v.(ErrorValue); ok {
-			return v, nil
-		}
 
 		return NilValue{}, NewRuntimeError(node, fmt.Sprintf("array cast does not support %s, try the function toArr to construct arrays", string(v.Type())))
 	case TypeNamed:
 		base := target.Underlying
 
-		if v, ok := v.(ErrorValue); ok {
-			return v, nil
-		}
-
 		casted, err := i.evalTypeCast(base, arg, node)
 		if err != nil {
 			return NilValue{}, err
-		}
-		if v, ok := casted.(ErrorValue); ok {
-			return v, nil
 		}
 
 		if sv, ok := casted.(*StructValue); ok {
@@ -1984,13 +1912,7 @@ func (i *Interpreter) evalTypeCast(target *TypeInfo, arg parser.Expression, node
 			TypeName: target,
 			Value:    casted,
 		}, nil
-	case TypeError:
-		s, ok := v.(StringValue)
-		if ok {
-			return ErrorValue{V: errors.New(s.V)}, nil
-		}
 
-		return NilValue{}, NewRuntimeError(node, fmt.Sprintf("error cast does not support %s", string(v.Type())))
 	default:
 		return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unknown type cast: %s", target.Name))
 	}
@@ -2048,9 +1970,6 @@ func (i *Interpreter) evalFuncCall(expr *parser.FuncCall) (Value, error) {
 	val, err := i.EvalExpression(expr.Callee)
 	if err != nil {
 		return NilValue{}, err
-	}
-	if v, ok := val.(ErrorValue); ok {
-		return v, nil
 	}
 
 	args, err := i.evalArgs(expr.Args)
@@ -2198,10 +2117,6 @@ func (i *Interpreter) callFunction(fn *Func, args []Value, callNode parser.Node)
 				if _, isNil := actual.(NilValue); isNil {
 					continue
 				}
-			}
-
-			if unwrapAlias(i.typeInfoFromValue(actual)).Kind == TypeError {
-				return actual, nil
 			}
 
 			actual, err = i.assignWithType(callNode, actual, expectedTI)
@@ -2352,7 +2267,6 @@ func (i *Interpreter) evalIndexExpression(node parser.Expression, left, idx Valu
 			TypeStruct:     "struct",
 			TypeMap:        "map",
 			TypeEnum:       "enum",
-			TypeError:      "error",
 		}
 
 		typeStr, ok := types[typ.Kind]
@@ -2531,11 +2445,70 @@ func (i *Interpreter) evalMemberExpression(node parser.Expression, left Value, f
 }
 
 func (i *Interpreter) evalInfix(node *parser.InfixExpression, left Value, op string, right Value) (Value, error) {
-	if left.Type() == ERROR {
-		return evalErrorInfix(node, left.(ErrorValue), op, right)
+	left = unwrapUntyped(left)
+	right = unwrapUntyped(right)
+
+	if iv, ok := left.(InterfaceValue); ok {
+		if _, isNil := right.(NilValue); isNil {
+			return evalInterfaceNilInfix(node, iv, op)
+		}
 	}
-	if right.Type() == ERROR {
-		return evalErrorInfix(node, right.(ErrorValue), op, left)
+
+	if iv, ok := right.(InterfaceValue); ok {
+		if _, isNil := left.(NilValue); isNil {
+			return evalInterfaceNilInfix(node, iv, op)
+		}
+	}
+
+	liv, lok := left.(InterfaceValue)
+	riv, rok := right.(InterfaceValue)
+
+	if lok && rok {
+		// both interfaces
+		if liv.Value == nil && riv.Value == nil {
+			switch op {
+			case "==":
+				return BoolValue{V: true}, nil
+			case "!=":
+				return BoolValue{V: false}, nil
+			}
+		}
+
+		if liv.Value == nil || riv.Value == nil {
+			switch op {
+			case "==":
+				return BoolValue{V: false}, nil
+			case "!=":
+				return BoolValue{V: true}, nil
+			}
+		}
+
+		// compare underlying values
+		return i.evalInfix(node, liv.Value, op, riv.Value)
+	}
+
+	if iv, ok := left.(InterfaceValue); ok {
+		if iv.Value == nil {
+			switch op {
+			case "==":
+				return BoolValue{V: false}, nil
+			case "!=":
+				return BoolValue{V: true}, nil
+			}
+		}
+		return i.evalInfix(node, iv.Value, op, right)
+	}
+
+	if iv, ok := right.(InterfaceValue); ok {
+		if iv.Value == nil {
+			switch op {
+			case "==":
+				return BoolValue{V: false}, nil
+			case "!=":
+				return BoolValue{V: true}, nil
+			}
+		}
+		return i.evalInfix(node, left, op, iv.Value)
 	}
 
 	// nil handling
@@ -2577,10 +2550,6 @@ func (i *Interpreter) evalInfix(node *parser.InfixExpression, left Value, op str
 		if err != nil {
 			return NilValue{}, err
 		}
-		if v, ok := res.(ErrorValue); ok {
-			return v, nil
-		}
-
 		// Re-wrap result
 		return NamedValue{
 			TypeName: lnv.TypeName,
@@ -2745,25 +2714,17 @@ func evalNilInfix(node *parser.InfixExpression, op string, other Value) (Value, 
 	}
 }
 
-func evalErrorInfix(node *parser.InfixExpression, left ErrorValue, op string, right Value) (Value, error) {
-	re, ok := right.(ErrorValue)
-	if !ok {
-		switch op {
-		case "==":
-			return BoolValue{V: false}, nil
-		case "!=":
-			return BoolValue{V: true}, nil
-		}
-	}
+func evalInterfaceNilInfix(node *parser.InfixExpression, left InterfaceValue, op string) (Value, error) {
+	isNil := left.Value == NilValue{} || left.Value.Type() == NIL
 
 	switch op {
 	case "==":
-		return BoolValue{V: left.V.Error() == re.V.Error()}, nil
+		return BoolValue{V: isNil}, nil
 	case "!=":
-		return BoolValue{V: left.V.Error() != re.V.Error()}, nil
-	default:
-		return NilValue{}, NewRuntimeError(node, fmt.Sprintf("invalid operator: error %s error", op))
+		return BoolValue{V: !isNil}, nil
 	}
+
+	return NilValue{}, NewRuntimeError(node, fmt.Sprintf("invalid operator: interface %s nil", op))
 }
 
 func evalEnumInfix(node *parser.InfixExpression, left EnumValue, op string, right EnumValue) (Value, error) {
