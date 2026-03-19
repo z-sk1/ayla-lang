@@ -833,7 +833,7 @@ func LoadTimeModule(i *Interpreter) (ModuleValue, error) {
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
 			var seconds float64
 
-			switch v := unwrapNamed(args[0]).(type) {
+			switch v := unwrapNamed(unwrapUntyped(args[0])).(type) {
 			case IntValue:
 				seconds = float64(v.V)
 			case FloatValue:
@@ -1698,7 +1698,7 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 				return NilValue{}, err
 			}
 
-			rl.SetMousePosition(x, y)
+			rl.SetMousePosition(int32(x), int32(y))
 			return NilValue{}, nil
 		},
 	}, false)
@@ -1824,6 +1824,77 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 	env.Define("FlagWindowHighDPI", IntValue{V: rl.FlagWindowHighdpi}, true)
 	env.Define("FlagWindowBorderless", IntValue{V: rl.FlagBorderlessWindowedMode}, true)
 	env.Define("FlagWindowMsaa4x", IntValue{V: rl.FlagMsaa4xHint}, true)
+
+	env.Define("InitSound", &BuiltinFunc{
+		Name:  "InitSound",
+		Arity: 0,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			rl.InitAudioDevice()
+			return NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("LoadSound", &BuiltinFunc{
+		Name:  "LoadSound",
+		Arity: 1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			path, err := argString(node, args, 0, "audio.LoadSound")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			sound := rl.LoadSound(path)
+
+			return SoundValue{Sound: sound}, nil
+		},
+	}, false)
+
+	env.Define("PlaySound", &BuiltinFunc{
+		Name:  "PlaySound",
+		Arity: 1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			soundVal, ok := args[0].(SoundValue)
+			if !ok {
+				return NilValue{}, fmt.Errorf("expected a Sound")
+			}
+
+			rl.PlaySound(soundVal.Sound)
+			return NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("StopSound", &BuiltinFunc{
+		Name:  "StopSound",
+		Arity: 1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			soundVal, ok := args[0].(SoundValue)
+			if !ok {
+				return NilValue{}, fmt.Errorf("expected a Sound")
+			}
+
+			rl.StopSound(soundVal.Sound)
+			return NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("SetSoundVolume", &BuiltinFunc{
+		Name:  "SetSoundVolume",
+		Arity: 2,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			soundVal, ok := args[0].(SoundValue)
+			if !ok {
+				return NilValue{}, fmt.Errorf("expected a Sound")
+			}
+
+			volume, err := argFloat(node, args, 1, "audio.SetSoundVolume")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			rl.SetSoundVolume(soundVal.Sound, float32(volume))
+			return NilValue{}, nil
+		},
+	}, false)
 
 	module := ModuleValue{
 		Name:    "gfx",
