@@ -141,19 +141,41 @@ func argSound(node parser.Node, i *Interpreter, typeEnv map[string]TypeValue, ar
 
 	soundVal, ok := v.(*StructValue)
 	if !ok {
-		return rl.Sound{}, NewRuntimeError(node, fmt.Sprintf("%s: argument must be rl.Sound son", name))
+		return rl.Sound{}, NewRuntimeError(node, fmt.Sprintf("%s: argument must be rl.Sound", name))
 	}
 
 	if !typesAssignable(i.typeInfoFromValue(soundVal), soundTI) {
-		return rl.Sound{}, NewRuntimeError(node, fmt.Sprintf("%s: argument must be rl.Sound sonion", name))
+		return rl.Sound{}, NewRuntimeError(node, fmt.Sprintf("%s: argument must be rl.Sound", name))
 	}
 
 	sound, ok := soundVal.Native.(rl.Sound)
 	if !ok {
-		return rl.Sound{}, NewRuntimeError(node, fmt.Sprintf("%s: argument must be rl.Sound shoncicle", name))
+		return rl.Sound{}, NewRuntimeError(node, fmt.Sprintf("%s: argument must be rl.Sound", name))
 	}
 
 	return sound, nil
+}
+
+func argMusic(node parser.Node, i *Interpreter, typeEnv map[string]TypeValue, args []Value, idx int, name string) (rl.Music, error) {
+	musTI := typeEnv["Music"].TypeInfo
+
+	v := unwrapNamed(args[idx])
+
+	musVal, ok := v.(*StructValue)
+	if !ok {
+		return rl.Music{}, NewRuntimeError(node, fmt.Sprintf("%s: argument must be rl.Music", name))
+	}
+
+	if !typesAssignable(i.typeInfoFromValue(musVal), musTI) {
+		return rl.Music{}, NewRuntimeError(node, fmt.Sprintf("%s: argument must be rl.Music", name))
+	}
+
+	mus, ok := musVal.Native.(rl.Music)
+	if !ok {
+		return rl.Music{}, NewRuntimeError(node, fmt.Sprintf("%s: argument must be rl.Music", name))
+	}
+
+	return mus, nil
 }
 
 func colorFromValue(v Value) (rl.Color, error) {
@@ -1258,6 +1280,15 @@ func LoadRLModule(i *Interpreter) (ModuleValue, error) {
 		},
 	}
 
+	typeEnv["Music"] = TypeValue{
+		TypeInfo: &TypeInfo{
+			Name:   "Music",
+			Kind:   TypeStruct,
+			Fields: nil,
+			Opaque: true,
+		},
+	}
+
 	env.Define("SetWindowFlags", &BuiltinFunc{
 		Name:  "SetWindowFlags",
 		Arity: 1,
@@ -2192,6 +2223,184 @@ func LoadRLModule(i *Interpreter) (ModuleValue, error) {
 		},
 	}, false)
 
+	env.Define("SetSoundPitch", &BuiltinFunc{
+		Name:  "SetSoundPitch",
+		Arity: 2,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			sound, err := argSound(node, i, typeEnv, args, 0, "rl.SetSoundPitch")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			pitch, err := argFloat(node, args, 1, "rl.SetSoundPitch")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			rl.SetSoundPitch(sound, float32(pitch))
+			return NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("LoadMusic", &BuiltinFunc{
+		Name:  "LoadMusic",
+		Arity: 1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			path, err := argString(node, args, 0, "rl.LoadMusic")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			mus := rl.LoadMusicStream(path)
+
+			return &StructValue{
+				TypeName: typeEnv["Music"].TypeInfo,
+				Native:   mus,
+			}, nil
+		},
+	}, false)
+
+	env.Define("UnloadMusic", &BuiltinFunc{
+		Name:  "UnloadMusic",
+		Arity: 1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			mus, err := argMusic(node, i, typeEnv, args, 0, "rl.UnloadMusic")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			rl.UnloadMusicStream(mus)
+			return NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("PlayMusic", &BuiltinFunc{
+		Name:  "PlayMusic",
+		Arity: 1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			mus, err := argMusic(node, i, typeEnv, args, 0, "rl.PlayMusic")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			rl.PlayMusicStream(mus)
+			return NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("UpdateMusic", &BuiltinFunc{
+		Name:  "UpdateMusic",
+		Arity: 1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			mus, err := argMusic(node, i, typeEnv, args, 0, "rl.UpdateMusic")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			rl.UpdateMusicStream(mus)
+			return NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("StopMusic", &BuiltinFunc{
+		Name:  "StopMusic",
+		Arity: 1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			mus, err := argMusic(node, i, typeEnv, args, 0, "rl.StopMusic")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			rl.StopMusicStream(mus)
+			return NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("PauseMusic", &BuiltinFunc{
+		Name:  "PauseMusic",
+		Arity: 1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			mus, err := argMusic(node, i, typeEnv, args, 0, "rl.PauseMusic")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			rl.PauseMusicStream(mus)
+			return NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("ResumeMusic", &BuiltinFunc{
+		Name:  "ResumeMusic",
+		Arity: 1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			mus, err := argMusic(node, i, typeEnv, args, 0, "rl.ResumeMusic")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			rl.ResumeMusicStream(mus)
+			return NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("SetMusicVolume", &BuiltinFunc{
+		Name:  "SetMusicVolume",
+		Arity: 2,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			mus, err := argMusic(node, i, typeEnv, args, 0, "rl.SetMusicVolume")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			vol, err := argFloat(node, args, 1, "rl.SetMusicVolume")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			rl.SetMusicVolume(mus, float32(vol))
+			return NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("SetMusicPitch", &BuiltinFunc{
+		Name:  "SetMusicPitch",
+		Arity: 2,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			mus, err := argMusic(node, i, typeEnv, args, 0, "rl.SetMusicPitch")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			pitch, err := argFloat(node, args, 1, "rl.SetMusicPitch")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			rl.SetMusicPitch(mus, float32(pitch))
+			return NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("SetMusicLooping", &BuiltinFunc{
+		Name:  "SetMusicLooping",
+		Arity: 2,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			mus, err := argMusic(node, i, typeEnv, args, 0, "rl.SetMusicLooping")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			looping, err := argBool(node, args, 1, "rl.SetMusicLooping")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			mus.Looping = looping
+			return NilValue{}, nil
+		},
+	}, false)
+
 	// consts
 	env.Define("MouseLeft", IntValue{V: int(rl.MouseButtonLeft)}, true)
 	env.Define("MouseRight", IntValue{V: int(rl.MouseButtonRight)}, true)
@@ -2251,19 +2460,6 @@ func LoadRLModule(i *Interpreter) (ModuleValue, error) {
 	env.Define("KeyRightShift", IntValue{V: rl.KeyRightShift}, true)
 	env.Define("KeyRShift", IntValue{V: rl.KeyRightShift}, true)
 	env.Define("KeyNumLock", IntValue{V: rl.KeyNumLock}, true)
-	env.Define("KeyOne", IntValue{V: rl.KeyOne}, true)
-	env.Define("KeyTwo", IntValue{V: rl.KeyTwo}, true)
-	env.Define("KeyThree", IntValue{V: rl.KeyThree}, true)
-	env.Define("KeyFour", IntValue{V: rl.KeyFour}, true)
-	env.Define("KeyFive", IntValue{V: rl.KeyFive}, true)
-	env.Define("KeySix", IntValue{V: rl.KeySix}, true)
-	env.Define("KeySeven", IntValue{V: rl.KeySeven}, true)
-	env.Define("KeyEight", IntValue{V: rl.KeyEight}, true)
-	env.Define("KeyNine", IntValue{V: rl.KeyNine}, true)
-	env.Define("KeyZero", IntValue{V: rl.KeyZero}, true)
-	env.Define("KeySlash", IntValue{V: rl.KeySlash}, true)
-	env.Define("KeyBackspace", IntValue{V: rl.KeyBackspace}, true)
-	env.Define("KeyBackSlash", IntValue{V: rl.KeyBackSlash}, true)
 	env.Define("KeyTab", IntValue{V: rl.KeyTab}, true)
 	env.Define("KeyLeftBracket", IntValue{V: rl.KeyLeftBracket}, true)
 	env.Define("KeyRightBracket", IntValue{V: rl.KeyRightBracket}, true)

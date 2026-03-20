@@ -1,22 +1,22 @@
 import rl
-import time
 
 rl.InitAudio()
+rl.InitWindow(1000, 1000, "hi")
 
-fun (s rl.Sound) Play(vol float) {
-    rl.PlaySound(s)
-    rl.SetSoundVolume(s, vol)
+m := rl.LoadMusic("megalovania.ogg")
 
-    why rl.IsSoundPlaying(s) {
-        time.Sleep(0.1)
-    }
+rl.PlayMusic(m)
+rl.SetMusicVolume(m, 0.25)
 
-    rl.StopSound(s)
+rl.SetTargetFPS(60)
+
+why !rl.ShouldClose() {
+    rl.UpdateMusic(m)
+
+    rl.Clear()
+
+    rl.Present()
 }
 
-s := rl.LoadSound("example.wav") // put your own file
-s.Play(1)
-
-rl.UnloadSound(s)
-
+rl.UnloadMusic(m)
 rl.CloseAudio()
