@@ -230,10 +230,13 @@ func (e *Environment) SetMethod(typ *TypeInfo, name string, fn *Func) {
 func (e *Environment) GetMethod(typ *TypeInfo, name string) (*Func, bool) {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	if fn, ok := typ.Methods[name]; ok {
-		return fn, ok
+
+	if typ.Methods == nil {
+		return nil, false
 	}
-	return nil, false
+
+	fn, ok := typ.Methods[name]
+	return fn, ok
 }
 
 func (e *Environment) AddDefer(call *parser.FuncCall) {
@@ -642,6 +645,29 @@ func (i *Interpreter) tickLifetimes() {
 		}
 
 		i.Env.store[name] = v
+	}
+}
+
+func mapKey(v Value) string {
+	switch x := v.(type) {
+
+	case IntValue:
+		return fmt.Sprintf("i:%d", x.V)
+
+	case StringValue:
+		return "s:" + x.V
+
+	case BoolValue:
+		return fmt.Sprintf("b:%v", x.V)
+
+	case *PointerValue:
+		return fmt.Sprintf("p:%p", x.Target)
+
+	case EnumValue:
+		return fmt.Sprintf("e:%s:%d", x.Enum.Name, x.Index)
+
+	default:
+		panic("unhashable map key")
 	}
 }
 

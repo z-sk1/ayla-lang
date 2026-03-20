@@ -57,12 +57,12 @@ var precedences = map[token.TokenType]int{
 
 	token.EQ:  EQUALS,
 	token.NEQ: EQUALS,
-	token.IN:  EQUALS,
 
 	token.LT:  LESSGREATER,
 	token.GT:  LESSGREATER,
 	token.LTE: LESSGREATER,
 	token.GTE: LESSGREATER,
+	token.IN:  LESSGREATER,
 
 	token.SHL: SHIFT,
 	token.SHR: SHIFT,

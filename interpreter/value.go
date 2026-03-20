@@ -3,7 +3,6 @@ package interpreter
 import (
 	"fmt"
 	"math"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -150,32 +149,21 @@ type MemberTarget struct {
 }
 
 func (m MemberTarget) Set(i *Interpreter, val Value) error {
-	valType := unwrapAlias(i.typeInfoFromValue(val))
-
-	if !typesAssignable(valType, m.FieldType) {
-		return fmt.Errorf(
-			"field '%s' expects %s but got %s",
-			m.Field,
-			m.FieldType.Name,
-			valType.Name,
-		)
+	newVal, err := i.assignToType(val, m.FieldType)
+	if err != nil {
+		return fmt.Errorf("field '%s' %s", m.Field, err)
 	}
-
-	if err := validateRange(nil, val, m.FieldType); err != nil {
-		return err
-	}
-
-	m.Struct.Fields[m.Field] = val
+	m.Struct.Fields[m.Field] = newVal
 	return nil
 }
 
 func (m MemberTarget) Get(i *Interpreter) (Value, error) {
-	val, ok := m.Struct.Fields[m.Field]
+	fieldVar, ok := m.Struct.Fields[m.Field]
 	if !ok {
 		return NilValue{}, fmt.Errorf("unknown field %s", m.Field)
 	}
 
-	return val, nil
+	return fieldVar, nil
 }
 
 type ArrayIndexTarget struct {
@@ -189,23 +177,12 @@ func (a ArrayIndexTarget) Set(i *Interpreter, val Value) error {
 		return fmt.Errorf("index %d out of bounds", a.Index)
 	}
 
-	valType := unwrapAlias(i.typeInfoFromValue(val))
-
-	if a.ElemType.Kind != TypeAny {
-		if !typesAssignable(valType, a.ElemType) {
-			return fmt.Errorf(
-				"array element expected %s but got %s",
-				a.ElemType.Name,
-				valType.Name,
-			)
-		}
-
-		if err := validateRange(nil, val, a.ElemType); err != nil {
-			return err
-		}
+	newVal, err := i.assignToType(val, a.ElemType)
+	if err != nil {
+		return err
 	}
 
-	a.Array.Elements[a.Index] = val
+	a.Array.Elements[a.Index] = newVal
 	return nil
 }
 
@@ -225,48 +202,22 @@ type MapIndexTarget struct {
 }
 
 func (m MapIndexTarget) Set(i *Interpreter, val Value) error {
-	keyType := unwrapAlias(i.typeInfoFromValue(m.Key))
-
-	if m.KeyType.Kind == TypeAny {
-		if !isComparableValue(m.Key) {
-			return fmt.Errorf("value of this type cannot be used as map key")
-		}
-	} else {
-		if !typesAssignable(keyType, m.KeyType) {
-			return fmt.Errorf(
-				"map key expected %s but got %s",
-				m.KeyType.Name,
-				keyType.Name,
-			)
-		}
-
-		if err := validateRange(nil, m.Key, m.KeyType); err != nil {
-			return err
-		}
+	key, err := i.assignToType(m.Key, m.KeyType)
+	if err != nil {
+		return fmt.Errorf("map key %s", err)
 	}
 
-	valType := unwrapAlias(i.typeInfoFromValue(val))
-
-	if m.ValueType.Kind != TypeAny {
-		if !typesAssignable(valType, m.ValueType) {
-			return fmt.Errorf(
-				"map value expected %s but got %s",
-				m.ValueType.Name,
-				valType.Name,
-			)
-		}
-
-		if err := validateRange(nil, val, m.ValueType); err != nil {
-			return err
-		}
+	newVal, err := i.assignToType(val, m.ValueType)
+	if err != nil {
+		return fmt.Errorf("map value %s", err)
 	}
 
-	m.Map.Entries[m.Key] = val
+	m.Map.Entries[mapKey(key)] = newVal
 	return nil
 }
 
 func (m MapIndexTarget) Get(i *Interpreter) (Value, error) {
-	if val, ok := m.Map.Entries[m.Key]; ok {
+	if val, ok := m.Map.Entries[mapKey(m.Key)]; ok {
 		return val, nil
 	}
 
@@ -284,6 +235,41 @@ func (p PointerTarget) Set(i *Interpreter, val Value) error {
 
 func (p PointerTarget) Get(i *Interpreter) (Value, error) {
 	return p.Ptr.Target.Value, nil
+}
+
+func (i *Interpreter) assignToType(val Value, expected *TypeInfo) (Value, error) {
+	valType := unwrapAlias(i.typeInfoFromValue(val))
+	expected = unwrapAlias(expected)
+
+	if expected.Kind == TypePointer && valType.Kind != TypePointer {
+		return nil, fmt.Errorf(
+			"type mismatch: expected %s but got %s",
+			expected.Name,
+			valType.Name,
+		)
+	}
+
+	if expected.Kind != TypePointer && valType.Kind == TypePointer {
+		ptr := val.(*PointerValue)
+		if typesAssignable(ptr.ElemType, expected) {
+			val = ptr.Target.Value
+			valType = unwrapAlias(i.typeInfoFromValue(val))
+		}
+	}
+
+	if !typesAssignable(valType, expected) {
+		return nil, fmt.Errorf(
+			"type mismatch: expected %s but got %s",
+			expected.Name,
+			valType.Name,
+		)
+	}
+
+	if err := validateRange(nil, val, expected); err != nil {
+		return nil, err
+	}
+
+	return val, nil
 }
 
 type ControlSignal any
@@ -491,9 +477,11 @@ func (s *StructValue) String() string {
 }
 
 type MapValue struct {
-	Entries   map[Value]Value
 	KeyType   *TypeInfo
 	ValueType *TypeInfo
+
+	Entries map[string]Value
+	Keys    map[string]Value
 }
 
 func (m MapValue) Type() ValueType {
@@ -501,21 +489,15 @@ func (m MapValue) Type() ValueType {
 }
 
 func (m MapValue) String() string {
-	keys := make([]string, 0, len(m.Entries))
-	keyMap := map[string]Value{}
+	keys := make([]Value, 0, len(m.Entries))
 
-	for k := range m.Entries {
-		ks := k.String()
-		keys = append(keys, ks)
-		keyMap[ks] = k
+	for _, k := range m.Keys {
+		keys = append(keys, k)
 	}
 
-	sort.Strings(keys)
-
 	parts := make([]string, 0, len(keys))
-	for _, ks := range keys {
-		k := keyMap[ks]
-		v := m.Entries[k]
+	for _, k := range keys {
+		v := m.Entries[mapKey(k)]
 		parts = append(parts, fmt.Sprintf("%s: %s", k.String(), v.String()))
 	}
 
@@ -621,11 +603,7 @@ func (i *Interpreter) resolveTypeNode(t parser.TypeNode) (*TypeInfo, error) {
 			return nil, err
 		}
 
-		return &TypeInfo{
-			Name: fmt.Sprintf("*%s", base.Name),
-			Kind: TypePointer,
-			Elem: base,
-		}, nil
+		return i.pointerTo(base), nil
 
 	case *parser.RangeType:
 		baseTI, err := i.resolveTypeNode(tn.Base)
@@ -1012,7 +990,7 @@ func (i *Interpreter) defaultValueFromTypeInfo(node parser.Node, ti *TypeInfo) (
 		}
 
 		return MapValue{
-			Entries:   make(map[Value]Value),
+			Entries:   make(map[string]Value),
 			KeyType:   ti.Key,
 			ValueType: ti.Value,
 		}, nil
@@ -1046,10 +1024,7 @@ func (i *Interpreter) defaultValueFromTypeInfo(node parser.Node, ti *TypeInfo) (
 			Index:   idx,
 		}, nil
 	case TypePointer:
-		return &PointerValue{
-			Target:   nil,
-			ElemType: ti,
-		}, nil
+		return NilValue{}, nil
 	case TypeInterface:
 		return NilValue{}, nil
 	case TypeNamed:
@@ -1063,7 +1038,7 @@ func isComparableValue(v Value) bool {
 	v = unwrapNamed(v)
 
 	switch val := v.(type) {
-	case IntValue, FloatValue, BoolValue, StringValue, NilValue:
+	case IntValue, FloatValue, BoolValue, StringValue, NilValue, *PointerValue:
 		return true
 
 	case *StructValue:

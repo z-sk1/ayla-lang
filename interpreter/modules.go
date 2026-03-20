@@ -7,6 +7,8 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
@@ -833,13 +835,13 @@ func LoadTimeModule(i *Interpreter) (ModuleValue, error) {
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
 			var seconds float64
 
-			switch v := unwrapNamed(args[0]).(type) {
+			switch v := unwrapUntyped(unwrapNamed(args[0])).(type) {
 			case IntValue:
 				seconds = float64(v.V)
 			case FloatValue:
 				seconds = v.V
 			default:
-				return NilValue{}, NewRuntimeError(node, "Sleep: argument must be number")
+				return NilValue{}, NewRuntimeError(node, "time.Sleep: argument must be number")
 			}
 
 			time.Sleep(time.Duration(seconds * float64(time.Second)))
@@ -911,6 +913,279 @@ func LoadTimeModule(i *Interpreter) (ModuleValue, error) {
 	}
 
 	return module, nil
+}
+
+func LoadParseModule(i *Interpreter) (ModuleValue, error) {
+	env := NewEnvironment(i.Env)
+	typeEnv := make(map[string]TypeValue)
+
+	env.Define("Int", &BuiltinFunc{
+		Name:  "Int",
+		Arity: 1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			v := unwrapUntyped(args[0])
+
+			ti := unwrapAlias(i.typeInfoFromValue(v))
+
+			switch ti.Kind {
+			case TypeInt:
+				return TupleValue{
+					Values: []Value{
+						v,
+						NilValue{},
+					},
+				}, nil
+			case TypeFloat:
+				return TupleValue{
+					Values: []Value{
+						IntValue{V: int(v.(FloatValue).V)},
+						NilValue{},
+					},
+				}, nil
+			case TypeString:
+				n, err := strconv.Atoi(v.(StringValue).V)
+				if err != nil {
+					return TupleValue{
+						Values: []Value{
+							IntValue{V: n},
+							Error{Message: fmt.Sprintf("parse.Int: %s", err.Error())},
+						},
+					}, nil
+				}
+
+				return TupleValue{
+					Values: []Value{
+						IntValue{V: n},
+						NilValue{},
+					},
+				}, nil
+			case TypeBool:
+				if v.(BoolValue).V {
+					return TupleValue{
+						Values: []Value{
+							IntValue{V: 1},
+							NilValue{},
+						},
+					}, nil
+				}
+
+				return TupleValue{
+					Values: []Value{
+						IntValue{V: 0},
+						NilValue{},
+					},
+				}, nil
+			default:
+				return NilValue{}, NewRuntimeError(node, "parse.Int: cannot convert to int")
+			}
+		},
+	}, false)
+
+	env.Define("Float", &BuiltinFunc{
+		Name:  "Float",
+		Arity: 1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			v := unwrapUntyped(args[0])
+
+			ti := unwrapAlias(i.typeInfoFromValue(v))
+
+			switch ti.Kind {
+			case TypeFloat:
+				return TupleValue{
+					Values: []Value{
+						v,
+						NilValue{},
+					},
+				}, nil
+			case TypeInt:
+				return TupleValue{
+					Values: []Value{
+						FloatValue{V: float64(v.(IntValue).V)},
+						NilValue{},
+					},
+				}, nil
+			case TypeString:
+				n, err := strconv.ParseFloat(v.(StringValue).V, 64)
+				if err != nil {
+					return TupleValue{
+						Values: []Value{
+							NilValue{},
+							Error{Message: fmt.Sprintf("parse.Float: %s", err.Error())},
+						},
+					}, nil
+				}
+
+				return TupleValue{
+					Values: []Value{
+						FloatValue{V: n},
+						NilValue{},
+					},
+				}, nil
+			case TypeBool:
+				if v.(BoolValue).V {
+					return TupleValue{
+						Values: []Value{
+							FloatValue{V: 1},
+							NilValue{},
+						},
+					}, nil
+				}
+
+				return TupleValue{
+					Values: []Value{
+						FloatValue{V: 0},
+						NilValue{},
+					},
+				}, nil
+			default:
+				return NilValue{}, NewRuntimeError(node, "parse.Float: cannot convert to float")
+			}
+		},
+	}, false)
+
+	env.Define("String", &BuiltinFunc{
+		Name:  "String",
+		Arity: 1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			v := unwrapUntyped(args[0])
+
+			ti := unwrapAlias(i.typeInfoFromValue(v))
+
+			switch ti.Kind {
+			case TypeString:
+				return v, nil
+			case TypeInt:
+				s := strconv.Itoa(v.(IntValue).V)
+
+				return StringValue{V: s}, nil
+			case TypeFloat:
+				s := strconv.FormatFloat(v.(FloatValue).V, 'g', -1, 64)
+				return StringValue{V: s}, nil
+			case TypeBool:
+				if v.(BoolValue).V {
+					return StringValue{V: "yes"}, nil
+				}
+
+				return StringValue{V: "no"}, nil
+			default:
+				return NilValue{}, NewRuntimeError(node, "parse.String: cannot convert to string")
+			}
+		},
+	}, false)
+
+	env.Define("Bool", &BuiltinFunc{
+		Name:  "Bool",
+		Arity: 1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			v := unwrapUntyped(args[0])
+
+			ti := unwrapAlias(i.typeInfoFromValue(v))
+
+			switch ti.Kind {
+			case TypeBool:
+				return TupleValue{
+					Values: []Value{
+						v,
+						NilValue{},
+					},
+				}, nil
+			case TypeInt:
+				if v.(IntValue).V != 0 {
+					return TupleValue{
+						Values: []Value{
+							BoolValue{V: true},
+							NilValue{},
+						},
+					}, nil
+				}
+
+				return TupleValue{
+					Values: []Value{
+						BoolValue{V: false},
+						NilValue{},
+					},
+				}, nil
+			case TypeFloat:
+				if v.(FloatValue).V != 0 {
+					return TupleValue{
+						Values: []Value{
+							BoolValue{V: true},
+							NilValue{},
+						},
+					}, nil
+				}
+
+				return TupleValue{
+					Values: []Value{
+						BoolValue{V: false},
+						NilValue{},
+					},
+				}, nil
+			case TypeString:
+				s := strings.ToLower(v.(StringValue).V)
+
+				if s == "yes" {
+					return TupleValue{
+						Values: []Value{
+							BoolValue{V: true},
+							NilValue{},
+						},
+					}, nil
+				}
+				if s == "no" {
+					return TupleValue{
+						Values: []Value{
+							BoolValue{V: false},
+							NilValue{},
+						},
+					}, nil
+				}
+				if s == "true" {
+					return TupleValue{
+						Values: []Value{
+							NilValue{},
+							Error{Message: "parse.Bool: invalid boolean string"},
+						},
+					}, nil
+				}
+				if s == "false" {
+					return TupleValue{
+						Values: []Value{
+							NilValue{},
+							Error{Message: "parse.Bool: invalid boolean string"},
+						},
+					}, nil
+				}
+
+				b, err := strconv.ParseBool(s)
+				if err != nil {
+					return TupleValue{
+						Values: []Value{
+							NilValue{},
+							Error{Message: "parse.Bool: invalid boolean string"},
+						},
+					}, nil
+				}
+
+				return TupleValue{
+					Values: []Value{
+						BoolValue{V: b},
+						NilValue{},
+					},
+				}, nil
+			default:
+				return NilValue{}, NewRuntimeError(node, "parse.Bool: cannot convert to bool")
+			}
+		},
+	}, false)
+
+	mod := ModuleValue{
+		Name:    "parse",
+		Env:     env,
+		typeEnv: typeEnv,
+	}
+
+	return mod, nil
 }
 
 func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
@@ -988,13 +1263,15 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 			rl.InitWindow(int32(w), int32(h), title)
 			rl.SetTargetFPS(60)
 
-			rl.DrawTriangle(
-				rl.Vector2{X: 100, Y: 100},
-				rl.Vector2{X: 200, Y: 100},
-				rl.Vector2{X: 150, Y: 200},
-				rl.Red,
-			)
+			return NilValue{}, nil
+		},
+	}, false)
 
+	env.Define("CloseWindow", &BuiltinFunc{
+		Name:  "CloseWindow",
+		Arity: 0,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			rl.CloseWindow()
 			return NilValue{}, nil
 		},
 	}, false)
@@ -1707,6 +1984,7 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 		Name:  "GetMousePos",
 		Arity: 0,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+
 			return &StructValue{
 				TypeName: typeEnv["Vector2"].TypeInfo,
 				Fields: map[string]Value{

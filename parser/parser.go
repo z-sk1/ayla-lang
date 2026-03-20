@@ -2404,7 +2404,8 @@ func (p *Parser) parseExpression(precedence int) Expression {
 
 		case token.IN:
 			p.nextToken()
-			right := p.parseExpression(LOWEST)
+			cur := p.curPrecedence()
+			right := p.parseExpression(cur)
 			left = &InExpression{
 				NodeBase: NodeBase{Token: p.curTok},
 				Left:     left,

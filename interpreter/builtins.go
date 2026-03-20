@@ -92,11 +92,12 @@ func initBuiltinTypes(typeEnv map[string]TypeValue) {
 
 func (i *Interpreter) registerNativeModules() {
 	i.nativeModules = map[string]NativeLoader{
-		"math": LoadMathModule,
-		"rand": LoadRandModule,
-		"fs":   LoadFSModule,
-		"time": LoadTimeModule,
-		"gfx":  LoadGFXModule,
+		"math":  LoadMathModule,
+		"rand":  LoadRandModule,
+		"fs":    LoadFSModule,
+		"time":  LoadTimeModule,
+		"parse": LoadParseModule,
+		"gfx":   LoadGFXModule,
 	}
 }
 
@@ -227,9 +228,9 @@ func (i *Interpreter) registerBuiltins() {
 					Fixed:    false,
 				}, nil
 			case TypeMap:
-				m := make(map[Value]Value)
 				return MapValue{
-					Entries:   m,
+					Entries:   make(map[string]Value),
+					Keys:      make(map[string]Value),
 					KeyType:   ti.Key,
 					ValueType: ti.Value,
 				}, nil
@@ -292,7 +293,7 @@ func (i *Interpreter) registerBuiltins() {
 				return NilValue{}, err
 			}
 
-			delete(val.(MapValue).Entries, key)
+			delete(val.(MapValue).Entries, mapKey(key))
 			i.Env.Set(ident.Value, val)
 			return NilValue{}, nil
 		},

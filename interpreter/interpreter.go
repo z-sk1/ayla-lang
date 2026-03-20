@@ -190,6 +190,70 @@ func (i *Interpreter) RegisterForward(stmts []parser.Statement) error {
 
 			i.typeEnv[stmt.Name.Value] = TypeValue{TypeInfo: enumType}
 
+		case *parser.MethodStatement:
+			recvType, err := i.resolveTypeNode(stmt.Receiver.Type)
+			if err != nil {
+				return NewRuntimeError(stmt, err.Error())
+			}
+
+			recvType = unwrapAlias(recvType)
+
+			params := append(
+				[]*parser.Param{
+					{
+						Name: stmt.Receiver.Name,
+						Type: stmt.Receiver.Type,
+					},
+				},
+				stmt.Params...,
+			)
+
+			paramTypes := []*TypeInfo{}
+			paramNames := []string{}
+			returnTypes := []*TypeInfo{}
+			returnNames := []string{}
+
+			err = i.checkMethodStatement(stmt)
+			if err != nil {
+				return err
+			}
+
+			for _, typ := range stmt.ReturnTypes {
+				ti, err := i.resolveTypeNode(typ)
+				if err != nil {
+					return err
+				}
+				ti = unwrapAlias(ti)
+
+				returnTypes = append(returnTypes, ti)
+				returnNames = append(returnNames, ti.Name)
+			}
+
+			for _, param := range stmt.Params {
+				ti, err := i.resolveTypeNode(param.Type)
+				if err != nil {
+					return err
+				}
+				ti = unwrapAlias(ti)
+
+				paramTypes = append(paramTypes, ti)
+				paramNames = append(paramNames, ti.Name)
+			}
+
+			typeInfo := &TypeInfo{
+				Name:    fmt.Sprintf("fun(%s, %s) (%s)", recvType.Name, strings.Join(paramNames, ", "), strings.Join(returnNames, ", ")),
+				Kind:    TypeFunc,
+				Returns: returnTypes,
+				Params:  paramTypes,
+			}
+
+			i.Env.SetMethod(recvType, stmt.Name.Value, &Func{
+				Params:   params,
+				Body:     stmt.Body,
+				Env:      i.Env,
+				TypeName: typeInfo,
+			})
+
 		case *parser.FuncStatement:
 			paramTypes := make([]*TypeInfo, 0)
 			paramNames := make([]string, 0)
@@ -811,73 +875,6 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 
 		return SignalNone{}, nil
 
-	case *parser.MethodStatement:
-		recvType, err := i.resolveTypeNode(stmt.Receiver.Type)
-		if err != nil {
-			return SignalNone{}, NewRuntimeError(stmt, err.Error())
-		}
-
-		params := append(
-			[]*parser.Param{
-				{
-					Name: stmt.Receiver.Name,
-					Type: stmt.Receiver.Type,
-				},
-			},
-			stmt.Params...,
-		)
-
-		paramTypes := make([]*TypeInfo, 0)
-		paramNames := make([]string, 0)
-
-		returnTypes := make([]*TypeInfo, 0)
-		returnNames := make([]string, 0)
-
-		err = i.checkMethodStatement(stmt)
-		if err != nil {
-			return SignalNone{}, err
-		}
-
-		for _, typ := range stmt.ReturnTypes {
-			ti, err := i.resolveTypeNode(typ)
-			if err != nil {
-				return SignalNone{}, err
-			}
-
-			ti = unwrapAlias(ti)
-
-			returnTypes = append(returnTypes, ti)
-			paramNames = append(paramNames, ti.Name)
-		}
-
-		for _, param := range stmt.Params {
-			ti, err := i.resolveTypeNode(param.Type)
-			if err != nil {
-				return SignalNone{}, err
-			}
-
-			ti = unwrapAlias(ti)
-
-			paramTypes = append(paramTypes, ti)
-			paramNames = append(paramNames, ti.Name)
-		}
-
-		typeInfo := &TypeInfo{
-			Name:    fmt.Sprintf("fun(%s) (%s) (%s)", recvType.Name, strings.Join(paramNames, ", "), strings.Join(returnNames, ", ")),
-			Kind:    TypeFunc,
-			Returns: returnTypes,
-			Params:  paramTypes,
-		}
-
-		i.Env.SetMethod(recvType, stmt.Name.Value, &Func{
-			Params:   params,
-			Body:     stmt.Body,
-			Env:      i.Env,
-			TypeName: typeInfo,
-		})
-
-		return SignalNone{}, nil
-
 	case *parser.ReturnStatement:
 		values := []Value{}
 
@@ -1109,7 +1106,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 				i.Env = NewEnvironment(oldEnv)
 
 				if stmt.Key != nil && stmt.Key.Value != "_" {
-					i.Env.Define(stmt.Key.Value, k, false)
+					i.Env.Define(stmt.Key.Value, copyValue(v.Keys[k]), false)
 				}
 
 				if stmt.Value != nil && stmt.Value.Value != "_" {
@@ -1117,7 +1114,6 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 				}
 
 				sig, err := i.EvalBlock(stmt.Body, false)
-
 				i.Env = oldEnv
 
 				if err != nil {
@@ -1527,7 +1523,7 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 
 		switch s := set.(type) {
 		case MapValue:
-			_, ok := s.Entries[elem]
+			_, ok := s.Entries[mapKey(elem)]
 			return BoolValue{V: ok}, nil
 
 		case ArrayValue:
@@ -1742,7 +1738,8 @@ func (i *Interpreter) evalMapLiteral(expr *parser.CompositeLiteral, expected *Ty
 		}
 
 		return MapValue{
-			Entries:   map[Value]Value{},
+			Entries:   map[string]Value{},
+			Keys:      map[string]Value{},
 			KeyType:   expected.Key,
 			ValueType: expected.Value,
 		}, nil
@@ -1777,7 +1774,8 @@ func (i *Interpreter) evalMapLiteral(expr *parser.CompositeLiteral, expected *Ty
 		valTI = expected.Value
 	}
 
-	elems := map[Value]Value{}
+	elems := map[string]Value{}
+	keys := map[string]Value{}
 
 	for idx, e := range expr.Pairs {
 		k, err := i.EvalExpression(e.Key)
@@ -1813,11 +1811,13 @@ func (i *Interpreter) evalMapLiteral(expr *parser.CompositeLiteral, expected *Ty
 			return NilValue{}, err
 		}
 
-		elems[k] = v
+		elems[mapKey(k)] = v
+		keys[mapKey(k)] = k
 	}
 
 	return MapValue{
 		Entries:   elems,
+		Keys:      keys,
 		KeyType:   keyTI,
 		ValueType: valTI,
 	}, nil
@@ -2141,6 +2141,7 @@ func (i *Interpreter) evalIndexExpression(node parser.Expression, left, idx Valu
 		return NilValue{}, NewRuntimeError(node, "cannot index value of type 'thing' without type assertion")
 	}
 
+	idx = unwrapUntyped(idx)
 	left = unwrapNamed(left)
 
 	typ := i.typeInfoFromValue(left)
@@ -2201,7 +2202,6 @@ func (i *Interpreter) evalIndexExpression(node parser.Expression, left, idx Valu
 	case TypeMap:
 		mv := left.(MapValue)
 
-		// 1. type check key
 		keyType := unwrapAlias(i.typeInfoFromValue(idx))
 
 		if mv.KeyType.Kind == TypeAny {
@@ -2228,7 +2228,7 @@ func (i *Interpreter) evalIndexExpression(node parser.Expression, left, idx Valu
 			}
 		}
 
-		val, ok := mv.Entries[idx]
+		val, ok := mv.Entries[mapKey(idx)]
 		if !ok {
 			return NilValue{}, nil
 		}
@@ -2285,7 +2285,7 @@ func (i *Interpreter) evalSliceExpression(node parser.Expression, left, startVal
 			"cannot slice value of type 'thing' without type assertion")
 	}
 
-	left = unwrapNamed(left)
+	left = unwrapUntyped(unwrapNamed(left))
 	typ := i.typeInfoFromValue(left)
 
 	var length int
@@ -2345,6 +2345,48 @@ func (i *Interpreter) evalSliceExpression(node parser.Expression, left, startVal
 }
 
 func (i *Interpreter) evalMemberExpression(node parser.Expression, left Value, field string) (Value, error) {
+	if left == nil {
+		return NilValue{}, NewRuntimeError(node, "nil value in member expression")
+	}
+
+	orig := left
+
+	origType := unwrapAlias(i.typeInfoFromValue(orig))
+	recvType := unwrapAlias(i.typeInfoFromValue(left))
+	ptrType := i.pointerTo(recvType)
+
+	if fn, ok := i.Env.GetMethod(origType, field); ok {
+		return BoundMethodValue{
+			Receiver: orig,
+			Func:     fn,
+		}, nil
+	}
+
+	if fn, ok := i.Env.GetMethod(ptrType, field); ok {
+		if ptr, ok := orig.(*PointerValue); ok {
+			return BoundMethodValue{
+				Receiver: ptr,
+				Func:     fn,
+			}, nil
+		}
+
+		if v, ok := orig.(*PointerValue); ok {
+			return BoundMethodValue{
+				Receiver: v,
+				Func:     fn,
+			}, nil
+		}
+
+		tmp := &Variable{Value: orig}
+		return BoundMethodValue{
+			Receiver: &PointerValue{
+				Target:   tmp,
+				ElemType: recvType,
+			},
+			Func: fn,
+		}, nil
+	}
+
 	if ptr, ok := left.(*PointerValue); ok {
 		if ptr.Target == nil || ptr.Target.Value == nil {
 			return NilValue{}, NewRuntimeError(node, "nil pointer dereference")
@@ -2352,58 +2394,24 @@ func (i *Interpreter) evalMemberExpression(node parser.Expression, left Value, f
 		left = ptr.Target.Value
 	}
 
-	if left == nil {
-		return NilValue{}, NewRuntimeError(node, "nil value in member expression")
-	}
-	recvType := unwrapAlias(i.typeInfoFromValue(left))
-	ptrType := i.pointerTo(recvType)
-
-	if fn, ok := i.Env.GetMethod(ptrType, field); ok {
-		tmp := &Variable{Value: left}
-		return BoundMethodValue{
-			Receiver: &PointerValue{Target: tmp, ElemType: recvType},
-			Func:     fn,
-		}, nil
-	}
-
-	if fn, ok := i.Env.GetMethod(recvType, field); ok {
-		recv := left
-
-		if sv, ok := left.(*StructValue); ok {
-			newFields := make(map[string]Value)
-			for k, v := range sv.Fields {
-				newFields[k] = v
-			}
-
-			recv = &StructValue{
-				TypeName: sv.TypeName,
-				Fields:   newFields,
-			}
-		}
-
-		return BoundMethodValue{
-			Receiver: recv,
-			Func:     fn,
-		}, nil
-	}
-
 	switch obj := left.(type) {
+
 	case ModuleValue:
 		if typ, ok := obj.typeEnv[field]; ok {
 			return typ, nil
 		}
-
 		val, ok, _ := obj.Env.Get(field)
 		if !ok {
 			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unknown '%s'", field))
 		}
-
 		return val, nil
+
 	case *StructValue:
-		val, ok := obj.Fields[field]
+		fieldVar, ok := obj.Fields[field]
 		if !ok {
 			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unknown field %s", field))
 		}
+		val := fieldVar
 
 		structTI := obj.TypeName
 		if structTI.Kind == TypeNamed {
@@ -2412,26 +2420,31 @@ func (i *Interpreter) evalMemberExpression(node parser.Expression, left Value, f
 
 		expectedType, ok := structTI.Fields[field]
 		if !ok {
-			return NilValue{}, NewRuntimeError(node,
-				fmt.Sprintf("unknown field %s", field))
+			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unknown field %s", field))
 		}
 
 		actualTI := unwrapAlias(i.typeInfoFromValue(val))
 		expectedTI := unwrapAlias(expectedType)
 
 		if !typesAssignable(actualTI, expectedTI) {
-			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("field '%s' expected '%s' but got '%s'", field, expectedType.Name, actualTI.Name))
+			return NilValue{}, NewRuntimeError(node,
+				fmt.Sprintf("field '%s' expected '%s' but got '%s'",
+					field, expectedType.Name, actualTI.Name))
 		}
 
 		return val, nil
+
 	case TypeValue:
 		if obj.TypeInfo.Kind != TypeEnum {
-			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("type '%s' has no members", obj.TypeInfo.Name))
+			return NilValue{}, NewRuntimeError(node,
+				fmt.Sprintf("type '%s' has no members", obj.TypeInfo.Name))
 		}
 
 		idx, ok := obj.TypeInfo.Variants[field]
 		if !ok {
-			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unknown enum variant '%s.%s'", obj.TypeInfo.Name, field))
+			return NilValue{}, NewRuntimeError(node,
+				fmt.Sprintf("unknown enum variant '%s.%s'",
+					obj.TypeInfo.Name, field))
 		}
 
 		return EnumValue{
@@ -2441,7 +2454,9 @@ func (i *Interpreter) evalMemberExpression(node parser.Expression, left Value, f
 		}, nil
 	}
 
-	return NilValue{}, NewRuntimeError(node, fmt.Sprintf("member expression expects enums or structs, but got '%s'", string(left.Type())))
+	return NilValue{}, NewRuntimeError(node,
+		fmt.Sprintf("member expression expects enums or structs, but got '%s'",
+			string(left.Type())))
 }
 
 func (i *Interpreter) evalInfix(node *parser.InfixExpression, left Value, op string, right Value) (Value, error) {
@@ -2847,17 +2862,58 @@ func (i *Interpreter) evalPrefix(node *parser.PrefixExpression, op string, right
 		}
 
 	case "&":
-		ident, ok := node.Right.(*parser.Identifier)
-		if !ok {
+		switch expr := node.Right.(type) {
+
+		case *parser.Identifier:
+			v, ok := i.Env.GetVar(expr.Value)
+			if !ok {
+				return NilValue{}, NewRuntimeError(node, "undefined variable")
+			}
+			ti := i.typeInfoFromValue(v.Value)
+			if ti.Kind == TypePointer {
+				ti = ti.Elem
+			}
+
+			return &PointerValue{
+				Target:   v,
+				ElemType: ti,
+			}, nil
+
+		case *parser.CompositeLiteral:
+			val, err := i.EvalExpression(expr)
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			ti := i.typeInfoFromValue(val)
+			if ti.Kind == TypePointer {
+				ti = ti.Elem
+			}
+
+			tmp := &Variable{Value: val}
+
+			return &PointerValue{
+				Target:   tmp,
+				ElemType: ti,
+			}, nil
+
+		case *parser.MemberExpression:
+			ptr, err := i.evalAddressableMember(expr)
+			if err != nil {
+				return NilValue{}, err
+			}
+			return ptr, nil
+
+		case *parser.IndexExpression:
+			ptr, err := i.evalAddressableIndex(expr)
+			if err != nil {
+				return NilValue{}, err
+			}
+			return ptr, nil
+
+		default:
 			return NilValue{}, NewRuntimeError(node, "cannot take address of expression")
 		}
-		v, ok := i.Env.GetVar(ident.Value)
-		if !ok {
-			return NilValue{}, NewRuntimeError(node, "undefined variable")
-		}
-
-		ptr := &PointerValue{Target: v, ElemType: i.typeInfoFromValue(v.Value)}
-		return ptr, nil
 
 	case "*":
 		ptr, ok := right.(*PointerValue)
@@ -2871,6 +2927,70 @@ func (i *Interpreter) evalPrefix(node *parser.PrefixExpression, op string, right
 	}
 
 	return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unknown prefix operator: %s", node.Operator))
+}
+
+func (i *Interpreter) evalAddressableMember(node *parser.MemberExpression) (*PointerValue, error) {
+	left, err := i.EvalExpression(node.Left)
+	if err != nil {
+		return nil, err
+	}
+
+	if ptr, ok := left.(*PointerValue); ok {
+		left = ptr.Target.Value
+	}
+
+	sv, ok := left.(*StructValue)
+	if !ok {
+		return nil, NewRuntimeError(node, "cannot take address of non-struct field")
+	}
+
+	val, ok := sv.Fields[node.Field.Value]
+	if !ok {
+		return nil, NewRuntimeError(node, "unknown field")
+	}
+
+	ti := i.typeInfoFromValue(val)
+	if ti.Kind == TypePointer {
+		ti = ti.Elem
+	}
+
+	tmp := &Variable{Value: val}
+
+	return &PointerValue{
+		Target:   tmp,
+		ElemType: ti,
+	}, nil
+}
+
+func (i *Interpreter) evalAddressableIndex(node *parser.IndexExpression) (*PointerValue, error) {
+	left, err := i.EvalExpression(node.Left)
+	if err != nil {
+		return nil, err
+	}
+
+	idxVal, err := i.EvalExpression(node.Index)
+	if err != nil {
+		return nil, err
+	}
+
+	idx := idxVal.(IntValue).V
+
+	switch arr := left.(type) {
+
+	case ArrayValue:
+		if idx < 0 || idx >= len(arr.Elements) {
+			return nil, NewRuntimeError(node, "index out of range")
+		}
+
+		tmp := &Variable{Value: arr.Elements[idx]}
+
+		return &PointerValue{
+			Target:   tmp,
+			ElemType: i.typeInfoFromValue(arr.Elements[idx]),
+		}, nil
+	}
+
+	return nil, NewRuntimeError(node, "cannot take address of index")
 }
 
 func (i *Interpreter) evalPostfix(node *parser.PostfixExpression, left Value, op string) (Value, error) {
@@ -2920,6 +3040,7 @@ func (i *Interpreter) evalPostfix(node *parser.PostfixExpression, left Value, op
 }
 
 func isTruthy(val Value) (bool, error) {
+	val = unwrapNamed(unwrapUntyped(val))
 	b, ok := val.(BoolValue)
 	if !ok {
 		return false, fmt.Errorf("condition must be boolean")
