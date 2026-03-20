@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	rl "github.com/gen2brain/raylib-go/raylib"
 	"github.com/z-sk1/ayla-lang/parser"
 )
 
@@ -434,6 +435,18 @@ func (i InterfaceValue) Type() ValueType {
 
 func (i InterfaceValue) String() string {
 	return i.TypeInfo.Name
+}
+
+type SoundValue struct {
+	Sound rl.Sound
+}
+
+func (s SoundValue) Type() ValueType {
+	return "Sound"
+}
+
+func (s SoundValue) String() string {
+	return "<Sound>"
 }
 
 type ArrayValue struct {

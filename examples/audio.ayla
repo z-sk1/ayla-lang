@@ -1,0 +1,14 @@
+import gfx
+import time
+
+gfx.InitSound()
+
+s := gfx.LoadSound("example.wav")
+
+gfx.PlaySound(s)
+gfx.SetSoundVolume(s, 0.5)
+
+
+time.Sleep(2)
+
+gfx.StopSound(s)
