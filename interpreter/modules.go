@@ -99,13 +99,13 @@ func argArray(node parser.Node, args []Value, i int, name string) (ArrayValue, e
 func argColor(node parser.Node, typeEnv map[string]TypeValue, args []Value, i int, name string) (rl.Color, error) {
 	colTI := typeEnv["Color"].TypeInfo
 
-	sv, err := argStruct(node, args, i, name, "gfx.Color")
+	sv, err := argStruct(node, args, i, name, "rl.Color")
 	if err != nil {
 		return rl.Color{}, err
 	}
 
 	if !typesAssignable(sv.TypeName, colTI) {
-		return rl.Color{}, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be gfx.Color", name, i+1))
+		return rl.Color{}, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be rl.Color", name, i+1))
 	}
 
 	return colorFromValue(sv)
@@ -118,11 +118,11 @@ func argVector2(node parser.Node, i *Interpreter, typeEnv map[string]TypeValue, 
 
 	vecVal, ok := v.(*StructValue)
 	if !ok {
-		return rl.Vector2{}, NewRuntimeError(node, name+": argument must be gfx.Vector2")
+		return rl.Vector2{}, NewRuntimeError(node, name+": argument must be rl.Vector2")
 	}
 
 	if !typesAssignable(i.typeInfoFromValue(vecVal), vecTI) {
-		return rl.Vector2{}, NewRuntimeError(node, name+": argument must be gfx.Vector2")
+		return rl.Vector2{}, NewRuntimeError(node, name+": argument must be rl.Vector2")
 	}
 
 	x, _ := toFloat(unwrapUntyped(vecVal.Fields["X"]))
@@ -132,6 +132,28 @@ func argVector2(node parser.Node, i *Interpreter, typeEnv map[string]TypeValue, 
 		X: float32(x),
 		Y: float32(y),
 	}, nil
+}
+
+func argSound(node parser.Node, i *Interpreter, typeEnv map[string]TypeValue, args []Value, idx int, name string) (rl.Sound, error) {
+	soundTI := typeEnv["Sound"].TypeInfo
+
+	v := unwrapNamed(args[idx])
+
+	soundVal, ok := v.(*StructValue)
+	if !ok {
+		return rl.Sound{}, NewRuntimeError(node, fmt.Sprintf("%s: argument must be rl.Sound son", name))
+	}
+
+	if !typesAssignable(i.typeInfoFromValue(soundVal), soundTI) {
+		return rl.Sound{}, NewRuntimeError(node, fmt.Sprintf("%s: argument must be rl.Sound sonion", name))
+	}
+
+	sound, ok := soundVal.Native.(rl.Sound)
+	if !ok {
+		return rl.Sound{}, NewRuntimeError(node, fmt.Sprintf("%s: argument must be rl.Sound shoncicle", name))
+	}
+
+	return sound, nil
 }
 
 func colorFromValue(v Value) (rl.Color, error) {
@@ -1188,7 +1210,7 @@ func LoadParseModule(i *Interpreter) (ModuleValue, error) {
 	return mod, nil
 }
 
-func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
+func LoadRLModule(i *Interpreter) (ModuleValue, error) {
 	env := NewEnvironment(i.Env)
 	typeEnv := make(map[string]TypeValue)
 
@@ -1227,11 +1249,20 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 		},
 	}
 
+	typeEnv["Sound"] = TypeValue{
+		TypeInfo: &TypeInfo{
+			Name:   "Sound",
+			Kind:   TypeStruct,
+			Fields: nil,
+			Opaque: true,
+		},
+	}
+
 	env.Define("SetWindowFlags", &BuiltinFunc{
 		Name:  "SetWindowFlags",
 		Arity: 1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			flag, err := argInt(node, args, 0, "gfx.SetWindowFlags")
+			flag, err := argInt(node, args, 0, "rl.SetWindowFlags")
 			if err != nil {
 				return NilValue{}, err
 			}
@@ -1245,17 +1276,17 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 		Name:  "Init",
 		Arity: 3,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			w, err := argInt(node, args, 0, "gfx.InitWindow")
+			w, err := argInt(node, args, 0, "rl.InitWindow")
 			if err != nil {
 				return NilValue{}, err
 			}
 
-			h, err := argInt(node, args, 1, "gfx.InitWindow")
+			h, err := argInt(node, args, 1, "rl.InitWindow")
 			if err != nil {
 				return NilValue{}, err
 			}
 
-			title, err := argString(node, args, 2, "gfx.InitWindow")
+			title, err := argString(node, args, 2, "rl.InitWindow")
 			if err != nil {
 				return NilValue{}, err
 			}
@@ -1280,7 +1311,7 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 		Name:  "SetTargetFPS",
 		Arity: 1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			fps, err := argInt(node, args, 0, "gfx.SetTargetFPS")
+			fps, err := argInt(node, args, 0, "rl.SetTargetFPS")
 			if err != nil {
 				return NilValue{}, err
 			}
@@ -1298,6 +1329,20 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 		},
 	}, false)
 
+	env.Define("SetExitKey", &BuiltinFunc{
+		Name:  "SetExitKey",
+		Arity: 1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			key, err := argInt(node, args, 0, "rl.SetExitKey")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			rl.SetExitKey(int32(key))
+			return NilValue{}, nil
+		},
+	}, false)
+
 	env.Define("Clear", &BuiltinFunc{
 		Name:  "Clear",
 		Arity: -1,
@@ -1310,7 +1355,7 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 
 				return NilValue{}, nil
 			case 1:
-				col, err := argColor(node, typeEnv, args, 0, "gfx.Clear")
+				col, err := argColor(node, typeEnv, args, 0, "rl.Clear")
 				if err != nil {
 					return NilValue{}, err
 				}
@@ -1320,7 +1365,7 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 				return NilValue{}, nil
 			}
 
-			return NilValue{}, NewRuntimeError(node, "gfx.Clear: invalid amount of arguments, expected between 0-1 arguments")
+			return NilValue{}, NewRuntimeError(node, "rl.Clear: invalid amount of arguments, expected between 0-1 arguments")
 		},
 	}, false)
 
@@ -1337,7 +1382,7 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 		Name:  "SetWindowTitle",
 		Arity: 1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			title, err := argString(node, args, 0, "gfx.SetWindowTitle")
+			title, err := argString(node, args, 0, "rl.SetWindowTitle")
 			if err != nil {
 				return NilValue{}, err
 			}
@@ -1351,12 +1396,12 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 		Name:  "SetWindowPos",
 		Arity: 2,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			x, err := argInt(node, args, 0, "gfx.SetWindowPos")
+			x, err := argInt(node, args, 0, "rl.SetWindowPos")
 			if err != nil {
 				return NilValue{}, err
 			}
 
-			y, err := argInt(node, args, 1, "gfx.SetWindowPos")
+			y, err := argInt(node, args, 1, "rl.SetWindowPos")
 			if err != nil {
 				return NilValue{}, err
 			}
@@ -1384,12 +1429,12 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 		Name:  "SetWindowSize",
 		Arity: 2,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			w, err := argInt(node, args, 0, "gfx.SetWindowSize")
+			w, err := argInt(node, args, 0, "rl.SetWindowSize")
 			if err != nil {
 				return NilValue{}, err
 			}
 
-			h, err := argInt(node, args, 1, "gfx.SetWindowSize")
+			h, err := argInt(node, args, 1, "rl.SetWindowSize")
 			if err != nil {
 				return NilValue{}, err
 			}
@@ -1403,12 +1448,12 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 		Name:  "SetWindowMinSize",
 		Arity: 2,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			w, err := argInt(node, args, 0, "gfx.SetWindowMinSize")
+			w, err := argInt(node, args, 0, "rl.SetWindowMinSize")
 			if err != nil {
 				return NilValue{}, err
 			}
 
-			h, err := argInt(node, args, 1, "gfx.SetWindowMinSize")
+			h, err := argInt(node, args, 1, "rl.SetWindowMinSize")
 			if err != nil {
 				return NilValue{}, err
 			}
@@ -1422,12 +1467,12 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 		Name:  "SetWindowMaxSize",
 		Arity: 2,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			w, err := argInt(node, args, 0, "gfx.SetWindowMaxSize")
+			w, err := argInt(node, args, 0, "rl.SetWindowMaxSize")
 			if err != nil {
 				return NilValue{}, err
 			}
 
-			h, err := argInt(node, args, 1, "gfx.SetWindowMaxSize")
+			h, err := argInt(node, args, 1, "rl.SetWindowMaxSize")
 			if err != nil {
 				return NilValue{}, err
 			}
@@ -1455,7 +1500,7 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 		Name:  "SetFullscreen",
 		Arity: 1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			enabled, err := argBool(node, args, 0, "gfx.SetFullscreen")
+			enabled, err := argBool(node, args, 0, "rl.SetFullscreen")
 			if err != nil {
 				return NilValue{}, err
 			}
@@ -1575,22 +1620,22 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 		Name:  "NewColor",
 		Arity: 4,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			r, err := argInt(node, args, 0, "gfx.NewColor")
+			r, err := argInt(node, args, 0, "rl.NewColor")
 			if err != nil {
 				return NilValue{}, err
 			}
 
-			g, err := argInt(node, args, 1, "gfx.NewColor")
+			g, err := argInt(node, args, 1, "rl.NewColor")
 			if err != nil {
 				return NilValue{}, err
 			}
 
-			b, err := argInt(node, args, 2, "gfx.NewColor")
+			b, err := argInt(node, args, 2, "rl.NewColor")
 			if err != nil {
 				return NilValue{}, err
 			}
 
-			a, err := argInt(node, args, 3, "gfx.NewColor")
+			a, err := argInt(node, args, 3, "rl.NewColor")
 			if err != nil {
 				return NilValue{}, err
 			}
@@ -1611,12 +1656,12 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 		Name:  "NewVector2",
 		Arity: 2,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			x, err := argFloat(node, args, 0, "gfx.NewVector2")
+			x, err := argFloat(node, args, 0, "rl.NewVector2")
 			if err != nil {
 				return NilValue{}, err
 			}
 
-			y, err := argFloat(node, args, 1, "gfx.NewVector2")
+			y, err := argFloat(node, args, 1, "rl.NewVector2")
 			if err != nil {
 				return NilValue{}, err
 			}
@@ -1637,17 +1682,17 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 		Name:  "DrawRect",
 		Arity: 3,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			pv, err := argVector2(node, i, typeEnv, args, 0, "gfx.DrawRect")
+			pv, err := argVector2(node, i, typeEnv, args, 0, "rl.DrawRect")
 			if err != nil {
 				return NilValue{}, err
 			}
 
-			sv, err := argVector2(node, i, typeEnv, args, 1, "gfx.DrawRect")
+			sv, err := argVector2(node, i, typeEnv, args, 1, "rl.DrawRect")
 			if err != nil {
 				return NilValue{}, err
 			}
 
-			col, err := argColor(node, typeEnv, args, 2, "gfx.DrawRect")
+			col, err := argColor(node, typeEnv, args, 2, "rl.DrawRect")
 			if err != nil {
 				return NilValue{}, err
 			}
@@ -1661,17 +1706,17 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 		Name:  "DrawRectLines",
 		Arity: 3,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			pv, err := argVector2(node, i, typeEnv, args, 0, "gfx.DrawRectLines")
+			pv, err := argVector2(node, i, typeEnv, args, 0, "rl.DrawRectLines")
 			if err != nil {
 				return NilValue{}, err
 			}
 
-			sv, err := argVector2(node, i, typeEnv, args, 1, "gfx.DrawRectLines")
+			sv, err := argVector2(node, i, typeEnv, args, 1, "rl.DrawRectLines")
 			if err != nil {
 				return NilValue{}, err
 			}
 
-			col, err := argColor(node, typeEnv, args, 2, "gfx.DrawRectLines")
+			col, err := argColor(node, typeEnv, args, 2, "rl.DrawRectLines")
 			if err != nil {
 				return NilValue{}, err
 			}
@@ -1685,17 +1730,17 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 		Name:  "DrawCircle",
 		Arity: 3,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			pv, err := argVector2(node, i, typeEnv, args, 0, "gfx.DrawCircle")
+			pv, err := argVector2(node, i, typeEnv, args, 0, "rl.DrawCircle")
 			if err != nil {
 				return NilValue{}, err
 			}
 
-			rVal, err := argFloat(node, args, 1, "gfx.DrawCircle")
+			rVal, err := argFloat(node, args, 1, "rl.DrawCircle")
 			if err != nil {
 				return NilValue{}, err
 			}
 
-			col, err := argColor(node, typeEnv, args, 2, "gfx.DrawCircle")
+			col, err := argColor(node, typeEnv, args, 2, "rl.DrawCircle")
 			if err != nil {
 				return NilValue{}, err
 			}
@@ -1711,17 +1756,17 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 		Name:  "DrawCircleLines",
 		Arity: 3,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			pv, err := argVector2(node, i, typeEnv, args, 0, "gfx.DrawCircleLines")
+			pv, err := argVector2(node, i, typeEnv, args, 0, "rl.DrawCircleLines")
 			if err != nil {
 				return NilValue{}, err
 			}
 
-			rVal, err := argFloat(node, args, 1, "gfx.DrawCircleLines")
+			rVal, err := argFloat(node, args, 1, "rl.DrawCircleLines")
 			if err != nil {
 				return NilValue{}, err
 			}
 
-			col, err := argColor(node, typeEnv, args, 2, "gfx.DrawCircleLines")
+			col, err := argColor(node, typeEnv, args, 2, "rl.DrawCircleLines")
 			if err != nil {
 				return NilValue{}, err
 			}
@@ -1737,22 +1782,22 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 		Name:  "DrawText",
 		Arity: 4,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			txtVal, err := argString(node, args, 0, "gfx.DrawText")
+			txtVal, err := argString(node, args, 0, "rl.DrawText")
 			if err != nil {
 				return NilValue{}, err
 			}
 
-			pv, err := argVector2(node, i, typeEnv, args, 1, "gfx.DrawRect")
+			pv, err := argVector2(node, i, typeEnv, args, 1, "rl.DrawRect")
 			if err != nil {
 				return NilValue{}, err
 			}
 
-			fontVal, err := argInt(node, args, 2, "gfx.DrawText")
+			fontVal, err := argInt(node, args, 2, "rl.DrawText")
 			if err != nil {
 				return NilValue{}, err
 			}
 
-			col, err := argColor(node, typeEnv, args, 3, "gfx.DrawText")
+			col, err := argColor(node, typeEnv, args, 3, "rl.DrawText")
 			if err != nil {
 				return NilValue{}, err
 			}
@@ -1771,17 +1816,17 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 		Name:  "DrawLine",
 		Arity: 3,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			pv, err := argVector2(node, i, typeEnv, args, 0, "gfx.DrawLine")
+			pv, err := argVector2(node, i, typeEnv, args, 0, "rl.DrawLine")
 			if err != nil {
 				return NilValue{}, err
 			}
 
-			sv, err := argVector2(node, i, typeEnv, args, 1, "gfx.DrawLine")
+			sv, err := argVector2(node, i, typeEnv, args, 1, "rl.DrawLine")
 			if err != nil {
 				return NilValue{}, err
 			}
 
-			col, err := argColor(node, typeEnv, args, 2, "gfx.DrawLine")
+			col, err := argColor(node, typeEnv, args, 2, "rl.DrawLine")
 			if err != nil {
 				return NilValue{}, err
 			}
@@ -1853,7 +1898,7 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 		Name:  "IsKeyDown",
 		Arity: 1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			v, err := argInt(node, args, 0, "gfx.KeyDown")
+			v, err := argInt(node, args, 0, "rl.KeyDown")
 			if err != nil {
 				return NilValue{}, err
 			}
@@ -1874,7 +1919,7 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 		Name:  "IsKeyPressed",
 		Arity: 1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			v, err := argInt(node, args, 0, "gfx.KeyPressed")
+			v, err := argInt(node, args, 0, "rl.KeyPressed")
 			if err != nil {
 				return NilValue{}, err
 			}
@@ -1887,7 +1932,7 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 		Name:  "IsKeyReleased",
 		Arity: 1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			v, err := argInt(node, args, 0, "gfx.KeyReleased")
+			v, err := argInt(node, args, 0, "rl.KeyReleased")
 			if err != nil {
 				return NilValue{}, err
 			}
@@ -1900,7 +1945,7 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 		Name:  "IsKeyUp",
 		Arity: 1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			v, err := argInt(node, args, 0, "gfx.KeyUp")
+			v, err := argInt(node, args, 0, "rl.KeyUp")
 			if err != nil {
 				return NilValue{}, err
 			}
@@ -1913,7 +1958,7 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 		Name:  "IsMouseDown",
 		Arity: 1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			v, err := argInt(node, args, 0, "gfx.MouseDown")
+			v, err := argInt(node, args, 0, "rl.MouseDown")
 			if err != nil {
 				return NilValue{}, err
 			}
@@ -1926,7 +1971,7 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 		Name:  "IsMousePressed",
 		Arity: 1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			v, err := argInt(node, args, 0, "gfx.MousePressed")
+			v, err := argInt(node, args, 0, "rl.MousePressed")
 			if err != nil {
 				return NilValue{}, err
 			}
@@ -1939,7 +1984,7 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 		Name:  "IsMouseReleased",
 		Arity: 1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			v, err := argInt(node, args, 0, "gfx.MouseReleased")
+			v, err := argInt(node, args, 0, "rl.MouseReleased")
 			if err != nil {
 				return NilValue{}, err
 			}
@@ -1952,7 +1997,7 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 		Name:  "IsMouseUp",
 		Arity: 1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			v, err := argInt(node, args, 0, "gfx.MouseUp")
+			v, err := argInt(node, args, 0, "rl.MouseUp")
 			if err != nil {
 				return NilValue{}, err
 			}
@@ -1965,12 +2010,12 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 		Name:  "SetMousePos",
 		Arity: 2,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			x, err := argInt(node, args, 0, "gfx.SetMousePos")
+			x, err := argInt(node, args, 0, "rl.SetMousePos")
 			if err != nil {
 				return NilValue{}, err
 			}
 
-			y, err := argInt(node, args, 1, "gfx.SetMousePos")
+			y, err := argInt(node, args, 1, "rl.SetMousePos")
 			if err != nil {
 				return NilValue{}, err
 			}
@@ -2009,11 +2054,150 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 		},
 	}, false)
 
+	env.Define("InitAudio", &BuiltinFunc{
+		Name:  "InitSound",
+		Arity: 0,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			rl.InitAudioDevice()
+			return NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("CloseAudio", &BuiltinFunc{
+		Name:  "CloseSound",
+		Arity: 0,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			rl.CloseAudioDevice()
+			return NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("LoadSound", &BuiltinFunc{
+		Name:  "LoadSound",
+		Arity: 1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			path, err := argString(node, args, 0, "rl.LoadSound")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			sound := rl.LoadSound(path)
+
+			return &StructValue{
+				TypeName: typeEnv["Sound"].TypeInfo,
+				Native:   sound,
+			}, nil
+		},
+	}, false)
+
+	env.Define("UnloadSound", &BuiltinFunc{
+		Name:  "UnloadSound",
+		Arity: 1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			sound, err := argSound(node, i, typeEnv, args, 0, "rl.UnloadSound")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			rl.UnloadSound(sound)
+			return NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("PlaySound", &BuiltinFunc{
+		Name:  "PlaySound",
+		Arity: 1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			sound, err := argSound(node, i, typeEnv, args, 0, "rl.PlaySound")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			rl.PlaySound(sound)
+			return NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("StopSound", &BuiltinFunc{
+		Name:  "StopSound",
+		Arity: 1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			sound, err := argSound(node, i, typeEnv, args, 0, "rl.StopSound")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			rl.StopSound(sound)
+			return NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("IsSoundPlaying", &BuiltinFunc{
+		Name:  "IsSoundPlaying",
+		Arity: 1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			sound, err := argSound(node, i, typeEnv, args, 0, "rl.IsSoundPlaying")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			return BoolValue{V: rl.IsSoundPlaying(sound)}, nil
+		},
+	}, false)
+
+	env.Define("PauseSound", &BuiltinFunc{
+		Name:  "PauseSound",
+		Arity: 1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			sound, err := argSound(node, i, typeEnv, args, 0, "rl.PauseSound")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			rl.PauseSound(sound)
+			return NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("ResumeSound", &BuiltinFunc{
+		Name:  "ResumeSound",
+		Arity: 1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			sound, err := argSound(node, i, typeEnv, args, 0, "rl.ResumeSound")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			rl.ResumeSound(sound)
+			return NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("SetSoundVolume", &BuiltinFunc{
+		Name:  "SetSoundVolume",
+		Arity: 2,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			sound, err := argSound(node, i, typeEnv, args, 0, "rl.SetSoundVolume")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			volume, err := argFloat(node, args, 1, "rl.SetSoundVolume")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			rl.SetSoundVolume(sound, float32(volume))
+			return NilValue{}, nil
+		},
+	}, false)
+
 	// consts
 	env.Define("MouseLeft", IntValue{V: int(rl.MouseButtonLeft)}, true)
 	env.Define("MouseRight", IntValue{V: int(rl.MouseButtonRight)}, true)
 	env.Define("MouseMiddle", IntValue{V: int(rl.MouseMiddleButton)}, true)
 
+	env.Define("KeyNil", IntValue{V: rl.KeyNull}, true)
 	env.Define("KeyA", IntValue{V: rl.KeyA}, true)
 	env.Define("KeyB", IntValue{V: rl.KeyB}, true)
 	env.Define("KeyC", IntValue{V: rl.KeyC}, true)
@@ -2103,79 +2287,8 @@ func LoadGFXModule(i *Interpreter) (ModuleValue, error) {
 	env.Define("FlagWindowBorderless", IntValue{V: rl.FlagBorderlessWindowedMode}, true)
 	env.Define("FlagWindowMsaa4x", IntValue{V: rl.FlagMsaa4xHint}, true)
 
-	env.Define("InitSound", &BuiltinFunc{
-		Name:  "InitSound",
-		Arity: 0,
-		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			rl.InitAudioDevice()
-			return NilValue{}, nil
-		},
-	}, false)
-
-	env.Define("LoadSound", &BuiltinFunc{
-		Name:  "LoadSound",
-		Arity: 1,
-		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			path, err := argString(node, args, 0, "audio.LoadSound")
-			if err != nil {
-				return NilValue{}, err
-			}
-
-			sound := rl.LoadSound(path)
-
-			return SoundValue{Sound: sound}, nil
-		},
-	}, false)
-
-	env.Define("PlaySound", &BuiltinFunc{
-		Name:  "PlaySound",
-		Arity: 1,
-		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			soundVal, ok := args[0].(SoundValue)
-			if !ok {
-				return NilValue{}, fmt.Errorf("expected a Sound")
-			}
-
-			rl.PlaySound(soundVal.Sound)
-			return NilValue{}, nil
-		},
-	}, false)
-
-	env.Define("StopSound", &BuiltinFunc{
-		Name:  "StopSound",
-		Arity: 1,
-		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			soundVal, ok := args[0].(SoundValue)
-			if !ok {
-				return NilValue{}, fmt.Errorf("expected a Sound")
-			}
-
-			rl.StopSound(soundVal.Sound)
-			return NilValue{}, nil
-		},
-	}, false)
-
-	env.Define("SetSoundVolume", &BuiltinFunc{
-		Name:  "SetSoundVolume",
-		Arity: 2,
-		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			soundVal, ok := args[0].(SoundValue)
-			if !ok {
-				return NilValue{}, fmt.Errorf("expected a Sound")
-			}
-
-			volume, err := argFloat(node, args, 1, "audio.SetSoundVolume")
-			if err != nil {
-				return NilValue{}, err
-			}
-
-			rl.SetSoundVolume(soundVal.Sound, float32(volume))
-			return NilValue{}, nil
-		},
-	}, false)
-
 	module := ModuleValue{
-		Name:    "gfx",
+		Name:    "rl",
 		Env:     env,
 		typeEnv: typeEnv,
 	}

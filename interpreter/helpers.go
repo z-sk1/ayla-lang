@@ -1010,6 +1010,7 @@ func copyValue(v Value) Value {
 		return &StructValue{
 			TypeName: val.TypeName,
 			Fields:   newFields,
+			Native:   val.Native,
 		}
 
 	case ArrayValue:

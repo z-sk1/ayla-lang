@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"strings"
 
-	rl "github.com/gen2brain/raylib-go/raylib"
 	"github.com/z-sk1/ayla-lang/parser"
 )
 
@@ -31,33 +30,29 @@ const (
 )
 
 type TypeInfo struct {
-	Name        string
-	Kind        TypeKind
-	Underlying  *TypeInfo
-	Alias       bool
+	Name       string
+	Kind       TypeKind
+	Underlying *TypeInfo
+	Alias      bool
+	Opaque     bool
+
 	Methods     map[string]*Func
 	MethodTypes map[string]*TypeInfo
 
-	// boundaries
 	Min *float64
 	Max *float64
 
-	// structs
 	Fields map[string]*TypeInfo
 
-	// arrays
-	Elem *TypeInfo // arrays and pointers
+	Elem *TypeInfo
 	Size int
 
-	// maps
 	Key          *TypeInfo
 	Value        *TypeInfo
 	IsComparable bool
 
-	// enums
 	Variants map[string]int
 
-	// funcs
 	Params  []*TypeInfo
 	Returns []*TypeInfo
 }
@@ -437,18 +432,6 @@ func (i InterfaceValue) String() string {
 	return i.TypeInfo.Name
 }
 
-type SoundValue struct {
-	Sound rl.Sound
-}
-
-func (s SoundValue) Type() ValueType {
-	return "Sound"
-}
-
-func (s SoundValue) String() string {
-	return "<Sound>"
-}
-
 type ArrayValue struct {
 	Elements []Value
 	ElemType *TypeInfo
@@ -475,6 +458,7 @@ func (a ArrayValue) String() string {
 type StructValue struct {
 	TypeName *TypeInfo
 	Fields   map[string]Value
+	Native   any
 }
 
 func (s *StructValue) Type() ValueType {

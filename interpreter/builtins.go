@@ -97,7 +97,7 @@ func (i *Interpreter) registerNativeModules() {
 		"fs":    LoadFSModule,
 		"time":  LoadTimeModule,
 		"parse": LoadParseModule,
-		"gfx":   LoadGFXModule,
+		"rl":    LoadRLModule,
 	}
 }
 

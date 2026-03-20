@@ -1600,6 +1600,10 @@ func (i *Interpreter) evalStructLiteral(expr *parser.CompositeLiteral, typeInfo 
 			fmt.Sprintf("%s is not a struct type", typeInfo.Name))
 	}
 
+	if typeInfo.Opaque && len(expr.Fields) > 0 {
+		return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("type '%s' is opaque and cannot be constructed with fields", typeInfo.Name))
+	}
+
 	fields := make(map[string]Value)
 
 	for name, e := range expr.Fields {
@@ -2407,15 +2411,18 @@ func (i *Interpreter) evalMemberExpression(node parser.Expression, left Value, f
 		return val, nil
 
 	case *StructValue:
-		fieldVar, ok := obj.Fields[field]
-		if !ok {
-			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unknown field %s", field))
-		}
-		val := fieldVar
-
 		structTI := obj.TypeName
 		if structTI.Kind == TypeNamed {
 			structTI = structTI.Underlying
+		}
+
+		if structTI.Opaque {
+			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("type '%s' is opaque and its fields cannot be accessed", structTI.Name))
+		}
+
+		val, ok := obj.Fields[field]
+		if !ok {
+			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unknown field %s", field))
 		}
 
 		expectedType, ok := structTI.Fields[field]
