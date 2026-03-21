@@ -156,23 +156,23 @@ func argSound(node parser.Node, i *Interpreter, typeEnv map[string]TypeValue, ar
 	return sound, nil
 }
 
-func argMusic(node parser.Node, i *Interpreter, typeEnv map[string]TypeValue, args []Value, idx int, name string) (rl.Music, error) {
+func argMusic(node parser.Node, i *Interpreter, typeEnv map[string]TypeValue, args []Value, idx int, name string) (*rl.Music, error) {
 	musTI := typeEnv["Music"].TypeInfo
 
 	v := unwrapNamed(args[idx])
 
 	musVal, ok := v.(*StructValue)
 	if !ok {
-		return rl.Music{}, NewRuntimeError(node, fmt.Sprintf("%s: argument must be rl.Music", name))
+		return &rl.Music{}, NewRuntimeError(node, fmt.Sprintf("%s: argument must be rl.Music", name))
 	}
 
 	if !typesAssignable(i.typeInfoFromValue(musVal), musTI) {
-		return rl.Music{}, NewRuntimeError(node, fmt.Sprintf("%s: argument must be rl.Music", name))
+		return &rl.Music{}, NewRuntimeError(node, fmt.Sprintf("%s: argument must be rl.Music", name))
 	}
 
-	mus, ok := musVal.Native.(rl.Music)
+	mus, ok := musVal.Native.(*rl.Music)
 	if !ok {
-		return rl.Music{}, NewRuntimeError(node, fmt.Sprintf("%s: argument must be rl.Music", name))
+		return &rl.Music{}, NewRuntimeError(node, fmt.Sprintf("%s: argument must be rl.Music", name))
 	}
 
 	return mus, nil
@@ -2255,7 +2255,7 @@ func LoadRLModule(i *Interpreter) (ModuleValue, error) {
 
 			return &StructValue{
 				TypeName: typeEnv["Music"].TypeInfo,
-				Native:   mus,
+				Native:   &mus,
 			}, nil
 		},
 	}, false)
@@ -2269,7 +2269,7 @@ func LoadRLModule(i *Interpreter) (ModuleValue, error) {
 				return NilValue{}, err
 			}
 
-			rl.UnloadMusicStream(mus)
+			rl.UnloadMusicStream(*mus)
 			return NilValue{}, nil
 		},
 	}, false)
@@ -2283,7 +2283,7 @@ func LoadRLModule(i *Interpreter) (ModuleValue, error) {
 				return NilValue{}, err
 			}
 
-			rl.PlayMusicStream(mus)
+			rl.PlayMusicStream(*mus)
 			return NilValue{}, nil
 		},
 	}, false)
@@ -2297,7 +2297,7 @@ func LoadRLModule(i *Interpreter) (ModuleValue, error) {
 				return NilValue{}, err
 			}
 
-			rl.UpdateMusicStream(mus)
+			rl.UpdateMusicStream(*mus)
 			return NilValue{}, nil
 		},
 	}, false)
@@ -2311,8 +2311,21 @@ func LoadRLModule(i *Interpreter) (ModuleValue, error) {
 				return NilValue{}, err
 			}
 
-			rl.StopMusicStream(mus)
+			rl.StopMusicStream(*mus)
 			return NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("IsMusicPlaying", &BuiltinFunc{
+		Name:  "IsMusicPlaying",
+		Arity: 1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			mus, err := argMusic(node, i, typeEnv, args, 0, "rl.IsMusicPlaying")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			return BoolValue{V: rl.IsMusicStreamPlaying(*mus)}, nil
 		},
 	}, false)
 
@@ -2325,7 +2338,7 @@ func LoadRLModule(i *Interpreter) (ModuleValue, error) {
 				return NilValue{}, err
 			}
 
-			rl.PauseMusicStream(mus)
+			rl.PauseMusicStream(*mus)
 			return NilValue{}, nil
 		},
 	}, false)
@@ -2339,7 +2352,7 @@ func LoadRLModule(i *Interpreter) (ModuleValue, error) {
 				return NilValue{}, err
 			}
 
-			rl.ResumeMusicStream(mus)
+			rl.ResumeMusicStream(*mus)
 			return NilValue{}, nil
 		},
 	}, false)
@@ -2358,7 +2371,7 @@ func LoadRLModule(i *Interpreter) (ModuleValue, error) {
 				return NilValue{}, err
 			}
 
-			rl.SetMusicVolume(mus, float32(vol))
+			rl.SetMusicVolume(*mus, float32(vol))
 			return NilValue{}, nil
 		},
 	}, false)
@@ -2377,7 +2390,7 @@ func LoadRLModule(i *Interpreter) (ModuleValue, error) {
 				return NilValue{}, err
 			}
 
-			rl.SetMusicPitch(mus, float32(pitch))
+			rl.SetMusicPitch(*mus, float32(pitch))
 			return NilValue{}, nil
 		},
 	}, false)

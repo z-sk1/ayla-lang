@@ -298,7 +298,6 @@ func (i *Interpreter) RegisterForward(stmts []parser.Statement) error {
 			}
 
 			i.Env.Define(stmt.Name.Value, &Func{Params: stmt.Params, Body: stmt.Body, TypeName: typeInfo, Env: i.Env}, false)
-			return nil
 		}
 	}
 
@@ -1067,7 +1066,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			return SignalNone{}, err
 		}
 
-		iterable = unwrapNamed(iterable)
+		iterable = unwrapNamed(unwrapUntyped(iterable))
 
 		switch v := iterable.(type) {
 		case ArrayValue:
@@ -2134,6 +2133,10 @@ func (i *Interpreter) callFunction(fn *Func, args []Value, callNode parser.Node)
 		if len(fn.TypeName.Returns) > 1 {
 			return TupleValue{Values: ret.Values}, nil
 		}
+
+		if len(ret.Values) == 0 {
+			return NilValue{}, nil
+		}
 		return ret.Values[0], nil
 	}
 
@@ -2979,6 +2982,8 @@ func (i *Interpreter) evalAddressableIndex(node *parser.IndexExpression) (*Point
 	if err != nil {
 		return nil, err
 	}
+
+	idxVal = unwrapNamed(unwrapUntyped(idxVal))
 
 	idx := idxVal.(IntValue).V
 
