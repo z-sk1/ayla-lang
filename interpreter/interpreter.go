@@ -2665,6 +2665,8 @@ func evalFloatInfix(node *parser.InfixExpression, left FloatValue, op string, ri
 		return BoolValue{V: left.V < right.V}, nil
 	case ">=":
 		return BoolValue{V: left.V >= right.V}, nil
+	case "<=":
+		return BoolValue{V: left.V <= right.V}, nil
 	}
 
 	return NilValue{}, NewRuntimeError(node, fmt.Sprintf("invalid operator %f %s %f", left.V, op, right.V))
