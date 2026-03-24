@@ -91,7 +91,6 @@ const (
 	DEFAULT   = "DEFAULT"
 	WITH      = "WITH"
 	MAP       = "MAP"
-	IN        = "IN"
 	FUNC      = "FUNC"
 	RETURN    = "RETURN"
 	CONTINUE  = "CONTINUE"
@@ -128,7 +127,6 @@ var keywords = map[string]TokenType{
 	"otherwise": DEFAULT,
 	"with":      WITH,
 	"map":       MAP,
-	"in":        IN,
 	"fun":       FUNC,
 	"back":      RETURN,
 	"defer":     DEFER,

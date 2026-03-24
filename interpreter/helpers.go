@@ -890,7 +890,7 @@ func (i *Interpreter) resolveAssignableTarget(expr parser.Expression) (Assignabl
 
 		structVal, ok := objVal.(*StructValue)
 		if !ok {
-			return nil, fmt.Errorf("cannot assign field on non-struct")
+			return nil, fmt.Errorf("cannot assign field on non-struct, got %s", i.typeInfoFromValue(objVal).Name)
 		}
 
 		if _, ok := structVal.Fields[e.Field.Value]; !ok {

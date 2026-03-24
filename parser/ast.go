@@ -62,7 +62,6 @@ var precedences = map[token.TokenType]int{
 	token.GT:  LESSGREATER,
 	token.LTE: LESSGREATER,
 	token.GTE: LESSGREATER,
-	token.IN:  LESSGREATER,
 
 	token.SHL: SHIFT,
 	token.SHR: SHIFT,
@@ -456,12 +455,6 @@ type PrefixExpression struct {
 type GroupedExpression struct {
 	NodeBase
 	Expression Expression
-}
-
-type InExpression struct {
-	NodeBase
-	Left  Expression
-	Right Expression
 }
 
 type PostfixExpression struct {

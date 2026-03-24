@@ -1098,26 +1098,26 @@ func (p *Parser) parseType() TypeNode {
 
 func (p *Parser) parseTypeList(end token.TokenType) []TypeNode {
 	list := []TypeNode{}
-
 	p.nextToken()
-
 	if p.curTok.Type == end {
 		return list
 	}
-
+	if p.curTok.Type == token.IDENT && p.isTypeToken(p.peekTok.Type) {
+		p.nextToken()
+	}
 	list = append(list, p.parseType())
-
 	for p.peekTok.Type == token.COMMA {
 		p.nextToken()
 		p.nextToken()
+		if p.curTok.Type == token.IDENT && p.isTypeToken(p.peekTok.Type) {
+			p.nextToken()
+		}
 		list = append(list, p.parseType())
 	}
-
 	if p.peekTok.Type != end {
-		p.addError("expected '%s'")
+		p.addError(fmt.Sprintf("expected '%s'", end))
 		return nil
 	}
-
 	p.nextToken()
 	return list
 }
@@ -2401,17 +2401,7 @@ func (p *Parser) parseExpression(precedence int) Expression {
 				Left:     left,
 				Operator: p.curTok.Literal,
 			}
-
-		case token.IN:
-			p.nextToken()
-			cur := p.curPrecedence()
-			right := p.parseExpression(cur)
-			left = &InExpression{
-				NodeBase: NodeBase{Token: p.curTok},
-				Left:     left,
-				Right:    right,
-			}
-
+			
 		default:
 			p.nextToken()
 			left = p.parseInfixExpression(left)

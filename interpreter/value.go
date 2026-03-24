@@ -618,6 +618,9 @@ func (i *Interpreter) resolveTypeNode(t parser.TypeNode) (*TypeInfo, error) {
 			return nil, err
 		}
 
+		minVal = unwrapUntyped(minVal)
+		maxVal = unwrapUntyped(maxVal)
+
 		var minPtr *float64
 		var maxPtr *float64
 
@@ -628,7 +631,7 @@ func (i *Interpreter) resolveTypeNode(t parser.TypeNode) (*TypeInfo, error) {
 		case FloatValue:
 			minNum = v.V
 		default:
-			return nil, NewRuntimeError(tn.Min, "range minimum must be numeric")
+			return nil, NewRuntimeError(tn.Min, fmt.Sprintf("range minimum must be a numeric type, got '%s'", i.typeInfoFromValue(minVal).Name))
 		}
 		minPtr = &minNum
 
@@ -639,7 +642,7 @@ func (i *Interpreter) resolveTypeNode(t parser.TypeNode) (*TypeInfo, error) {
 		case FloatValue:
 			maxNum = v.V
 		default:
-			return nil, NewRuntimeError(tn.Max, "range maximum must be numeric")
+			return nil, NewRuntimeError(tn.Max, fmt.Sprintf("range maximum must be a numeric type, got '%s'", i.typeInfoFromValue(maxVal).Name))
 		}
 		maxPtr = &maxNum
 

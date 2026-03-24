@@ -1509,38 +1509,6 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 	case *parser.GroupedExpression:
 		return i.EvalExpression(expr.Expression)
 
-	case *parser.InExpression:
-		elem, err := i.EvalExpression(expr.Left)
-		if err != nil {
-			return NilValue{}, err
-		}
-
-		set, err := i.EvalExpression(expr.Right)
-		if err != nil {
-			return NilValue{}, err
-		}
-
-		switch s := set.(type) {
-		case MapValue:
-			_, ok := s.Entries[mapKey(elem)]
-			return BoolValue{V: ok}, nil
-
-		case ArrayValue:
-			for _, v := range s.Elements {
-				if valuesEqual(v, elem) {
-					return BoolValue{V: true}, nil
-				}
-			}
-			return BoolValue{V: false}, nil
-		case StringValue:
-			if strings.Contains(s.V, elem.(StringValue).V) {
-				return BoolValue{V: true}, nil
-			}
-			return BoolValue{V: false}, nil
-		}
-
-		return NilValue{}, NewRuntimeError(expr, "in expects map or array or string")
-
 	case *parser.InterpolatedString:
 		is := expr
 		var out strings.Builder
@@ -1610,7 +1578,7 @@ func (i *Interpreter) evalStructLiteral(expr *parser.CompositeLiteral, typeInfo 
 		if !ok {
 			return NilValue{}, NewRuntimeError(
 				expr,
-				fmt.Sprintf("unknown field '%s' in struct %s",
+				fmt.Sprintf("unknown field '%s' in struct '%s'",
 					name, typeInfo.Name),
 			)
 		}
@@ -3010,12 +2978,12 @@ func (i *Interpreter) evalPostfix(node *parser.PostfixExpression, left Value, op
 	case "++", "--":
 		target, err := i.resolveAssignableTarget(node.Left)
 		if err != nil {
-			return NilValue{}, err
+			return NilValue{}, NewRuntimeError(node, err.Error())
 		}
 
 		cur, err := target.Get(i)
 		if err != nil {
-			return NilValue{}, err
+			return NilValue{}, NewRuntimeError(node, err.Error())
 		}
 
 		one := IntValue{V: 1}
@@ -3042,7 +3010,7 @@ func (i *Interpreter) evalPostfix(node *parser.PostfixExpression, left Value, op
 
 		err = target.Set(i, res)
 		if err != nil {
-			return NilValue{}, err
+			return NilValue{}, NewRuntimeError(node, err.Error())
 		}
 
 		return cur, nil
