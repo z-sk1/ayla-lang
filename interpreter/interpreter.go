@@ -23,15 +23,16 @@ type Environment struct {
 }
 
 type Interpreter struct {
-	Env           *Environment
-	typeEnv       map[string]TypeValue
-	modules       map[string]ModuleValue
-	nativeModules map[string]NativeLoader
-	pointerCache  map[*TypeInfo]*TypeInfo
-	modulePaths   []string
-	currentDir    string
-	projectRoot   string
+	Env          *Environment
+	TypeEnv      map[string]TypeValue
+	modules      map[string]ModuleValue
+	pointerCache map[*TypeInfo]*TypeInfo
+	modulePaths  []string
+	currentDir   string
+	projectRoot  string
 }
+
+var NativeModules map[string]NativeLoader = map[string]NativeLoader{}
 
 type RuntimeError struct {
 	Message string
@@ -100,7 +101,7 @@ func (i *Interpreter) loadModule(name string) (Value, error) {
 		return mod, nil
 	}
 
-	if loader, ok := i.nativeModules[name]; ok {
+	if loader, ok := NativeModules[name]; ok {
 		mod, err := loader(i)
 		if err != nil {
 			return NilValue{}, err
@@ -163,7 +164,7 @@ func (i *Interpreter) RegisterForward(stmts []parser.Statement) error {
 				MethodTypes: make(map[string]*TypeInfo),
 			}
 
-			i.typeEnv[stmt.Name.Value] = TypeValue{
+			i.TypeEnv[stmt.Name.Value] = TypeValue{
 				TypeInfo: ti,
 			}
 
@@ -188,7 +189,7 @@ func (i *Interpreter) RegisterForward(stmts []parser.Statement) error {
 				enumType.Variants[name] = idx
 			}
 
-			i.typeEnv[stmt.Name.Value] = TypeValue{TypeInfo: enumType}
+			i.TypeEnv[stmt.Name.Value] = TypeValue{TypeInfo: enumType}
 
 		case *parser.MethodStatement:
 			recvType, err := i.resolveTypeNode(stmt.Receiver.Type)
@@ -196,7 +197,7 @@ func (i *Interpreter) RegisterForward(stmts []parser.Statement) error {
 				return NewRuntimeError(stmt, err.Error())
 			}
 
-			recvType = unwrapAlias(recvType)
+			recvType = UnwrapAlias(recvType)
 
 			params := append(
 				[]*parser.Param{
@@ -223,7 +224,7 @@ func (i *Interpreter) RegisterForward(stmts []parser.Statement) error {
 				if err != nil {
 					return err
 				}
-				ti = unwrapAlias(ti)
+				ti = UnwrapAlias(ti)
 
 				returnTypes = append(returnTypes, ti)
 				returnNames = append(returnNames, ti.Name)
@@ -234,7 +235,7 @@ func (i *Interpreter) RegisterForward(stmts []parser.Statement) error {
 				if err != nil {
 					return err
 				}
-				ti = unwrapAlias(ti)
+				ti = UnwrapAlias(ti)
 
 				paramTypes = append(paramTypes, ti)
 				paramNames = append(paramNames, ti.Name)
@@ -272,7 +273,7 @@ func (i *Interpreter) RegisterForward(stmts []parser.Statement) error {
 					return err
 				}
 
-				ti = unwrapAlias(ti)
+				ti = UnwrapAlias(ti)
 
 				returnTypes = append(returnTypes, ti)
 				paramNames = append(paramNames, ti.Name)
@@ -284,7 +285,7 @@ func (i *Interpreter) RegisterForward(stmts []parser.Statement) error {
 					return err
 				}
 
-				ti = unwrapAlias(ti)
+				ti = UnwrapAlias(ti)
 
 				paramTypes = append(paramTypes, ti)
 				paramNames = append(paramNames, ti.Name)
@@ -309,7 +310,7 @@ func (i *Interpreter) ResolveTypes(stmts []parser.Statement) error {
 		switch stmt := stmt.(type) {
 
 		case *parser.TypeStatement:
-			tv := i.typeEnv[stmt.Name.Value]
+			tv := i.TypeEnv[stmt.Name.Value]
 			ti := tv.TypeInfo
 
 			underlying, err := i.resolveTypeNode(stmt.Type)
@@ -370,7 +371,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			if err != nil {
 				return SignalNone{}, err
 			}
-			expectedTI = unwrapAlias(expectedTI)
+			expectedTI = UnwrapAlias(expectedTI)
 		}
 
 		if stmt.Value != nil {
@@ -476,7 +477,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 				if err != nil {
 					return SignalNone{}, err
 				}
-				expectedTI = unwrapAlias(expectedTI)
+				expectedTI = UnwrapAlias(expectedTI)
 			}
 
 			for _, name := range stmt.Names {
@@ -665,7 +666,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			if err != nil {
 				return SignalNone{}, err
 			}
-			expectedTI = unwrapAlias(expectedTI)
+			expectedTI = UnwrapAlias(expectedTI)
 		}
 
 		if stmt.Value != nil {
@@ -1018,7 +1019,6 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 
 		for {
 			i.Env = loopEnv
-
 			cond, err := i.EvalExpression(stmt.Condition)
 			if err != nil {
 				return SignalNone{}, err
@@ -1029,7 +1029,9 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 				break
 			}
 
-			i.Env = loopEnv
+			bodyEnv := NewEnvironment(loopEnv)
+			i.Env = bodyEnv
+
 			sig, err := i.EvalStatements(stmt.Body)
 			if err != nil {
 				return SignalNone{}, err
@@ -1066,25 +1068,32 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			return SignalNone{}, err
 		}
 
-		iterable = unwrapNamed(unwrapUntyped(iterable))
+		iterable = UnwrapFully(iterable)
+
+		runIteration := func(setVars func()) (ControlSignal, error) {
+			oldEnv := i.Env
+			env := NewEnvironment(oldEnv)
+			i.Env = env
+
+			setVars()
+			sig, err := i.EvalBlock(stmt.Body, false)
+
+			i.Env = oldEnv
+			return sig, err
+		}
 
 		switch v := iterable.(type) {
 		case ArrayValue:
 			for idx, elem := range v.Elements {
-				oldEnv := i.Env
-				i.Env = NewEnvironment(oldEnv)
+				sig, err := runIteration(func() {
+					if stmt.Key != nil && stmt.Key.Value != "_" {
+						i.Env.Define(stmt.Key.Value, IntValue{V: idx}, false)
+					}
 
-				if stmt.Key != nil && stmt.Key.Value != "_" {
-					i.Env.Define(stmt.Key.Value, IntValue{V: idx}, false)
-				}
-
-				if stmt.Value != nil && stmt.Value.Value != "_" {
-					i.Env.Define(stmt.Value.Value, copyValue(elem), false)
-				}
-
-				sig, err := i.EvalBlock(stmt.Body, false)
-
-				i.Env = oldEnv
+					if stmt.Value != nil && stmt.Value.Value != "_" {
+						i.Env.Define(stmt.Value.Value, copyValue(elem), false)
+					}
+				})
 
 				if err != nil {
 					return SignalNone{}, err
@@ -1101,19 +1110,15 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			}
 		case MapValue:
 			for k, val := range v.Entries {
-				oldEnv := i.Env
-				i.Env = NewEnvironment(oldEnv)
+				sig, err := runIteration(func() {
+					if stmt.Key != nil && stmt.Key.Value != "_" {
+						i.Env.Define(stmt.Key.Value, copyValue(v.Keys[k]), false)
+					}
 
-				if stmt.Key != nil && stmt.Key.Value != "_" {
-					i.Env.Define(stmt.Key.Value, copyValue(v.Keys[k]), false)
-				}
-
-				if stmt.Value != nil && stmt.Value.Value != "_" {
-					i.Env.Define(stmt.Value.Value, copyValue(val), false)
-				}
-
-				sig, err := i.EvalBlock(stmt.Body, false)
-				i.Env = oldEnv
+					if stmt.Value != nil && stmt.Value.Value != "_" {
+						i.Env.Define(stmt.Value.Value, copyValue(val), false)
+					}
+				})
 
 				if err != nil {
 					return SignalNone{}, err
@@ -1130,20 +1135,15 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			}
 		case StringValue:
 			for idx, s := range v.V {
-				oldEnv := i.Env
-				i.Env = NewEnvironment(oldEnv)
+				sig, err := runIteration(func() {
+					if stmt.Key != nil && stmt.Key.Value != "_" {
+						i.Env.Define(stmt.Key.Value, IntValue{V: idx}, false)
+					}
 
-				if stmt.Key != nil && stmt.Key.Value != "_" {
-					i.Env.Define(stmt.Key.Value, IntValue{V: idx}, false)
-				}
-
-				if stmt.Value != nil && stmt.Value.Value != "_" {
-					i.Env.Define(stmt.Value.Value, StringValue{V: string(s)}, false)
-				}
-
-				sig, err := i.EvalBlock(stmt.Body, false)
-
-				i.Env = oldEnv
+					if stmt.Value != nil && stmt.Value.Value != "_" {
+						i.Env.Define(stmt.Value.Value, StringValue{V: string(s)}, false)
+					}
+				})
 
 				if err != nil {
 					return SignalNone{}, err
@@ -1167,7 +1167,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 					i.Env.Define(stmt.Key.Value, IntValue{V: idx}, false)
 				}
 
-				if stmt.Value != nil && stmt.Value.Value != "_" {
+				if stmt.Value != nil {
 					return SignalNone{}, NewRuntimeError(stmt, "integer range expects 1 variable")
 				}
 
@@ -1189,7 +1189,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 				}
 			}
 		default:
-			return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("range expects (array|map|int|string), but got %s", unwrapAlias(i.typeInfoFromValue(iterable)).Name))
+			return SignalNone{}, NewRuntimeError(stmt, fmt.Sprintf("range expects (slice|array|map|int|string), but got %s", UnwrapAlias(i.TypeInfoFromValue(iterable)).Name))
 		}
 
 		return SignalNone{}, nil
@@ -1210,7 +1210,13 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 				break
 			}
 
-			sig, err := i.EvalBlock(stmt.Body, true)
+			oldEnv := i.Env
+			i.Env = NewEnvironment(oldEnv)
+
+			sig, err := i.EvalBlock(stmt.Body, false)
+
+			i.Env = oldEnv
+
 			if err != nil {
 				return SignalNone{}, err
 			}
@@ -1224,6 +1230,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 				return sig, nil
 			}
 		}
+
 		return SignalNone{}, nil
 
 	case *parser.DeferStatement:
@@ -1284,7 +1291,7 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 			return NilValue{}, NewRuntimeError(expr, "cannot use '_' as a value")
 		}
 
-		if v, ok := i.typeEnv[expr.Value]; ok {
+		if v, ok := i.TypeEnv[expr.Value]; ok {
 			return v, nil
 		}
 
@@ -1320,7 +1327,7 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 				return NilValue{}, err
 			}
 
-			ti = unwrapAlias(ti)
+			ti = UnwrapAlias(ti)
 
 			returnTypes = append(returnTypes, ti)
 			paramNames = append(paramNames, ti.Name)
@@ -1332,7 +1339,7 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 				return NilValue{}, err
 			}
 
-			ti = unwrapAlias(ti)
+			ti = UnwrapAlias(ti)
 
 			paramTypes = append(paramTypes, ti)
 			returnNames = append(returnNames, ti.Name)
@@ -1402,7 +1409,7 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 			return NilValue{}, err
 		}
 
-		staticTI := unwrapAlias(i.typeInfoFromValue(val))
+		staticTI := UnwrapAlias(i.TypeInfoFromValue(val))
 		if staticTI.Kind != TypeAny {
 			return NilValue{}, NewRuntimeError(expr, "type assertion only allowed on 'thing'")
 		}
@@ -1412,8 +1419,8 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 			return NilValue{}, err
 		}
 
-		inner := unwrapNamed(val)
-		actualTI := unwrapAlias(i.typeInfoFromValue(inner))
+		inner := UnwrapFully(val)
+		actualTI := UnwrapAlias(i.TypeInfoFromValue(inner))
 
 		if !typesAssignable(actualTI, targetTI) {
 			return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("type mismatch: '%s' asserted as '%s'", actualTI.Name, targetTI.Name))
@@ -1529,7 +1536,7 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 }
 
 func (i *Interpreter) evalCompositeLiteral(expr *parser.CompositeLiteral, ti *TypeInfo) (Value, error) {
-	ti = unwrapAlias(ti)
+	ti = UnwrapAlias(ti)
 
 	switch ti.Kind {
 	case TypeArray, TypeFixedArray:
@@ -1588,8 +1595,8 @@ func (i *Interpreter) evalStructLiteral(expr *parser.CompositeLiteral, typeInfo 
 			return NilValue{}, err
 		}
 
-		actualTI := unwrapAlias(i.typeInfoFromValue(v))
-		expectedTI := unwrapAlias(expectedType)
+		actualTI := UnwrapAlias(i.TypeInfoFromValue(v))
+		expectedTI := UnwrapAlias(expectedType)
 
 		if !typesAssignable(actualTI, expectedTI) {
 			return NilValue{}, NewRuntimeError(
@@ -1649,7 +1656,7 @@ func (i *Interpreter) evalArrayLiteral(expr *parser.CompositeLiteral, ti *TypeIn
 			return NilValue{}, err
 		}
 
-		valType := unwrapAlias(i.typeInfoFromValue(val))
+		valType := UnwrapAlias(i.TypeInfoFromValue(val))
 
 		if !typesAssignable(valType, elemType) {
 			return nil, NewRuntimeError(
@@ -1726,8 +1733,8 @@ func (i *Interpreter) evalMapLiteral(expr *parser.CompositeLiteral, expected *Ty
 		return NilValue{}, err
 	}
 
-	keyTI := unwrapAlias(i.typeInfoFromValue(k0))
-	valTI := unwrapAlias(i.typeInfoFromValue(v0))
+	keyTI := UnwrapAlias(i.TypeInfoFromValue(k0))
+	valTI := UnwrapAlias(i.TypeInfoFromValue(v0))
 
 	if expected != nil {
 		if !isComparableValue(k0) {
@@ -1759,8 +1766,8 @@ func (i *Interpreter) evalMapLiteral(expr *parser.CompositeLiteral, expected *Ty
 			return NilValue{}, err
 		}
 
-		kt := unwrapAlias(i.typeInfoFromValue(k))
-		vt := unwrapAlias(i.typeInfoFromValue(v))
+		kt := UnwrapAlias(i.TypeInfoFromValue(k))
+		vt := UnwrapAlias(i.TypeInfoFromValue(v))
 
 		if keyTI.Kind == TypeAny && !isComparableValue(k) {
 			return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("map key %d is not comparable", idx))
@@ -1796,7 +1803,7 @@ func (i *Interpreter) evalMapLiteral(expr *parser.CompositeLiteral, expected *Ty
 
 func (i *Interpreter) evalCall(e *parser.FuncCall) (Value, error) {
 	if ident, ok := e.Callee.(*parser.Identifier); ok {
-		if ti, ok := i.typeEnv[ident.Value]; ok {
+		if ti, ok := i.TypeEnv[ident.Value]; ok {
 			if len(e.Args) != 1 {
 				return NilValue{}, NewRuntimeError(e, "type cast expects 1 arg")
 			}
@@ -1813,7 +1820,7 @@ func (i *Interpreter) evalTypeCast(target *TypeInfo, arg parser.Expression, node
 		return NilValue{}, err
 	}
 
-	v = unwrapNamed(v)
+	v = UnwrapFully(v)
 
 	switch target.Kind {
 	case TypeInt:
@@ -1960,7 +1967,7 @@ func (i *Interpreter) evalFuncCall(expr *parser.FuncCall) (Value, error) {
 		args = append([]Value{fn.Receiver}, args...)
 		return i.callFunction(fn.Func, args, expr)
 	default:
-		return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("expected 'function' but got '%s'", unwrapAlias(i.typeInfoFromValue(val)).Name))
+		return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("expected 'function' but got '%s'", UnwrapAlias(i.TypeInfoFromValue(val)).Name))
 	}
 }
 
@@ -2001,7 +2008,7 @@ func (i *Interpreter) callFunction(fn *Func, args []Value, callNode parser.Node)
 				return NilValue{}, err
 			}
 
-			actual := unwrapAlias(i.typeInfoFromValue(val))
+			actual := UnwrapAlias(i.TypeInfoFromValue(val))
 
 			val, err = i.assignWithType(callNode, val, expected)
 			if err != nil {
@@ -2028,7 +2035,7 @@ func (i *Interpreter) callFunction(fn *Func, args []Value, callNode parser.Node)
 		for idx := fixedCount; idx < argCount; idx++ {
 			v := args[idx]
 
-			actual := unwrapAlias(i.typeInfoFromValue(v))
+			actual := UnwrapAlias(i.TypeInfoFromValue(v))
 			v, err = i.assignWithType(callNode, v, elemType)
 			if err != nil {
 				return NilValue{}, NewRuntimeError(callNode,
@@ -2082,7 +2089,7 @@ func (i *Interpreter) callFunction(fn *Func, args []Value, callNode parser.Node)
 			if err != nil {
 				return NilValue{}, NewRuntimeError(callNode, err.Error())
 			}
-			expectedTI := unwrapAlias(expectedType)
+			expectedTI := UnwrapAlias(expectedType)
 
 			if expectedTI.Name == "error" {
 				if _, isNil := actual.(NilValue); isNil {
@@ -2116,10 +2123,10 @@ func (i *Interpreter) evalIndexExpression(node parser.Expression, left, idx Valu
 		return NilValue{}, NewRuntimeError(node, "cannot index value of type 'thing' without type assertion")
 	}
 
-	idx = unwrapUntyped(idx)
-	left = unwrapNamed(left)
+	idx = UnwrapFully(idx)
+	left = UnwrapFully(left)
 
-	typ := i.typeInfoFromValue(left)
+	typ := i.TypeInfoFromValue(left)
 
 	switch typ.Kind {
 	case TypeArray, TypeFixedArray:
@@ -2138,7 +2145,7 @@ func (i *Interpreter) evalIndexExpression(node parser.Expression, left, idx Valu
 
 		elem := arr.Elements[idx]
 
-		elemType := unwrapAlias(i.typeInfoFromValue(elem))
+		elemType := UnwrapAlias(i.TypeInfoFromValue(elem))
 
 		if !typesAssignable(elemType, arr.ElemType) {
 			return NilValue{}, NewRuntimeError(node,
@@ -2177,7 +2184,7 @@ func (i *Interpreter) evalIndexExpression(node parser.Expression, left, idx Valu
 	case TypeMap:
 		mv := left.(MapValue)
 
-		keyType := unwrapAlias(i.typeInfoFromValue(idx))
+		keyType := UnwrapAlias(i.TypeInfoFromValue(idx))
 
 		if mv.KeyType.Kind == TypeAny {
 			if !isComparableValue(idx) {
@@ -2208,7 +2215,7 @@ func (i *Interpreter) evalIndexExpression(node parser.Expression, left, idx Valu
 			return NilValue{}, nil
 		}
 
-		valType := unwrapAlias(i.typeInfoFromValue(val))
+		valType := UnwrapAlias(i.TypeInfoFromValue(val))
 
 		if !typesAssignable(valType, mv.ValueType) {
 			return NilValue{}, NewRuntimeError(node,
@@ -2260,8 +2267,8 @@ func (i *Interpreter) evalSliceExpression(node parser.Expression, left, startVal
 			"cannot slice value of type 'thing' without type assertion")
 	}
 
-	left = unwrapUntyped(unwrapNamed(left))
-	typ := i.typeInfoFromValue(left)
+	left = UnwrapFully(left)
+	typ := i.TypeInfoFromValue(left)
 
 	var length int
 	switch typ.Kind {
@@ -2276,6 +2283,9 @@ func (i *Interpreter) evalSliceExpression(node parser.Expression, left, startVal
 
 	start := 0
 	end := length
+
+	startVal = UnwrapFully(startVal)
+	endVal = UnwrapFully(endVal)
 
 	if _, ok := startVal.(NilValue); !ok {
 		intVal, ok := startVal.(IntValue)
@@ -2326,8 +2336,8 @@ func (i *Interpreter) evalMemberExpression(node parser.Expression, left Value, f
 
 	orig := left
 
-	origType := unwrapAlias(i.typeInfoFromValue(orig))
-	recvType := unwrapAlias(i.typeInfoFromValue(left))
+	origType := UnwrapAlias(i.TypeInfoFromValue(orig))
+	recvType := UnwrapAlias(i.TypeInfoFromValue(left))
 	ptrType := i.pointerTo(recvType)
 
 	if fn, ok := i.Env.GetMethod(origType, field); ok {
@@ -2372,7 +2382,7 @@ func (i *Interpreter) evalMemberExpression(node parser.Expression, left Value, f
 	switch obj := left.(type) {
 
 	case ModuleValue:
-		if typ, ok := obj.typeEnv[field]; ok {
+		if typ, ok := obj.TypeEnv[field]; ok {
 			return typ, nil
 		}
 		val, ok, _ := obj.Env.Get(field)
@@ -2401,8 +2411,8 @@ func (i *Interpreter) evalMemberExpression(node parser.Expression, left Value, f
 			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unknown field %s", field))
 		}
 
-		actualTI := unwrapAlias(i.typeInfoFromValue(val))
-		expectedTI := unwrapAlias(expectedType)
+		actualTI := UnwrapAlias(i.TypeInfoFromValue(val))
+		expectedTI := UnwrapAlias(expectedType)
 
 		if !typesAssignable(actualTI, expectedTI) {
 			return NilValue{}, NewRuntimeError(node,
@@ -2438,8 +2448,8 @@ func (i *Interpreter) evalMemberExpression(node parser.Expression, left Value, f
 }
 
 func (i *Interpreter) evalInfix(node *parser.InfixExpression, left Value, op string, right Value) (Value, error) {
-	left = unwrapUntyped(left)
-	right = unwrapUntyped(right)
+	left = UnwrapUntyped(left)
+	right = UnwrapUntyped(right)
 
 	if iv, ok := left.(InterfaceValue); ok {
 		if _, isNil := right.(NilValue); isNil {
@@ -2513,8 +2523,8 @@ func (i *Interpreter) evalInfix(node *parser.InfixExpression, left Value, op str
 	}
 
 	// strict any handling
-	leftTI := unwrapAlias(i.typeInfoFromValue(left))
-	rightTI := unwrapAlias(i.typeInfoFromValue(right))
+	leftTI := UnwrapAlias(i.TypeInfoFromValue(left))
+	rightTI := UnwrapAlias(i.TypeInfoFromValue(right))
 
 	if leftTI.Kind == TypeAny || rightTI.Kind == TypeAny {
 		return NilValue{}, NewRuntimeError(
@@ -2536,8 +2546,8 @@ func (i *Interpreter) evalInfix(node *parser.InfixExpression, left Value, op str
 		}
 
 		// Same named type → unwrap
-		ul := unwrapNamed(left)
-		ur := unwrapNamed(right)
+		ul := UnwrapFully(left)
+		ur := UnwrapFully(right)
 
 		res, err := i.evalInfix(node, ul, op, ur)
 		if err != nil {
@@ -2590,7 +2600,7 @@ func (i *Interpreter) evalInfix(node *parser.InfixExpression, left Value, op str
 		return evalArrayInfix(node, left.(ArrayValue), op, right.(ArrayValue))
 	}
 
-	return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unsupported operand types: %s %s %s", i.typeInfoFromValue(left).Name, op, i.typeInfoFromValue(right).Name))
+	return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unsupported operand types: %s %s %s", i.TypeInfoFromValue(left).Name, op, i.TypeInfoFromValue(right).Name))
 }
 
 func evalIntInfix(node *parser.InfixExpression, left IntValue, op string, right IntValue) (Value, error) {
@@ -2849,7 +2859,7 @@ func (i *Interpreter) evalPrefix(node *parser.PrefixExpression, op string, right
 			if !ok {
 				return NilValue{}, NewRuntimeError(node, "undefined variable")
 			}
-			ti := i.typeInfoFromValue(v.Value)
+			ti := i.TypeInfoFromValue(v.Value)
 			if ti.Kind == TypePointer {
 				ti = ti.Elem
 			}
@@ -2865,7 +2875,7 @@ func (i *Interpreter) evalPrefix(node *parser.PrefixExpression, op string, right
 				return NilValue{}, err
 			}
 
-			ti := i.typeInfoFromValue(val)
+			ti := i.TypeInfoFromValue(val)
 			if ti.Kind == TypePointer {
 				ti = ti.Elem
 			}
@@ -2929,7 +2939,7 @@ func (i *Interpreter) evalAddressableMember(node *parser.MemberExpression) (*Poi
 		return nil, NewRuntimeError(node, "unknown field")
 	}
 
-	ti := i.typeInfoFromValue(val)
+	ti := i.TypeInfoFromValue(val)
 	if ti.Kind == TypePointer {
 		ti = ti.Elem
 	}
@@ -2953,7 +2963,7 @@ func (i *Interpreter) evalAddressableIndex(node *parser.IndexExpression) (*Point
 		return nil, err
 	}
 
-	idxVal = unwrapNamed(unwrapUntyped(idxVal))
+	idxVal = UnwrapFully(idxVal)
 
 	idx := idxVal.(IntValue).V
 
@@ -2968,7 +2978,7 @@ func (i *Interpreter) evalAddressableIndex(node *parser.IndexExpression) (*Point
 
 		return &PointerValue{
 			Target:   tmp,
-			ElemType: i.typeInfoFromValue(arr.Elements[idx]),
+			ElemType: i.TypeInfoFromValue(arr.Elements[idx]),
 		}, nil
 	}
 
@@ -3022,7 +3032,7 @@ func (i *Interpreter) evalPostfix(node *parser.PostfixExpression, left Value, op
 }
 
 func isTruthy(val Value) (bool, error) {
-	val = unwrapNamed(unwrapUntyped(val))
+	val = UnwrapFully(val)
 	b, ok := val.(BoolValue)
 	if !ok {
 		return false, fmt.Errorf("condition must be boolean")

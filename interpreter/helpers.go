@@ -37,14 +37,13 @@ func New(path string) *Interpreter {
 		mu:       sync.RWMutex{},
 	}
 
-	typeEnv := make(map[string]TypeValue)
+	TypeEnv := make(map[string]TypeValue)
 
 	wd, _ := os.Getwd()
 
 	i := &Interpreter{
 		Env:           env,
 		modules:       make(map[string]ModuleValue),
-		nativeModules: make(map[string]NativeLoader),
 		pointerCache:  make(map[*TypeInfo]*TypeInfo),
 		currentDir:    dir,
 	}
@@ -67,16 +66,15 @@ func New(path string) *Interpreter {
 	}
 
 	i.registerBuiltins()
-	i.registerNativeModules()
-	initBuiltinTypes(typeEnv)
+	initBuiltinTypes(TypeEnv)
 
-	i.typeEnv = typeEnv
+	i.TypeEnv = TypeEnv
 
 	return i
 }
 
 func NewWithEnv(env *Environment, path string) *Interpreter {
-	typeEnv := make(map[string]TypeValue)
+	TypeEnv := make(map[string]TypeValue)
 
 	dir := filepath.Dir(path)
 
@@ -85,7 +83,6 @@ func NewWithEnv(env *Environment, path string) *Interpreter {
 	i := &Interpreter{
 		Env:           env,
 		modules:       make(map[string]ModuleValue),
-		nativeModules: make(map[string]NativeLoader),
 		pointerCache:  make(map[*TypeInfo]*TypeInfo),
 		currentDir:    dir,
 	}
@@ -109,10 +106,9 @@ func NewWithEnv(env *Environment, path string) *Interpreter {
 	}
 
 	i.registerBuiltins()
-	i.registerNativeModules()
-	initBuiltinTypes(typeEnv)
+	initBuiltinTypes(TypeEnv)
 
-	i.typeEnv = typeEnv
+	i.TypeEnv = TypeEnv
 
 	return i
 }
@@ -281,8 +277,8 @@ func toFloat(v Value) (float64, bool) {
 }
 
 func typesAssignable(from, to *TypeInfo) bool {
-	from = unwrapAlias(from)
-	to = unwrapAlias(to)
+	from = UnwrapAlias(from)
+	to = UnwrapAlias(to)
 
 	if from == nil || to == nil {
 		return false
@@ -483,8 +479,8 @@ func (i *Interpreter) promoteValueToType(v Value, ti *TypeInfo) Value {
 		return converted
 	}
 
-	ti = unwrapAlias(ti)
-	actual := i.typeInfoFromValue(v)
+	ti = UnwrapAlias(ti)
+	actual := i.TypeInfoFromValue(v)
 
 	if actual == ti {
 		return v
@@ -556,18 +552,31 @@ func unwrapNamed(v Value) Value {
 	}
 }
 
-func unwrapAlias(t *TypeInfo) *TypeInfo {
+func UnwrapAlias(t *TypeInfo) *TypeInfo {
 	for t != nil && t.Alias {
 		t = t.Underlying
 	}
 	return t
 }
 
-func unwrapUntyped(v Value) Value {
+func UnwrapUntyped(v Value) Value {
 	if v, ok := v.(UntypedValue); ok {
 		return v.Value
 	}
 	return v
+}
+
+func UnwrapFully(v Value) Value {
+	for {
+		switch val := v.(type) {
+		case NamedValue:
+			v = val.Value
+		case UntypedValue:
+			v = val.Value
+		default:
+			return v
+		}
+	}
 }
 
 func capacityFromType(ti *TypeInfo, elems []Value) int {
@@ -763,14 +772,14 @@ func (i *Interpreter) assignWithType(node parser.Node, v Value, expected *TypeIn
 		return v, nil
 	}
 
-	expected = unwrapAlias(expected)
+	expected = UnwrapAlias(expected)
 
 	// promote literals first
 	if uv, ok := v.(UntypedValue); ok {
 		v = i.promoteValueToType(uv, expected)
 	}
 
-	actual := unwrapAlias(i.typeInfoFromValue(v))
+	actual := UnwrapAlias(i.TypeInfoFromValue(v))
 
 	if !typesAssignable(actual, expected) {
 		if node == nil {
@@ -890,7 +899,7 @@ func (i *Interpreter) resolveAssignableTarget(expr parser.Expression) (Assignabl
 
 		structVal, ok := objVal.(*StructValue)
 		if !ok {
-			return nil, fmt.Errorf("cannot assign field on non-struct, got %s", i.typeInfoFromValue(objVal).Name)
+			return nil, fmt.Errorf("cannot assign field on non-struct, got %s", i.TypeInfoFromValue(objVal).Name)
 		}
 
 		if _, ok := structVal.Fields[e.Field.Value]; !ok {
@@ -910,7 +919,7 @@ func (i *Interpreter) resolveAssignableTarget(expr parser.Expression) (Assignabl
 		return MemberTarget{
 			Struct:    structVal,
 			Field:     e.Field.Value,
-			FieldType: unwrapAlias(fieldType),
+			FieldType: UnwrapAlias(fieldType),
 		}, nil
 
 	case *parser.IndexExpression:
@@ -929,7 +938,7 @@ func (i *Interpreter) resolveAssignableTarget(expr parser.Expression) (Assignabl
 
 		case MapValue:
 
-			keyType := unwrapAlias(i.typeInfoFromValue(indexVal))
+			keyType := UnwrapAlias(i.TypeInfoFromValue(indexVal))
 
 			if val.KeyType.Kind == TypeAny {
 

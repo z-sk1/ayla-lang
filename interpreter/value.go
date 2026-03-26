@@ -118,7 +118,7 @@ func (v VariableTarget) Set(i *Interpreter, val Value) error {
 		return nil
 	}
 
-	expectedTI := unwrapAlias(i.typeInfoFromValue(v.Var.Value))
+	expectedTI := UnwrapAlias(i.TypeInfoFromValue(v.Var.Value))
 
 	newVal, err := i.assignWithType(nil, val, expectedTI)
 	if err != nil {
@@ -234,8 +234,8 @@ func (p PointerTarget) Get(i *Interpreter) (Value, error) {
 }
 
 func (i *Interpreter) assignToType(val Value, expected *TypeInfo) (Value, error) {
-	valType := unwrapAlias(i.typeInfoFromValue(val))
-	expected = unwrapAlias(expected)
+	valType := UnwrapAlias(i.TypeInfoFromValue(val))
+	expected = UnwrapAlias(expected)
 
 	if expected.Kind == TypePointer && valType.Kind != TypePointer {
 		return nil, fmt.Errorf(
@@ -249,7 +249,7 @@ func (i *Interpreter) assignToType(val Value, expected *TypeInfo) (Value, error)
 		ptr := val.(*PointerValue)
 		if typesAssignable(ptr.ElemType, expected) {
 			val = ptr.Target.Value
-			valType = unwrapAlias(i.typeInfoFromValue(val))
+			valType = UnwrapAlias(i.TypeInfoFromValue(val))
 		}
 	}
 
@@ -560,7 +560,7 @@ func (u UninitializedValue) String() string {
 type ModuleValue struct {
 	Name    string
 	Env     *Environment
-	typeEnv map[string]TypeValue
+	TypeEnv map[string]TypeValue
 }
 
 func (m ModuleValue) Type() ValueType {
@@ -588,7 +588,7 @@ func (i *Interpreter) resolveTypeNode(t parser.TypeNode) (*TypeInfo, error) {
 
 	case *parser.IdentType:
 		// int, string, Person, etc.
-		tv, ok := i.typeEnv[tn.Name.Value]
+		tv, ok := i.TypeEnv[tn.Name.Value]
 		if !ok {
 			return nil, NewRuntimeError(tn, fmt.Sprintf("unknown type '%s'", tn.Name.Value))
 		}
@@ -618,8 +618,8 @@ func (i *Interpreter) resolveTypeNode(t parser.TypeNode) (*TypeInfo, error) {
 			return nil, err
 		}
 
-		minVal = unwrapUntyped(minVal)
-		maxVal = unwrapUntyped(maxVal)
+		minVal = UnwrapUntyped(minVal)
+		maxVal = UnwrapUntyped(maxVal)
 
 		var minPtr *float64
 		var maxPtr *float64
@@ -631,7 +631,7 @@ func (i *Interpreter) resolveTypeNode(t parser.TypeNode) (*TypeInfo, error) {
 		case FloatValue:
 			minNum = v.V
 		default:
-			return nil, NewRuntimeError(tn.Min, fmt.Sprintf("range minimum must be a numeric type, got '%s'", i.typeInfoFromValue(minVal).Name))
+			return nil, NewRuntimeError(tn.Min, fmt.Sprintf("range minimum must be a numeric type, got '%s'", i.TypeInfoFromValue(minVal).Name))
 		}
 		minPtr = &minNum
 
@@ -642,7 +642,7 @@ func (i *Interpreter) resolveTypeNode(t parser.TypeNode) (*TypeInfo, error) {
 		case FloatValue:
 			maxNum = v.V
 		default:
-			return nil, NewRuntimeError(tn.Max, fmt.Sprintf("range maximum must be a numeric type, got '%s'", i.typeInfoFromValue(maxVal).Name))
+			return nil, NewRuntimeError(tn.Max, fmt.Sprintf("range maximum must be a numeric type, got '%s'", i.TypeInfoFromValue(maxVal).Name))
 		}
 		maxPtr = &maxNum
 
@@ -671,7 +671,7 @@ func (i *Interpreter) resolveTypeNode(t parser.TypeNode) (*TypeInfo, error) {
 			return nil, NewRuntimeError(tn, fmt.Sprintf("'%s' is not a module", tn.Module.Value))
 		}
 
-		tv, ok := mod.typeEnv[tn.Name.Value]
+		tv, ok := mod.TypeEnv[tn.Name.Value]
 		if !ok {
 			return nil, NewRuntimeError(tn,
 				fmt.Sprintf("module '%s' has no type '%s'", tn.Module.Value, tn.Name.Value))
@@ -783,7 +783,7 @@ func (i *Interpreter) resolveTypeNode(t parser.TypeNode) (*TypeInfo, error) {
 				return nil, err
 			}
 
-			ti = unwrapAlias(ti)
+			ti = UnwrapAlias(ti)
 			paramsTI = append(paramsTI, ti)
 			paramsName = append(paramsName, ti.Name)
 		}
@@ -794,7 +794,7 @@ func (i *Interpreter) resolveTypeNode(t parser.TypeNode) (*TypeInfo, error) {
 				return nil, err
 			}
 
-			ti = unwrapAlias(ti)
+			ti = UnwrapAlias(ti)
 			returnsTI = append(returnsTI, ti)
 			returnsName = append(returnsName, ti.Name)
 		}
@@ -885,18 +885,18 @@ func valueTypeOf(ti *TypeInfo) ValueType {
 	}
 }
 
-func (i *Interpreter) typeInfoFromValue(v Value) *TypeInfo {
+func (i *Interpreter) TypeInfoFromValue(v Value) *TypeInfo {
 	switch v := v.(type) {
 	case UntypedValue:
-		return i.typeInfoFromValue(v.Value)
+		return i.TypeInfoFromValue(v.Value)
 	case IntValue:
-		return i.typeEnv["int"].TypeInfo
+		return i.TypeEnv["int"].TypeInfo
 	case FloatValue:
-		return i.typeEnv["float"].TypeInfo
+		return i.TypeEnv["float"].TypeInfo
 	case StringValue:
-		return i.typeEnv["string"].TypeInfo
+		return i.TypeEnv["string"].TypeInfo
 	case BoolValue:
-		return i.typeEnv["bool"].TypeInfo
+		return i.TypeEnv["bool"].TypeInfo
 	case ArrayValue:
 		if v.Fixed {
 			return &TypeInfo{
@@ -930,7 +930,7 @@ func (i *Interpreter) typeInfoFromValue(v Value) *TypeInfo {
 	case *Func:
 		return v.TypeName
 	case InterfaceValue:
-		return i.typeInfoFromValue(v.Value)
+		return i.TypeInfoFromValue(v.Value)
 	case EnumValue:
 		return v.Enum
 	case NamedValue:
@@ -941,12 +941,12 @@ func (i *Interpreter) typeInfoFromValue(v Value) *TypeInfo {
 		}
 		return i.pointerTo(v.ElemType)
 	default:
-		return i.typeEnv["nil"].TypeInfo
+		return i.TypeEnv["nil"].TypeInfo
 	}
 }
 
 func (i *Interpreter) defaultValueFromTypeInfo(node parser.Node, ti *TypeInfo) (Value, error) {
-	ti = unwrapAlias(ti)
+	ti = UnwrapAlias(ti)
 
 	switch ti.Kind {
 	case TypeInt:
@@ -1035,7 +1035,7 @@ func (i *Interpreter) defaultValueFromTypeInfo(node parser.Node, ti *TypeInfo) (
 }
 
 func isComparableValue(v Value) bool {
-	v = unwrapNamed(v)
+	v = UnwrapFully(v)
 
 	switch val := v.(type) {
 	case IntValue, FloatValue, BoolValue, StringValue, NilValue, *PointerValue:

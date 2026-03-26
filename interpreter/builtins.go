@@ -26,8 +26,8 @@ func (e Error) String() string {
 	return e.Message
 }
 
-func initBuiltinTypes(typeEnv map[string]TypeValue) {
-	typeEnv["int"] = TypeValue{
+func initBuiltinTypes(TypeEnv map[string]TypeValue) {
+	TypeEnv["int"] = TypeValue{
 		TypeInfo: &TypeInfo{
 			Name:         "int",
 			Kind:         TypeInt,
@@ -35,14 +35,14 @@ func initBuiltinTypes(typeEnv map[string]TypeValue) {
 		},
 	}
 
-	typeEnv["float"] = TypeValue{
+	TypeEnv["float"] = TypeValue{
 		TypeInfo: &TypeInfo{
 			Name:         "float",
 			Kind:         TypeFloat,
 			IsComparable: true,
 		},
 	}
-	typeEnv["string"] = TypeValue{
+	TypeEnv["string"] = TypeValue{
 		TypeInfo: &TypeInfo{
 			Name:         "string",
 			Kind:         TypeString,
@@ -50,7 +50,7 @@ func initBuiltinTypes(typeEnv map[string]TypeValue) {
 		},
 	}
 
-	typeEnv["bool"] = TypeValue{
+	TypeEnv["bool"] = TypeValue{
 		TypeInfo: &TypeInfo{
 			Name:         "bool",
 			Kind:         TypeBool,
@@ -58,7 +58,7 @@ func initBuiltinTypes(typeEnv map[string]TypeValue) {
 		},
 	}
 
-	typeEnv["nil"] = TypeValue{
+	TypeEnv["nil"] = TypeValue{
 		TypeInfo: &TypeInfo{
 			Name:         "nil",
 			Kind:         TypeNil,
@@ -66,14 +66,14 @@ func initBuiltinTypes(typeEnv map[string]TypeValue) {
 		},
 	}
 
-	typeEnv["thing"] = TypeValue{
+	TypeEnv["thing"] = TypeValue{
 		TypeInfo: &TypeInfo{
 			Name: "thing",
 			Kind: TypeAny,
 		},
 	}
 
-	typeEnv["error"] = TypeValue{
+	TypeEnv["error"] = TypeValue{
 		TypeInfo: &TypeInfo{
 			Name: "error",
 			Kind: TypeInterface,
@@ -82,22 +82,11 @@ func initBuiltinTypes(typeEnv map[string]TypeValue) {
 					TypeName: &TypeInfo{
 						Kind:    TypeFunc,
 						Params:  []*TypeInfo{},
-						Returns: []*TypeInfo{typeEnv["string"].TypeInfo},
+						Returns: []*TypeInfo{TypeEnv["string"].TypeInfo},
 					},
 				},
 			},
 		},
-	}
-}
-
-func (i *Interpreter) registerNativeModules() {
-	i.nativeModules = map[string]NativeLoader{
-		"math":  LoadMathModule,
-		"rand":  LoadRandModule,
-		"fs":    LoadFSModule,
-		"time":  LoadTimeModule,
-		"parse": LoadParseModule,
-		"rl":    LoadRLModule,
 	}
 }
 
@@ -108,7 +97,7 @@ func (i *Interpreter) registerBuiltins() {
 		Name:  "ord",
 		Arity: 1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			s, err := argString(node, args, 0, "ord")
+			s, err := ArgString(node, args, 0, "ord")
 			if err != nil {
 				return NilValue{}, err
 			}
@@ -126,7 +115,7 @@ func (i *Interpreter) registerBuiltins() {
 		Name:  "chr",
 		Arity: 1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			v, err := argInt(node, args, 0, "chr")
+			v, err := ArgInt(node, args, 0, "chr")
 			if err != nil {
 				return NilValue{}, err
 			}
@@ -149,7 +138,7 @@ func (i *Interpreter) registerBuiltins() {
 			case MAP:
 				return IntValue{V: len(v.(MapValue).Entries)}, nil
 			default:
-				return NilValue{}, NewRuntimeError(node, fmt.Sprintf("len: type %s not supported", i.typeInfoFromValue(v).Name))
+				return NilValue{}, NewRuntimeError(node, fmt.Sprintf("len: type %s not supported", i.TypeInfoFromValue(v).Name))
 			}
 		},
 	}
@@ -164,7 +153,7 @@ func (i *Interpreter) registerBuiltins() {
 			case ARR:
 				return IntValue{V: cap(v.(ArrayValue).Elements)}, nil
 			default:
-				return NilValue{}, NewRuntimeError(node, fmt.Sprintf("cap: type %s not supported", i.typeInfoFromValue(v).Name))
+				return NilValue{}, NewRuntimeError(node, fmt.Sprintf("cap: type %s not supported", i.TypeInfoFromValue(v).Name))
 			}
 		},
 	}
@@ -177,7 +166,7 @@ func (i *Interpreter) registerBuiltins() {
 				return NilValue{}, NewRuntimeError(node, "make: expected at least one argument")
 			}
 
-			typeVal, err := argType(node, args, 0, "make")
+			typeVal, err := ArgType(node, args, 0, "make")
 			if err != nil {
 				return NilValue{}, err
 			}
@@ -190,7 +179,7 @@ func (i *Interpreter) registerBuiltins() {
 					return NilValue{}, NewRuntimeError(node, "make: expected second argument, length, for arrays")
 				}
 
-				length, err := argInt(node, args, 1, "make")
+				length, err := ArgInt(node, args, 1, "make")
 				if err != nil {
 					return NilValue{}, err
 				}
@@ -199,7 +188,7 @@ func (i *Interpreter) registerBuiltins() {
 
 				if len(args) == 3 {
 					var err error
-					capacity, err = argInt(node, args, 2, "make")
+					capacity, err = ArgInt(node, args, 2, "make")
 
 					if err != nil {
 						return NilValue{}, err
@@ -244,7 +233,7 @@ func (i *Interpreter) registerBuiltins() {
 		Name:  "append",
 		Arity: -1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			slice, err := argArray(node, args, 0, "append")
+			slice, err := ArgArray(node, args, 0, "append")
 			if err != nil {
 				return NilValue{}, err
 			}
@@ -252,9 +241,9 @@ func (i *Interpreter) registerBuiltins() {
 			elemType := slice.ElemType
 
 			for idx, arg := range args[1:] {
-				argType := i.typeInfoFromValue(arg)
-				if !typesAssignable(argType, elemType) {
-					return NilValue{}, NewRuntimeError(node, fmt.Sprintf("append: arg %d expected '%s' but got '%s'", idx, elemType.Name, argType.Name))
+				ArgType := i.TypeInfoFromValue(arg)
+				if !typesAssignable(ArgType, elemType) {
+					return NilValue{}, NewRuntimeError(node, fmt.Sprintf("append: arg %d expected '%s' but got '%s'", idx, elemType.Name, ArgType.Name))
 				}
 
 				slice.Elements = append(slice.Elements, arg)
@@ -316,7 +305,7 @@ func (i *Interpreter) registerBuiltins() {
 				return StringValue{V: v.TypeName.Name}, nil
 			}
 
-			return StringValue{V: i.typeInfoFromValue(v).Name}, nil
+			return StringValue{V: i.TypeInfoFromValue(v).Name}, nil
 		},
 	}
 
@@ -330,9 +319,9 @@ func (i *Interpreter) registerBuiltins() {
 			}
 
 			for _, v := range args {
-				ti := unwrapAlias(i.typeInfoFromValue(v))
+				ti := UnwrapAlias(i.TypeInfoFromValue(v))
 
-				if ti != nil && typesAssignable(ti, i.typeEnv["error"].TypeInfo) {
+				if ti != nil && typesAssignable(ti, i.TypeEnv["error"].TypeInfo) {
 					method, ok := i.Env.GetMethod(ti, "Error")
 					if ok {
 						receiver := v
@@ -366,9 +355,9 @@ func (i *Interpreter) registerBuiltins() {
 					fmt.Print(" ")
 				}
 
-				ti := unwrapAlias(i.typeInfoFromValue(v))
+				ti := UnwrapAlias(i.TypeInfoFromValue(v))
 
-				if ti != nil && typesAssignable(ti, i.typeEnv["error"].TypeInfo) {
+				if ti != nil && typesAssignable(ti, i.TypeEnv["error"].TypeInfo) {
 					method, ok := i.Env.GetMethod(ti, "Error")
 					if ok {
 						receiver := v
@@ -402,7 +391,7 @@ func (i *Interpreter) registerBuiltins() {
 				return NilValue{}, NewRuntimeError(node, "putf: expected at least one argument")
 			}
 
-			format, err := argString(node, args, 0, "putf")
+			format, err := ArgString(node, args, 0, "putf")
 			if err != nil {
 				return NilValue{}, err
 			}
@@ -438,7 +427,7 @@ func (i *Interpreter) registerBuiltins() {
 			case StringValue:
 				msg = v.V
 			case InterfaceValue:
-				if typesAssignable(v.TypeInfo, i.typeEnv["error"].TypeInfo) {
+				if typesAssignable(v.TypeInfo, i.TypeEnv["error"].TypeInfo) {
 					msg = v.Value.(Error).Error()
 				}
 			default:
@@ -457,7 +446,7 @@ func (i *Interpreter) registerBuiltins() {
 				return NilValue{}, NewRuntimeError(node, "explodef: expected at least one argument")
 			}
 
-			format, err := argString(node, args, 0, "explodef")
+			format, err := ArgString(node, args, 0, "explodef")
 			if err != nil {
 				return NilValue{}, err
 			}
@@ -569,7 +558,7 @@ func (i *Interpreter) registerBuiltins() {
 				return NilValue{}, NewRuntimeError(node, "scanf: format and variables required")
 			}
 
-			format, err := argString(node, args, 0, "scanf")
+			format, err := ArgString(node, args, 0, "scanf")
 			if err != nil {
 				return NilValue{}, err
 			}
@@ -658,8 +647,8 @@ func (i *Interpreter) registerBuiltins() {
 				return NilValue{}, NewRuntimeError(node, err.Error())
 			}
 
-			expectedTI := i.typeInfoFromValue(v)
-			expectedTI = unwrapAlias(expectedTI)
+			expectedTI := i.TypeInfoFromValue(v)
+			expectedTI = UnwrapAlias(expectedTI)
 
 			var newVal Value
 			switch expectedTI.Kind {

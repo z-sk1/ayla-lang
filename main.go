@@ -15,6 +15,7 @@ import (
 	"github.com/z-sk1/ayla-lang/interpreter"
 	"github.com/z-sk1/ayla-lang/lexer"
 	"github.com/z-sk1/ayla-lang/parser"
+	_ "github.com/z-sk1/ayla-lang/stdlib"
 	"github.com/z-sk1/ayla-lang/token"
 )
 
