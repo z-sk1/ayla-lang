@@ -24,6 +24,7 @@ func main() {
 
 	cmds := []string{
 		"run: ayla run [--debug] [--timed] <file>, runs the ayla script",
+		"install: ayla run install <url>, installs an ayla module and makes it global",
 		"--version: ayla --version, returns the current version",
 		"--help: ayla --help, returns all the available commands",
 	}

@@ -371,7 +371,6 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			if err != nil {
 				return SignalNone{}, err
 			}
-			expectedTI = UnwrapAlias(expectedTI)
 		}
 
 		if stmt.Value != nil {
@@ -477,7 +476,6 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 				if err != nil {
 					return SignalNone{}, err
 				}
-				expectedTI = UnwrapAlias(expectedTI)
 			}
 
 			for _, name := range stmt.Names {
@@ -666,7 +664,6 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			if err != nil {
 				return SignalNone{}, err
 			}
-			expectedTI = UnwrapAlias(expectedTI)
 		}
 
 		if stmt.Value != nil {
@@ -1410,8 +1407,9 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 		}
 
 		staticTI := UnwrapAlias(i.TypeInfoFromValue(val))
-		if staticTI.Kind != TypeAny {
-			return NilValue{}, NewRuntimeError(expr, "type assertion only allowed on 'thing'")
+		if staticTI.Kind != TypeInterface {
+			return NilValue{}, NewRuntimeError(expr,
+				"type assertion only allowed on interface values")
 		}
 
 		targetTI, err := i.resolveTypeNode(expr.Type)
@@ -1423,7 +1421,9 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 		actualTI := UnwrapAlias(i.TypeInfoFromValue(inner))
 
 		if !typesAssignable(actualTI, targetTI) {
-			return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("type mismatch: '%s' asserted as '%s'", actualTI.Name, targetTI.Name))
+			return NilValue{}, NewRuntimeError(expr,
+				fmt.Sprintf("type mismatch: '%s' asserted as '%s'",
+					actualTI.Name, targetTI.Name))
 		}
 
 		return i.promoteValueToType(inner, targetTI), nil
@@ -1769,7 +1769,7 @@ func (i *Interpreter) evalMapLiteral(expr *parser.CompositeLiteral, expected *Ty
 		kt := UnwrapAlias(i.TypeInfoFromValue(k))
 		vt := UnwrapAlias(i.TypeInfoFromValue(v))
 
-		if keyTI.Kind == TypeAny && !isComparableValue(k) {
+		if keyTI.Kind == TypeInterface && !isComparableValue(k) {
 			return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("map key %d is not comparable", idx))
 		}
 
@@ -2119,8 +2119,8 @@ func (i *Interpreter) callFunction(fn *Func, args []Value, callNode parser.Node)
 }
 
 func (i *Interpreter) evalIndexExpression(node parser.Expression, left, idx Value) (Value, error) {
-	if nv, ok := left.(NamedValue); ok && nv.TypeName.Kind == TypeAny {
-		return NilValue{}, NewRuntimeError(node, "cannot index value of type 'thing' without type assertion")
+	if nv, ok := left.(InterfaceValue); ok {
+		return NilValue{}, NewRuntimeError(node, fmt.Sprintf("cannot index value of type '%s' without type assertion", nv.TypeInfo.Name))
 	}
 
 	idx = UnwrapFully(idx)
@@ -2157,13 +2157,6 @@ func (i *Interpreter) evalIndexExpression(node parser.Expression, left, idx Valu
 			return NilValue{}, err
 		}
 
-		if arr.ElemType.Kind == TypeAny {
-			elem = NamedValue{
-				TypeName: arr.ElemType,
-				Value:    elem,
-			}
-		}
-
 		return copyValue(elem), nil
 
 	case TypeString:
@@ -2186,7 +2179,7 @@ func (i *Interpreter) evalIndexExpression(node parser.Expression, left, idx Valu
 
 		keyType := UnwrapAlias(i.TypeInfoFromValue(idx))
 
-		if mv.KeyType.Kind == TypeAny {
+		if mv.KeyType.Kind == TypeInterface {
 			if !isComparableValue(idx) {
 				return NilValue{}, NewRuntimeError(
 					node,
@@ -2227,13 +2220,6 @@ func (i *Interpreter) evalIndexExpression(node parser.Expression, left, idx Valu
 			return NilValue{}, err
 		}
 
-		if mv.ValueType.Kind == TypeAny {
-			return NamedValue{
-				TypeName: mv.ValueType,
-				Value:    val,
-			}, nil
-		}
-
 		return val, nil
 
 	default:
@@ -2262,9 +2248,9 @@ func (i *Interpreter) evalIndexExpression(node parser.Expression, left, idx Valu
 }
 
 func (i *Interpreter) evalSliceExpression(node parser.Expression, left, startVal, endVal Value) (Value, error) {
-	if nv, ok := left.(NamedValue); ok && nv.TypeName.Kind == TypeAny {
+	if iv, ok := left.(InterfaceValue); ok {
 		return NilValue{}, NewRuntimeError(node,
-			"cannot slice value of type 'thing' without type assertion")
+			fmt.Sprintf("cannot slice value of type '%s' without type assertion", iv.TypeInfo.Name))
 	}
 
 	left = UnwrapFully(left)
@@ -2451,23 +2437,23 @@ func (i *Interpreter) evalInfix(node *parser.InfixExpression, left Value, op str
 	left = UnwrapUntyped(left)
 	right = UnwrapUntyped(right)
 
-	if iv, ok := left.(InterfaceValue); ok {
-		if _, isNil := right.(NilValue); isNil {
-			return evalInterfaceNilInfix(node, iv, op)
-		}
-	}
-
-	if iv, ok := right.(InterfaceValue); ok {
-		if _, isNil := left.(NilValue); isNil {
-			return evalInterfaceNilInfix(node, iv, op)
-		}
-	}
-
 	liv, lok := left.(InterfaceValue)
 	riv, rok := right.(InterfaceValue)
 
+	if lok {
+		if _, ok := right.(NilValue); ok {
+			return evalInterfaceNilInfix(node, liv, op)
+		}
+	}
+
+	if rok {
+		if _, ok := left.(NilValue); ok {
+			return evalInterfaceNilInfix(node, riv, op)
+		}
+	}
+
 	if lok && rok {
-		// both interfaces
+
 		if liv.Value == nil && riv.Value == nil {
 			switch op {
 			case "==":
@@ -2486,12 +2472,11 @@ func (i *Interpreter) evalInfix(node *parser.InfixExpression, left Value, op str
 			}
 		}
 
-		// compare underlying values
 		return i.evalInfix(node, liv.Value, op, riv.Value)
 	}
 
-	if iv, ok := left.(InterfaceValue); ok {
-		if iv.Value == nil {
+	if lok {
+		if liv.Value == nil {
 			switch op {
 			case "==":
 				return BoolValue{V: false}, nil
@@ -2499,11 +2484,16 @@ func (i *Interpreter) evalInfix(node *parser.InfixExpression, left Value, op str
 				return BoolValue{V: true}, nil
 			}
 		}
-		return i.evalInfix(node, iv.Value, op, right)
+
+		return NilValue{}, NewRuntimeError(
+			node,
+			fmt.Sprintf("cannot use '%s' in operations, assert a type first",
+				liv.TypeInfo.Name),
+		)
 	}
 
-	if iv, ok := right.(InterfaceValue); ok {
-		if iv.Value == nil {
+	if rok {
+		if riv.Value == nil {
 			switch op {
 			case "==":
 				return BoolValue{V: false}, nil
@@ -2511,33 +2501,27 @@ func (i *Interpreter) evalInfix(node *parser.InfixExpression, left Value, op str
 				return BoolValue{V: true}, nil
 			}
 		}
-		return i.evalInfix(node, left, op, iv.Value)
+
+		return NilValue{}, NewRuntimeError(
+			node,
+			fmt.Sprintf("cannot use '%s' in operations, assert a type first",
+				riv.TypeInfo.Name),
+		)
 	}
 
-	// nil handling
 	if _, ok := left.(NilValue); ok {
 		return evalNilInfix(node, op, right)
 	}
+
 	if _, ok := right.(NilValue); ok {
 		return evalNilInfix(node, op, left)
 	}
 
-	// strict any handling
-	leftTI := UnwrapAlias(i.TypeInfoFromValue(left))
-	rightTI := UnwrapAlias(i.TypeInfoFromValue(right))
-
-	if leftTI.Kind == TypeAny || rightTI.Kind == TypeAny {
-		return NilValue{}, NewRuntimeError(
-			node,
-			"cannot use 'thing' in operations, assert a type first",
-		)
-	}
-
-	// named values
 	lnv, lok := left.(NamedValue)
 	rnv, rok := right.(NamedValue)
 
 	if lok || rok {
+
 		if !lok || !rok || lnv.TypeName != rnv.TypeName {
 			return NilValue{}, NewRuntimeError(
 				node,
@@ -2545,7 +2529,6 @@ func (i *Interpreter) evalInfix(node *parser.InfixExpression, left Value, op str
 			)
 		}
 
-		// Same named type → unwrap
 		ul := UnwrapFully(left)
 		ur := UnwrapFully(right)
 
@@ -2553,7 +2536,7 @@ func (i *Interpreter) evalInfix(node *parser.InfixExpression, left Value, op str
 		if err != nil {
 			return NilValue{}, err
 		}
-		// Re-wrap result
+
 		return NamedValue{
 			TypeName: lnv.TypeName,
 			Value:    res,
@@ -2561,11 +2544,17 @@ func (i *Interpreter) evalInfix(node *parser.InfixExpression, left Value, op str
 	}
 
 	if left.Type() == INT && right.Type() == FLOAT {
-		return evalFloatInfix(node, FloatValue{V: float64(left.(IntValue).V)}, op, right.(FloatValue))
+		return evalFloatInfix(node,
+			FloatValue{V: float64(left.(IntValue).V)},
+			op,
+			right.(FloatValue))
 	}
 
 	if left.Type() == FLOAT && right.Type() == INT {
-		return evalFloatInfix(node, left.(FloatValue), op, FloatValue{V: float64(right.(IntValue).V)})
+		return evalFloatInfix(node,
+			left.(FloatValue),
+			op,
+			FloatValue{V: float64(right.(IntValue).V)})
 	}
 
 	if left.Type() == POINTER && right.Type() == NIL {
@@ -2576,31 +2565,48 @@ func (i *Interpreter) evalInfix(node *parser.InfixExpression, left Value, op str
 		return evalNilInfix(node, op, right.(*PointerValue))
 	}
 
-	// type mismatch check
 	if left.Type() != right.Type() {
-		return NilValue{}, NewRuntimeError(node, fmt.Sprintf("type mismatch: '%s' %s '%s'", left.Type(), op, right.Type()))
+		return NilValue{}, NewRuntimeError(
+			node,
+			fmt.Sprintf("type mismatch: '%s' %s '%s'",
+				left.Type(), op, right.Type()),
+		)
 	}
 
 	switch left.Type() {
+
 	case INT:
 		return evalIntInfix(node, left.(IntValue), op, right.(IntValue))
+
 	case FLOAT:
 		return evalFloatInfix(node, left.(FloatValue), op, right.(FloatValue))
+
 	case STRING:
 		return evalStringInfix(node, left.(StringValue), op, right.(StringValue))
+
 	case BOOL:
 		return evalBoolInfix(node, left.(BoolValue), op, right.(BoolValue))
+
 	case ENUM:
 		return evalEnumInfix(node, left.(EnumValue), op, right.(EnumValue))
+
 	case POINTER:
 		return evalPointerInfix(node, left.(*PointerValue), op, right.(*PointerValue))
+
 	case STRUCT:
 		return evalStructInfix(node, left.(*StructValue), op, right.(*StructValue))
+
 	case ARR:
 		return evalArrayInfix(node, left.(ArrayValue), op, right.(ArrayValue))
 	}
 
-	return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unsupported operand types: %s %s %s", i.TypeInfoFromValue(left).Name, op, i.TypeInfoFromValue(right).Name))
+	return NilValue{}, NewRuntimeError(
+		node,
+		fmt.Sprintf("unsupported operand types: %s %s %s",
+			i.TypeInfoFromValue(left).Name,
+			op,
+			i.TypeInfoFromValue(right).Name),
+	)
 }
 
 func evalIntInfix(node *parser.InfixExpression, left IntValue, op string, right IntValue) (Value, error) {

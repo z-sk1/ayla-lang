@@ -569,6 +569,9 @@ func (p *Parser) parseVarStatement() *VarStatement {
 		p.nextToken() // move to '='
 		p.nextToken() // move to expression
 		stmt.Value = p.parseExpression(LOWEST)
+		if stmt.Value == nil {
+			p.addError("expected expression after '='")
+		}
 	}
 
 	return stmt
@@ -1085,12 +1088,8 @@ func (p *Parser) parseType() TypeNode {
 		return p.exprToType(p.parseExpression(LOWEST))
 	}
 
-	for p.peekTok.Type == token.LBRACKET {
-		if p.peekN(2).Type == token.DUODOT {
-			base = p.parseRangeType(base)
-		} else {
-			break
-		}
+	if p.peekTok.Type == token.LT {
+		base = p.parseRangeType(base)
 	}
 
 	return base
@@ -1123,30 +1122,31 @@ func (p *Parser) parseTypeList(end token.TokenType) []TypeNode {
 }
 
 func (p *Parser) parseRangeType(base TypeNode) TypeNode {
-	p.nextToken() // move to '['
+	p.nextToken() // consume '<'
 	p.nextToken() // first token of min
 
 	min := p.parseExpression(LOWEST)
-
-	if p.curTok.Type != token.DUODOT {
-		if p.peekTok.Type == token.DUODOT {
-			p.nextToken()
-		} else {
-			p.addError("expected '..' in range type")
-			return nil
-		}
-	}
-
-	p.nextToken() // move to max start
-
-	max := p.parseExpression(LOWEST)
-
-	if p.peekTok.Type != token.RBRACKET {
-		p.addError("expected ']' after range type")
+	if min == nil {
+		p.addError("expected expression for min range")
 		return nil
 	}
 
-	p.nextToken() // consume ']'
+	if p.peekTok.Type != token.DUODOT {
+		p.addError("expected '..' in range type")
+		return nil
+	}
+
+	p.nextToken() // move to '..'
+	p.nextToken() // first token of max
+
+	max := p.parseExpression(PREFIX)
+
+	if p.peekTok.Type != token.GT {
+		p.addError("expected '>' after range type")
+		return nil
+	}
+
+	p.nextToken() // consume '>'
 
 	return &RangeType{
 		Base: base,
@@ -1169,6 +1169,10 @@ func (p *Parser) parseArrayType() TypeNode {
 	}
 
 	at.Size = p.parseExpression(LOWEST)
+	if at.Size == nil {
+		p.addError("expected expression for array size")
+		return nil
+	}
 
 	if p.peekTok.Type != token.RBRACKET {
 		p.addError("expected ']'")
@@ -1366,6 +1370,10 @@ func (p *Parser) parseCompositeLiteral(typ TypeNode) Expression {
 			p.nextToken() // :
 			p.nextToken() // value
 			lit.Fields[fieldName] = p.parseExpression(LOWEST)
+			if lit.Fields[fieldName] == nil {
+				p.addError("expected expression after ':'")
+				return nil
+			}
 		} else {
 			first := p.parseExpression(LOWEST)
 
@@ -1373,6 +1381,10 @@ func (p *Parser) parseCompositeLiteral(typ TypeNode) Expression {
 				p.nextToken() // :
 				p.nextToken() // value
 				value := p.parseExpression(LOWEST)
+				if value == nil {
+					p.addError("expected expression after ':'")
+					return nil
+				}
 
 				lit.Pairs = append(lit.Pairs, MapPair{
 					Key:   first,
@@ -2401,7 +2413,7 @@ func (p *Parser) parseExpression(precedence int) Expression {
 				Left:     left,
 				Operator: p.curTok.Literal,
 			}
-			
+
 		default:
 			p.nextToken()
 			left = p.parseInfixExpression(left)

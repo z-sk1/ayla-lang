@@ -59,5 +59,3 @@ got converted to Names like this
 ```ayla
 Names([]string{"Ziad", "Ayla", "Elen"})
 ```
-
-# Aliases

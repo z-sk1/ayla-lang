@@ -19,7 +19,7 @@ func LoadRLModule(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 	max := 255.0
 
 	uint8Type := &interpreter.TypeInfo{
-		Name:         "int[0..255]",
+		Name:         "int<0..255>",
 		Kind:         interpreter.TypeInt,
 		Min:          &min,
 		Max:          &max,

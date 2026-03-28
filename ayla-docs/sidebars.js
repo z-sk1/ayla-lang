@@ -68,6 +68,7 @@ const sidebars = {
           ],
         },
         "language/methods",
+        "language/pointers",
         "language/concurrency",
       ],
     },

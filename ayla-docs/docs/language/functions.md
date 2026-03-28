@@ -37,7 +37,10 @@ fun add(x int, y int) (int) {
 
 put(add(5, 7))
 ```
-output: 12
+> output: 
+```
+12
+```
 
 ## multiple return values
 ayla also supports **multiple return values**
@@ -48,8 +51,10 @@ fun operation(x int, y int) (int, int) {
 
 putln(operation(4, 5))
 ```
-> output: 9 -1
-
+> output: 
+```
+9 -1
+```
 
 ## variadic parameters
 Ayla supports **variadic parameters**, which allow a function to accept a variable number of arguments
@@ -125,7 +130,6 @@ output:
 ### what flattening does
 - `numbers...` expands the array
 - Each element becomes a separate argument
-- Only works when calling a function with a variadic parameter
 
 Without flattening:
 ```ayla

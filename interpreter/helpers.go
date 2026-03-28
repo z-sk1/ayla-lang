@@ -42,10 +42,10 @@ func New(path string) *Interpreter {
 	wd, _ := os.Getwd()
 
 	i := &Interpreter{
-		Env:           env,
-		modules:       make(map[string]ModuleValue),
-		pointerCache:  make(map[*TypeInfo]*TypeInfo),
-		currentDir:    dir,
+		Env:          env,
+		modules:      make(map[string]ModuleValue),
+		pointerCache: make(map[*TypeInfo]*TypeInfo),
+		currentDir:   dir,
 	}
 
 	libDir, err := SetupAylaDirs()
@@ -81,10 +81,10 @@ func NewWithEnv(env *Environment, path string) *Interpreter {
 	wd, _ := os.Getwd()
 
 	i := &Interpreter{
-		Env:           env,
-		modules:       make(map[string]ModuleValue),
-		pointerCache:  make(map[*TypeInfo]*TypeInfo),
-		currentDir:    dir,
+		Env:          env,
+		modules:      make(map[string]ModuleValue),
+		pointerCache: make(map[*TypeInfo]*TypeInfo),
+		currentDir:   dir,
 	}
 
 	libDir, err := SetupAylaDirs()
@@ -279,6 +279,7 @@ func toFloat(v Value) (float64, bool) {
 func typesAssignable(from, to *TypeInfo) bool {
 	from = UnwrapAlias(from)
 	to = UnwrapAlias(to)
+	fmt.Printf("typesAssignable: %s -> %s\n", from.Name, to.Name)
 
 	if from == nil || to == nil {
 		return false
@@ -300,9 +301,7 @@ func typesAssignable(from, to *TypeInfo) bool {
 		if rangeMismatch(from, to) {
 			return false
 		}
-	}
 
-	if to.Kind == TypeAny {
 		return true
 	}
 
@@ -403,8 +402,11 @@ func typesIdentical(a, b *TypeInfo) bool {
 		}
 		return true
 
-	case TypeString, TypeBool, TypeAny:
+	case TypeString, TypeBool:
 		return true
+
+	case TypeInterface:
+		return implementsInterface(a, b)
 
 	case TypePointer:
 		return typesIdentical(a.Elem, b.Elem)
@@ -450,10 +452,10 @@ func typesIdentical(a, b *TypeInfo) bool {
 		return true
 
 	case TypeEnum:
-		return a == b // enums are nominal
+		return a == b
 
 	case TypeNamed:
-		return a == b // named types are nominal
+		return a == b
 
 	default:
 		return false
@@ -461,13 +463,12 @@ func typesIdentical(a, b *TypeInfo) bool {
 }
 
 func (i *Interpreter) promoteValueToType(v Value, ti *TypeInfo) Value {
+	base := UnwrapAlias(ti)
 
 	switch val := v.(type) {
 
 	case UntypedValue:
-		base := val.Value
-
-		converted := i.promoteValueToType(base, ti)
+		converted := i.promoteValueToType(val.Value, ti)
 
 		if ti.Kind == TypeNamed {
 			return NamedValue{
@@ -479,7 +480,13 @@ func (i *Interpreter) promoteValueToType(v Value, ti *TypeInfo) Value {
 		return converted
 	}
 
-	ti = UnwrapAlias(ti)
+	if base.Kind == TypeInterface {
+		return InterfaceValue{
+			TypeInfo: ti, // keep alias (thing)
+			Value:    v,
+		}
+	}
+
 	actual := i.TypeInfoFromValue(v)
 
 	if actual == ti {
@@ -493,35 +500,27 @@ func (i *Interpreter) promoteValueToType(v Value, ti *TypeInfo) Value {
 		}
 	}
 
-	switch ti.Kind {
+	switch base.Kind {
 
 	case TypeArray:
-		switch v := v.(type) {
-		case ArrayValue:
+		if arr, ok := v.(ArrayValue); ok {
 			return ArrayValue{
-				Elements: v.Elements,
-				ElemType: ti.Elem,
-				Capacity: v.Capacity,
-				Fixed:    v.Fixed,
+				Elements: arr.Elements,
+				ElemType: base.Elem,
+				Capacity: arr.Capacity,
+				Fixed:    arr.Fixed,
 			}
 		}
 
 	case TypeFloat:
-		switch val := v.(type) {
-		case IntValue:
-			return FloatValue{V: float64(val.V)}
-		}
-	case TypeInt:
-		switch val := v.(type) {
-		case FloatValue:
-			return IntValue{V: int(val.V)}
-		}
-	case TypeInterface:
-		return InterfaceValue{
-			TypeInfo: ti,
-			Value:    v,
+		if iv, ok := v.(IntValue); ok {
+			return FloatValue{V: float64(iv.V)}
 		}
 
+	case TypeInt:
+		if fv, ok := v.(FloatValue); ok {
+			return IntValue{V: int(fv.V)}
+		}
 	}
 
 	return v
@@ -572,6 +571,8 @@ func UnwrapFully(v Value) Value {
 		case NamedValue:
 			v = val.Value
 		case UntypedValue:
+			v = val.Value
+		case InterfaceValue:
 			v = val.Value
 		default:
 			return v
@@ -772,16 +773,26 @@ func (i *Interpreter) assignWithType(node parser.Node, v Value, expected *TypeIn
 		return v, nil
 	}
 
-	expected = UnwrapAlias(expected)
+	baseExpected := UnwrapAlias(expected)
 
 	// promote literals first
 	if uv, ok := v.(UntypedValue); ok {
-		v = i.promoteValueToType(uv, expected)
+		promoted := i.promoteValueToType(uv, expected)
+		inner := UnwrapFully(promoted)
+		innerTI := UnwrapAlias(i.TypeInfoFromValue(inner))
+		if baseExpected.Kind == TypeInterface && len(baseExpected.MethodTypes) > 0 {
+			if !implementsInterface(innerTI, baseExpected) {
+				return NilValue{}, NewRuntimeError(node,
+					fmt.Sprintf("type '%s' does not implement '%s'",
+						innerTI.Name, expected.Name))
+			}
+		}
+		v = promoted
 	}
 
 	actual := UnwrapAlias(i.TypeInfoFromValue(v))
 
-	if !typesAssignable(actual, expected) {
+	if !typesAssignable(actual, baseExpected) {
 		if node == nil {
 			return NilValue{}, fmt.Errorf(
 				"type mismatch: expected '%s' but got '%s'",
@@ -802,18 +813,26 @@ func (i *Interpreter) assignWithType(node parser.Node, v Value, expected *TypeIn
 
 	v = i.promoteValueToType(v, expected)
 
-	if arr, ok := v.(ArrayValue); ok && expected.Kind == TypeArray {
+	if err := validateRange(node, v, baseExpected); err != nil {
+		return NilValue{}, err
+	}
+
+	if arr, ok := v.(ArrayValue); ok && baseExpected.Kind == TypeArray {
 		for _, el := range arr.Elements {
-			if err := validateRange(node, el, expected.Elem); err != nil {
+			if err := validateRange(node, el, baseExpected.Elem); err != nil {
 				return NilValue{}, err
 			}
 		}
 	}
 
-	if expected.Kind == TypeAny {
-		v = NamedValue{
-			TypeName: expected,
-			Value:    v,
+	if baseExpected.Min != nil || baseExpected.Max != nil {
+		switch val := v.(type) {
+		case IntValue:
+			val.TypeInfo = expected
+			v = val
+		case FloatValue:
+			val.TypeInfo = expected
+			v = val
 		}
 	}
 
@@ -855,16 +874,18 @@ func rangeMismatch(src, dst *TypeInfo) bool {
 		return false
 	}
 
-	if src.Min == nil && src.Max == nil {
-		return false
+	// src must be inside dst
+
+	if dst.Min != nil {
+		if src.Min == nil || *src.Min < *dst.Min {
+			return true
+		}
 	}
 
-	if src.Min != nil && dst.Min != nil && *src.Min != *dst.Min {
-		return true
-	}
-
-	if src.Max != nil && dst.Max != nil && *src.Max != *dst.Max {
-		return true
+	if dst.Max != nil {
+		if src.Max == nil || *src.Max > *dst.Max {
+			return true
+		}
 	}
 
 	return false
@@ -940,7 +961,7 @@ func (i *Interpreter) resolveAssignableTarget(expr parser.Expression) (Assignabl
 
 			keyType := UnwrapAlias(i.TypeInfoFromValue(indexVal))
 
-			if val.KeyType.Kind == TypeAny {
+			if val.KeyType.Kind == TypeInterface {
 
 				if !isComparableValue(indexVal) {
 					return nil, fmt.Errorf("value of this type cannot be used as map key")

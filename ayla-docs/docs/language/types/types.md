@@ -98,7 +98,7 @@ putln(y)
 here we convert a float to an int
 
 
-### invalid casts
+## invalid casts
 however notice that some casts cant be performed!
 
 for example, you cant cast a `string` to an `int` since `strings` are not numerical values
@@ -107,11 +107,9 @@ egg x string = "hi"
 
 egg y int = int(x)
 ```
-> output: runtime error at 3:16: int type cast does not support 'string', try the function toInt to parse non-numeric types
+> output: runtime error at 3:16: int type cast does not support 'string'
 
-here it recommends a parse function `toInt()`, which allows parsing strings like `"2"` to real integers
-
-### parsing vs casting
+## parsing vs casting
 
 type casting converts between compatible numeric types (such as float to int).
 
@@ -137,9 +135,9 @@ put(x)
 ```
 > output: 2
 
-### type assertion
+## type assertion
 
-but, you must use `type assertion` to do operations with it
+but, you must use `type assertion` to do operations with `thing`
 ```ayla
 egg x thing = 2
 

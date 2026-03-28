@@ -19,14 +19,6 @@ Length: 5
 
 Type: int
 ```
-Since arrays have zero values, this is equivalent to:
-
-```ayla
-egg x [5]int = [5]int{}
-```
-the default value for each element is the `zero value` of its `type`.
-
-for `int`, that is 0
 
 ## array literals
 You can initialize an array using a literal:

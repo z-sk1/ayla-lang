@@ -66,10 +66,18 @@ func initBuiltinTypes(TypeEnv map[string]TypeValue) {
 		},
 	}
 
+	var emptyInterface = &TypeInfo{
+		Name:    "interface{}",
+		Kind:    TypeInterface,
+		Methods: map[string]*Func{},
+	}
+
 	TypeEnv["thing"] = TypeValue{
 		TypeInfo: &TypeInfo{
-			Name: "thing",
-			Kind: TypeAny,
+			Name:       "thing",
+			Kind:       TypeNamed,
+			Alias:      true,
+			Underlying: emptyInterface,
 		},
 	}
 

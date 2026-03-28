@@ -26,7 +26,6 @@ const (
 	TypeEnum
 	TypeInterface
 	TypeNamed
-	TypeAny
 )
 
 type TypeInfo struct {
@@ -368,7 +367,8 @@ func (u UntypedValue) String() string {
 }
 
 type IntValue struct {
-	V int
+	V        int
+	TypeInfo *TypeInfo
 }
 
 func (i IntValue) Type() ValueType {
@@ -380,7 +380,8 @@ func (i IntValue) String() string {
 }
 
 type FloatValue struct {
-	V float64
+	V        float64
+	TypeInfo *TypeInfo
 }
 
 func (f FloatValue) Type() ValueType {
@@ -583,6 +584,28 @@ func (n NativeValue) String() string {
 	return "native"
 }
 
+func (i *Interpreter) rangedIntType(min, max *float64) *TypeInfo {
+	base := i.TypeEnv["int"].TypeInfo
+	return &TypeInfo{
+		Name:       fmt.Sprintf("int<%v..%v>", *min, *max),
+		Kind:       TypeInt,
+		Underlying: base,
+		Min:        min,
+		Max:        max,
+	}
+}
+
+func (i *Interpreter) rangedFloatType(min, max *float64) *TypeInfo {
+	base := i.TypeEnv["float"].TypeInfo
+	return &TypeInfo{
+		Name:       fmt.Sprintf("float<%v..%v>", *min, *max),
+		Kind:       TypeFloat,
+		Underlying: base,
+		Min:        min,
+		Max:        max,
+	}
+}
+
 func (i *Interpreter) resolveTypeNode(t parser.TypeNode) (*TypeInfo, error) {
 	switch tn := t.(type) {
 
@@ -650,7 +673,7 @@ func (i *Interpreter) resolveTypeNode(t parser.TypeNode) (*TypeInfo, error) {
 			return nil, NewRuntimeError(tn, "range minimum cannot be greater than maximum")
 		}
 
-		name := fmt.Sprintf("%s[%v..%v]", baseTI.Name, minNum, maxNum)
+		name := fmt.Sprintf("%s<%v..%v>", baseTI.Name, minNum, maxNum)
 
 		return &TypeInfo{
 			Name:       name,
@@ -706,6 +729,7 @@ func (i *Interpreter) resolveTypeNode(t parser.TypeNode) (*TypeInfo, error) {
 
 	case *parser.InterfaceType:
 		methods := make(map[string]*TypeInfo)
+		methodNames := make([]string, 0)
 
 		for _, m := range tn.Methods {
 			fnType, err := i.resolveTypeNode(m)
@@ -714,9 +738,48 @@ func (i *Interpreter) resolveTypeNode(t parser.TypeNode) (*TypeInfo, error) {
 			}
 
 			methods[m.Name.Value] = fnType
+			methodParams := make([]string, 0)
+			methodReturns := make([]string, 0)
+
+			for _, p := range m.Params {
+				pType, err := i.resolveTypeNode(p)
+				if err != nil {
+					return nil, err
+				}
+
+				methodParams = append(methodParams, pType.Name)
+			}
+
+			if len(m.Returns) > 0 {
+				for _, r := range m.Returns {
+					rType, err := i.resolveTypeNode(r)
+					if err != nil {
+						return nil, err
+					}
+
+					methodReturns = append(methodReturns, rType.Name)
+				}
+			}
+
+			var name string
+
+			if len(methodReturns) > 0 {
+				name = fmt.Sprintf("%s(%s) (%s)", m.Name.Value, strings.Join(methodParams, ", "), strings.Join(methodReturns, ", "))
+			} else {
+				name = fmt.Sprintf("%s(%s)", m.Name.Value, strings.Join(methodParams, ", "))
+			}
+
+			methodNames = append(methodNames, name)
+		}
+
+		name := fmt.Sprintf("interface{ %s }", strings.Join(methodNames, ", "))
+
+		if len(methodNames) == 0 {
+			name = "interface{}"
 		}
 
 		return &TypeInfo{
+			Name:        name,
 			Kind:        TypeInterface,
 			MethodTypes: methods,
 		}, nil
@@ -890,8 +953,16 @@ func (i *Interpreter) TypeInfoFromValue(v Value) *TypeInfo {
 	case UntypedValue:
 		return i.TypeInfoFromValue(v.Value)
 	case IntValue:
+		if v.TypeInfo != nil {
+			return v.TypeInfo
+		}
+
 		return i.TypeEnv["int"].TypeInfo
 	case FloatValue:
+		if v.TypeInfo != nil {
+			return v.TypeInfo
+		}
+
 		return i.TypeEnv["float"].TypeInfo
 	case StringValue:
 		return i.TypeEnv["string"].TypeInfo
@@ -930,7 +1001,7 @@ func (i *Interpreter) TypeInfoFromValue(v Value) *TypeInfo {
 	case *Func:
 		return v.TypeName
 	case InterfaceValue:
-		return i.TypeInfoFromValue(v.Value)
+		return v.TypeInfo
 	case EnumValue:
 		return v.Enum
 	case NamedValue:
@@ -950,8 +1021,16 @@ func (i *Interpreter) defaultValueFromTypeInfo(node parser.Node, ti *TypeInfo) (
 
 	switch ti.Kind {
 	case TypeInt:
+		if ti.Min != nil {
+			return IntValue{V: int(*ti.Min)}, nil
+		}
+
 		return IntValue{V: 0}, nil
 	case TypeFloat:
+		if ti.Min != nil {
+			return FloatValue{V: *ti.Min}, nil
+		}
+
 		return FloatValue{V: 0}, nil
 	case TypeString:
 		return StringValue{V: ""}, nil

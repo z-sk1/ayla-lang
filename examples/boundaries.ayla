@@ -1,0 +1,2 @@
+egg x thing = 4
+putln(x.(int) + 2)
