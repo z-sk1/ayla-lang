@@ -21,7 +21,7 @@ const sidebars = {
     "intro",
     "installation",
     "first-program",
-
+    "modules",
     {
       type: "category",
       label: "Features",
@@ -57,7 +57,6 @@ const sidebars = {
           ],
         },
         "language/functions",
-        "language/error",
         {
           type: "category",
           label: "Data Structures",
@@ -74,13 +73,6 @@ const sidebars = {
         "language/concurrency",
       ],
     },
-
-    // {
-    //   type: "category",
-    //   label: "Built-in Functions",
-    //   collapsed: false,
-    //   items: ["builtins/print", "builtins/len", "builtins/input"],
-    // },
   ],
 };
 
