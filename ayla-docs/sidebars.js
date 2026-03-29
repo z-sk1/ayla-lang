@@ -30,7 +30,7 @@ const sidebars = {
         "language/variables",
         "language/booleans",
         "language/strings",
-        "language/control-flow/lifetimes",
+        "language/lifetimes",
         {
           type: "category",
           label: "Type System",
