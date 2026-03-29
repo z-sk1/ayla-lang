@@ -2008,11 +2008,9 @@ func (i *Interpreter) callFunction(fn *Func, args []Value, callNode parser.Node)
 				return NilValue{}, err
 			}
 
-			actual := UnwrapAlias(i.TypeInfoFromValue(val))
-
-			val, err = i.assignWithType(callNode, val, expected)
+			val, err = i.paramWithType(callNode, param.Name.Value, val, expected)
 			if err != nil {
-				return NilValue{}, NewRuntimeError(callNode, fmt.Sprintf("param '%s' expects '%s' but got '%s'", param.Name.Value, expected.Name, actual.Name))
+				return NilValue{}, err
 			}
 		}
 
@@ -2320,6 +2318,13 @@ func (i *Interpreter) evalMemberExpression(node parser.Expression, left Value, f
 		return NilValue{}, NewRuntimeError(node, "nil value in member expression")
 	}
 
+	if iv, ok := left.(InterfaceValue); ok {
+		if iv.Value == nil {
+			return NilValue{}, NewRuntimeError(node, "nil interface value")
+		}
+		return i.evalMemberExpression(node, iv.Value, field)
+	}
+
 	orig := left
 
 	origType := UnwrapAlias(i.TypeInfoFromValue(orig))
@@ -2430,7 +2435,7 @@ func (i *Interpreter) evalMemberExpression(node parser.Expression, left Value, f
 
 	return NilValue{}, NewRuntimeError(node,
 		fmt.Sprintf("member expression expects enums or structs, but got '%s'",
-			string(left.Type())))
+			i.TypeInfoFromValue(left).Name))
 }
 
 func (i *Interpreter) evalInfix(node *parser.InfixExpression, left Value, op string, right Value) (Value, error) {

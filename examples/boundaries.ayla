@@ -1,2 +1,21 @@
-egg x thing = 4
-putln(x.(int) + 2)
+type Greeter interface {
+    Greet() (string)
+}
+
+type Person struct {
+    Name string
+}
+
+fun (p *Person) Greet() (string) {
+    back "Hi I'm ${p.Name}"
+}
+
+fun greet(g Greeter) {
+    putln(g.Greet())
+}
+
+p := &Person{Name: "Ziad"}  // correct, *Person implements Greeter
+greet(p)
+
+p2 := Person{Name: "Ziad"}  // wrong, Person does not implement Greeter
+greet(p2)

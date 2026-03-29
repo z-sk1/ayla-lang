@@ -30,6 +30,7 @@ const sidebars = {
         "language/variables",
         "language/booleans",
         "language/strings",
+        "language/control-flow/lifetimes",
         {
           type: "category",
           label: "Type System",
@@ -38,6 +39,8 @@ const sidebars = {
             "language/types/types",
             "language/types/custom-types",
             "language/types/aliases",
+            "language/types/boundaries",
+            "language/types/interfaces",
           ],
         },
         {
@@ -51,7 +54,6 @@ const sidebars = {
             "language/control-flow/while",
             "language/control-flow/break-continue",
             "language/control-flow/with",
-            "language/control-flow/lifetimes",
           ],
         },
         "language/functions",

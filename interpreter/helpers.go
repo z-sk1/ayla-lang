@@ -292,6 +292,13 @@ func typesAssignable(from, to *TypeInfo) bool {
 		return implementsInterface(from, to)
 	}
 
+	if to.Kind == TypeInterface {
+		return implementsInterface(from, to)
+	}
+	if to.Kind == TypeNamed && to.Underlying != nil && to.Underlying.Kind == TypeInterface {
+		return implementsInterface(from, to.Underlying)
+	}
+
 	if from.Kind == to.Kind && (from.Kind == TypeInt || from.Kind == TypeFloat) {
 		if from.Min == nil && from.Max == nil {
 			return true
@@ -311,6 +318,9 @@ func typesAssignable(from, to *TypeInfo) bool {
 	if from.Kind == TypeNamed {
 		if to.Kind == TypeInterface {
 			return implementsInterface(from, to)
+		}
+		if to.Kind == TypeNamed && to.Underlying != nil && to.Underlying.Kind == TypeInterface {
+			return implementsInterface(from, to.Underlying)
 		}
 		return typesIdentical(from, to)
 	}
@@ -479,9 +489,12 @@ func (i *Interpreter) promoteValueToType(v Value, ti *TypeInfo) Value {
 		return converted
 	}
 
+	if base.Kind == TypeNamed && base.Underlying != nil {
+		base = base.Underlying
+	}
 	if base.Kind == TypeInterface {
 		return InterfaceValue{
-			TypeInfo: ti, // keep alias (thing)
+			TypeInfo: ti,
 			Value:    v,
 		}
 	}
@@ -527,12 +540,14 @@ func (i *Interpreter) promoteValueToType(v Value, ti *TypeInfo) Value {
 
 func implementsInterface(ti, iface *TypeInfo) bool {
 	for name, expected := range iface.MethodTypes {
-
 		actual, ok := ti.MethodTypes[name]
 		if !ok {
-			return false
+			m, ok2 := ti.Methods[name]
+			if !ok2 {
+				return false
+			}
+			actual = m.TypeName
 		}
-
 		if !typesAssignable(actual, expected) {
 			return false
 		}
@@ -791,6 +806,31 @@ func (i *Interpreter) assignWithType(node parser.Node, v Value, expected *TypeIn
 
 	actual := UnwrapAlias(i.TypeInfoFromValue(v))
 
+	if baseExpected.Kind == TypeInterface || (baseExpected.Kind == TypeNamed && baseExpected.Underlying != nil && baseExpected.Underlying.Kind == TypeInterface) {
+		iface := baseExpected
+		if baseExpected.Kind == TypeNamed {
+			iface = baseExpected.Underlying
+		}
+		actual := UnwrapAlias(i.TypeInfoFromValue(v))
+		inner := UnwrapFully(v)
+		innerTI := UnwrapAlias(i.TypeInfoFromValue(inner))
+
+		if !implementsInterface(innerTI, iface) {
+			for name := range iface.MethodTypes {
+				_, inMethodTypes := innerTI.MethodTypes[name]
+				_, inMethods := innerTI.Methods[name]
+				if !inMethodTypes && !inMethods {
+					return NilValue{}, NewRuntimeError(node,
+						fmt.Sprintf("type '%s' does not implement '%s' (missing method '%s')",
+							actual.Name, expected.Name, name))
+				}
+			}
+			return NilValue{}, NewRuntimeError(node,
+				fmt.Sprintf("type '%s' does not implement '%s'",
+					actual.Name, expected.Name))
+		}
+	}
+
 	if !typesAssignable(actual, baseExpected) {
 		if node == nil {
 			return NilValue{}, fmt.Errorf(
@@ -804,6 +844,104 @@ func (i *Interpreter) assignWithType(node parser.Node, v Value, expected *TypeIn
 			node,
 			fmt.Sprintf(
 				"type mismatch: expected '%s' but got '%s'",
+				expected.Name,
+				actual.Name,
+			),
+		)
+	}
+
+	v = i.promoteValueToType(v, expected)
+
+	if err := validateRange(node, v, baseExpected); err != nil {
+		return NilValue{}, err
+	}
+
+	if arr, ok := v.(ArrayValue); ok && baseExpected.Kind == TypeArray {
+		for _, el := range arr.Elements {
+			if err := validateRange(node, el, baseExpected.Elem); err != nil {
+				return NilValue{}, err
+			}
+		}
+	}
+
+	if baseExpected.Min != nil || baseExpected.Max != nil {
+		switch val := v.(type) {
+		case IntValue:
+			val.TypeInfo = expected
+			v = val
+		case FloatValue:
+			val.TypeInfo = expected
+			v = val
+		}
+	}
+
+	return v, nil
+}
+
+func (i *Interpreter) paramWithType(node parser.Node, pname string, v Value, expected *TypeInfo) (Value, error) {
+	if expected == nil {
+		return v, nil
+	}
+
+	baseExpected := UnwrapAlias(expected)
+
+	// promote literals first
+	if uv, ok := v.(UntypedValue); ok {
+		promoted := i.promoteValueToType(uv, expected)
+		inner := UnwrapFully(promoted)
+		innerTI := UnwrapAlias(i.TypeInfoFromValue(inner))
+		if baseExpected.Kind == TypeInterface && len(baseExpected.MethodTypes) > 0 {
+			if !implementsInterface(innerTI, baseExpected) {
+				return NilValue{}, NewRuntimeError(node,
+					fmt.Sprintf("param '%s' of type '%s' does not implement '%s'",
+						pname, innerTI.Name, expected.Name))
+			}
+		}
+		v = promoted
+	}
+
+	actual := UnwrapAlias(i.TypeInfoFromValue(v))
+
+	if baseExpected.Kind == TypeInterface || (baseExpected.Kind == TypeNamed && baseExpected.Underlying != nil && baseExpected.Underlying.Kind == TypeInterface) {
+		iface := baseExpected
+		if baseExpected.Kind == TypeNamed {
+			iface = baseExpected.Underlying
+		}
+		actual := UnwrapAlias(i.TypeInfoFromValue(v))
+		inner := UnwrapFully(v)
+		innerTI := UnwrapAlias(i.TypeInfoFromValue(inner))
+
+		if !implementsInterface(innerTI, iface) {
+			for name := range iface.MethodTypes {
+				_, inMethodTypes := innerTI.MethodTypes[name]
+				_, inMethods := innerTI.Methods[name]
+				if !inMethodTypes && !inMethods {
+					return NilValue{}, NewRuntimeError(node,
+						fmt.Sprintf("param '%s' of type '%s' does not implement '%s' (missing method '%s')",
+							pname, actual.Name, expected.Name, name))
+				}
+			}
+			return NilValue{}, NewRuntimeError(node,
+				fmt.Sprintf("param '%s' of type '%s' does not implement '%s'",
+					pname, actual.Name, expected.Name))
+		}
+	}
+
+	if !typesAssignable(actual, baseExpected) {
+		if node == nil {
+			return NilValue{}, fmt.Errorf(
+				"type mismatch: param '%s' expected '%s' but got '%s'",
+				pname,
+				expected.Name,
+				actual.Name,
+			)
+		}
+
+		return NilValue{}, NewRuntimeError(
+			node,
+			fmt.Sprintf(
+				"type mismatch: param '%s' expected '%s' but got '%s'",
+				pname,
 				expected.Name,
 				actual.Name,
 			),

@@ -20,6 +20,11 @@ Length: 5
 Type: int
 ```
 
+to declare an array type use a type statement:
+```ayla
+type Names [5]string
+```
+
 ## array literals
 You can initialize an array using a literal:
 ```ayla

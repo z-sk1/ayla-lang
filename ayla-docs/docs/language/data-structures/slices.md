@@ -17,6 +17,11 @@ egg x []int
 
 this declares a slice of integers.
 
+to declare a slice type use a type statement:
+```ayla
+type Ages []int
+```
+
 ## slice literal
 you can create a slice using a literal:
 ```ayla
