@@ -19,7 +19,7 @@ why yes {
     why i < 1760 {
         z[i] = 0.0
         b[i] = 32
-        i = i + 1
+        i++
     }
 
     egg j int = 0
@@ -35,7 +35,7 @@ why yes {
             egg cosFi = math.Cos(fi)
 
             egg h = cosFj + 2.0
-            egg D = 1 / (sinFi * h * sinA + sinFj * cosA + 3)
+            egg D = 1 / (sinFi * h * sinA + sinFj * cosA + 5)
 
             egg t = sinFi * h * cosA - sinFj * sinA
 
@@ -46,13 +46,13 @@ why yes {
 
             ayla (y > 0) && (y < 22) && (x > 0) && (x < 79) && (D > z[o]) {
                 z[o] = D
-                b[o] = ord(".,-~:;=!#$@1234567890+-=QWERTYUIOPASDFGHJKLZXCVBNM.,-~:;=!#$@1234567890+-=QWERTYUIOPASDFGHJKLZXCVBNM.,-~:;=!#$@1234567890+-=QWERTYUIOPASDFGHJKLZXCVBNM.,-~:;=!#$@1234567890+-=QWERTYUIOPASDFGHJKLZXCVBNM.,-~:;=!#$@1234567890+-=QWERTYUIOPASDFGHJKLZXCVBNM.,-~:;=!#$@1234567890+-=QWERTYUIOPASDFGHJKLZXCVBNM.,-~:;=!#$@1234567890+-=QWERTYUIOPASDFGHJKLZXCVBNM.,-~:;=!#$@1234567890+-=QWERTYUIOPASDFGHJKLZXCVBNM.,-~:;=!#$@1234567890+-=QWERTYUIOPASDFGHJKLZXCVBNM"[int(8 D)])
+                b[o] = ord(".,-~:;=!#$@1234567890+-=QWERTYUIOPASDFGHJKLZXCVBNM.,-~:;=!#$@1234567890+-=QWERTYUIOPASDFGHJKLZXCVBNM.,-~:;=!#$@1234567890+-=QWERTYUIOPASDFGHJKLZXCVBNM.,-~:;=!#$@1234567890+-=QWERTYUIOPASDFGHJKLZXCVBNM.,-~:;=!#$@1234567890+-=QWERTYUIOPASDFGHJKLZXCVBNM.,-~:;=!#$@1234567890+-=QWERTYUIOPASDFGHJKLZXCVBNM.,-~:;=!#$@1234567890+-=QWERTYUIOPASDFGHJKLZXCVBNM.,-~:;=!#$@1234567890+-=QWERTYUIOPASDFGHJKLZXCVBNM.,-~:;=!#$@1234567890+-=QWERTYUIOPASDFGHJKLZXCVBNM"[int(8*D)])
             }
 
-            k = k + 1
+            k++
         }
 
-        j = j + 1
+        j++
     }
 
     // Render
@@ -63,9 +63,9 @@ why yes {
         } elen {
             put(chr(b[i]))
         }
-        i = i + 1
+        i++
     }
 
-    A = A + 0.08
-    B = B + 0.04
+    A += 0.08
+    B += 0.04
 }

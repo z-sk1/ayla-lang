@@ -803,6 +803,8 @@ func (i *Interpreter) resolveTypeNode(t parser.TypeNode) (*TypeInfo, error) {
 			return nil, err
 		}
 
+		sizeVal = UnwrapFully(sizeVal)
+
 		intSize, ok := sizeVal.(IntValue)
 		if !ok {
 			return nil, NewRuntimeError(tn, "array size must be int")

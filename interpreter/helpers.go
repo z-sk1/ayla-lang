@@ -279,7 +279,6 @@ func toFloat(v Value) (float64, bool) {
 func typesAssignable(from, to *TypeInfo) bool {
 	from = UnwrapAlias(from)
 	to = UnwrapAlias(to)
-	fmt.Printf("typesAssignable: %s -> %s\n", from.Name, to.Name)
 
 	if from == nil || to == nil {
 		return false
