@@ -1,6 +1,6 @@
 module github.com/z-sk1/ayla-lang
 
-go 1.24.2
+go 1.26.1
 
 require (
 	github.com/gen2brain/raylib-go/raylib v0.55.1
