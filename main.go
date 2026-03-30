@@ -45,7 +45,7 @@ func main() {
 
 	cmds := []string{
 		"run: ayla run [--debug] [--timed] <file>, runs the ayla script",
-		"build: ayla build <file> [-o <output>] [--os <name>] [--arch <name>], turns the ayla script into a standalone executable",
+		"build: ayla build <file> [-o <output>], turns the ayla script into a standalone executable",
 		"install: ayla run install <url>, installs an ayla module and makes it global",
 		"--version: ayla --version, returns the current version",
 		"--help: ayla --help, returns all the available commands",
@@ -262,7 +262,7 @@ func build() {
 		name := strings.TrimSuffix(base, filepath.Ext(base))
 		output = name + ".exe"
 	}
-	
+
 	src, err := readSourceFile(filename)
 	if err != nil {
 		fmt.Println(err)
