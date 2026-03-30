@@ -3,12 +3,24 @@ Ayla supports pointers and references, which allow you to work directly with the
 
 Pointers are useful when you want a function to modify the original variable instead of a copy.
 
+## pointer type syntax
+```ayla
+*Type
+```
+this declares a type of pointer to `Type`
+
+so this:
+```ayla
+*int
+```
+would declare a pointer type to `int`
+
 ## creating a pointer
 use `&` to get the `reference` (`address`) of a `variable`.
 
 ```ayla
 egg x int = 10
-egg p = &x
+egg p *int = &x
 
 putln(x)
 putln(p)
@@ -29,7 +41,7 @@ to access the value stored at a `pointer`, use `*`.
 
 ```ayla
 egg x int = 10
-egg p = &x
+egg p *int = &x
 
 putln(*p)
 ```
@@ -52,7 +64,7 @@ Pointers allow you to change the original variable.
 
 ```ayla
 egg x int = 10
-egg p = &x
+egg p *int = &x
 
 *p = 20
 
