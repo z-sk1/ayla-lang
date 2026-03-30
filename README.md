@@ -8,8 +8,8 @@ ayla lang is a statically typed interpreted language written in go, designed to 
 # about
 
 ## our team
-- **Me: z-sk1, Co-Owner**
-- **and Mregg55, Co-Owner (link: https://github.com/mregg55)**
+- **Me: z-sk1, Owner**
+- **and [SpiderInVr](https://github.com/SpiderInVr), Collaber**
 
 ## language server
 view the repo [here](https://github.com/z-sk1/elen)
@@ -25,24 +25,7 @@ view the repo [here](https://github.com/z-sk1/zed-ayla)
 # Installation and Usage
 See [INSTRUCTIONS.md](./INSTRUCTIONS.md) for full step-by-step instructions for macOS and Windows and Linux.
 
----
+# Learn Ayla Lang!
+Learn how to use ayla lang [here](https://z-sk1.github.io/ayla-lang)!
 
-## built in functions!`
-- `put(t ...thing)` – prints values to stdout
-- `putln(t ...thing)` — prints values to stdout and adds '\n' at the end
-- `explode(t ...thing)` — spits out a runtime error containing the message in the parameter 
-- `scanln(t ...thing)` – scans console input after clicking enter 
-- `scankey(t ...thing)` – scans key press in console
-- `toBool(t thing)` – parses a value to boolean
-- `toString(t thing)` – parses a value to string
-- `toInt(t thing)` – parses a value to integer
-- `toFloat(t thing)` – parses a value to float
-- `typeof(t thing)` – returns type of value as string
-- `len(t thing)` – returns length of arrays or slices or strings or maps
-- `cap(t thing)` – returns capacity of arrays or slices
-- `make(t Type, size ...int)` – creates and returns a slice or map
-- `append(slice []Type, t ...thing)` – appends a set of values to a slice then returns the final slice  
-- `delete(m map[Type]Type, key thing)`
-- `wait(ms)` – wait for a duration in milliseconds
-- `randi(range ...int)` – gives a random integer based off a range 
-- `randf(range ...int)` – gives a random float based off a range 
+---
