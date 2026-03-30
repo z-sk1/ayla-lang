@@ -392,19 +392,24 @@ func (p *Parser) parseStatement() Statement {
 		return p.parseAssignOrExprStatement()
 	}
 
-	if p.curTok.Type != token.NEWLINE {
-		switch p.curTok.Type {
-		case token.RBRACE,
-			token.SEMICOLON,
-			token.COMMA,
-			token.RBRACKET,
-			token.RPAREN:
+	switch p.curTok.Type {
+	case token.RBRACE, token.SEMICOLON, token.COMMA, token.RBRACKET, token.RPAREN:
+		if p.curTok.Type != token.NEWLINE {
 			p.addError(fmt.Sprintf("unexpected '%s'", p.curTok.Literal))
+		}
+		return nil
+	case token.NEWLINE, token.EOF:
+		return nil
+	default:
+		expr := p.parseExpression(LOWEST)
+		if expr == nil {
 			return nil
 		}
+		return &ExpressionStatement{
+			NodeBase:   NodeBase{Token: p.curTok},
+			Expression: expr,
+		}
 	}
-
-	return nil
 }
 
 func (p *Parser) parseVarStatementBlock() *VarStatementBlock {

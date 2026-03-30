@@ -324,6 +324,24 @@ func (i *Interpreter) ResolveTypes(stmts []parser.Statement) error {
 	return nil
 }
 
+func (i *Interpreter) EvalProgram(stmts []parser.Statement) (Value, error) {
+	var last Value
+	for _, s := range stmts {
+		sig, err := i.EvalStatement(s)
+		if err != nil {
+			return nil, err
+		}
+		switch v := sig.(type) {
+		case SignalValue:
+			last = v.Value
+		case SignalReturn:
+			return TupleValue{Values: v.Values}, nil
+		}
+		i.tickLifetimes()
+	}
+	return UnwrapFully(last), nil
+}
+
 func (i *Interpreter) EvalStatements(stmts []parser.Statement) (ControlSignal, error) {
 	for _, s := range stmts {
 		sig, err := i.EvalStatement(s)
@@ -886,12 +904,12 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		return SignalReturn{Values: values}, nil
 
 	case *parser.ExpressionStatement:
-		_, err := i.EvalExpression(stmt.Expression)
+		val, err := i.EvalExpression(stmt.Expression)
 		if err != nil {
 			return SignalNone{}, err
 		}
 
-		return SignalNone{}, nil
+		return SignalValue{Value: val}, nil
 
 	case *parser.IfStatement:
 		if stmt.Condition == nil {

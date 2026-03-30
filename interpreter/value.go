@@ -277,6 +277,10 @@ type SignalReturn struct {
 	Values []Value
 }
 
+type SignalValue struct {
+	Value Value
+}
+
 type TupleValue struct {
 	Values []Value
 }

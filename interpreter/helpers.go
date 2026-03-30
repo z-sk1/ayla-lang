@@ -265,6 +265,21 @@ func (i *Interpreter) pointerTo(t *TypeInfo) *TypeInfo {
 	return pt
 }
 
+func aylaValueToGoValue(v Value) any {
+	switch val := v.(type) {
+	case IntValue:
+		return val.V
+	case FloatValue:
+		return val.V
+	case StringValue:
+		return val.V
+	case BoolValue:
+		return val.V
+	default:
+		return v.String()
+	}
+}
+
 func toFloat(v Value) (float64, bool) {
 	switch x := v.(type) {
 	case FloatValue:

@@ -406,18 +406,7 @@ func (i *Interpreter) registerBuiltins() {
 
 			goArgs := []any{}
 			for _, v := range args[1:] {
-				switch val := v.(type) {
-				case IntValue:
-					goArgs = append(goArgs, val.V)
-				case FloatValue:
-					goArgs = append(goArgs, val.V)
-				case StringValue:
-					goArgs = append(goArgs, val.V)
-				case BoolValue:
-					goArgs = append(goArgs, val.V)
-				default:
-					goArgs = append(goArgs, val.String())
-				}
+				goArgs = append(goArgs, aylaValueToGoValue(v))
 			}
 
 			fmt.Printf(format, goArgs...)
@@ -461,18 +450,7 @@ func (i *Interpreter) registerBuiltins() {
 
 			goArgs := []any{}
 			for _, v := range args[1:] {
-				switch val := v.(type) {
-				case IntValue:
-					goArgs = append(goArgs, val.V)
-				case FloatValue:
-					goArgs = append(goArgs, val.V)
-				case StringValue:
-					goArgs = append(goArgs, val.V)
-				case BoolValue:
-					goArgs = append(goArgs, val.V)
-				default:
-					goArgs = append(goArgs, val.String())
-				}
+				goArgs = append(goArgs, aylaValueToGoValue(v))
 			}
 
 			msg := fmt.Sprintf(format, goArgs...)
