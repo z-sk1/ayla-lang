@@ -1,4 +1,4 @@
-package parse
+package conv
 
 import (
 	"fmt"
@@ -11,10 +11,10 @@ import (
 )
 
 func init() {
-	registry.Register("parse", LoadParseModule)
+	registry.Register("conv", LoadConvModule)
 }
 
-func LoadParseModule(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
+func LoadConvModule(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 	env := interpreter.NewEnvironment(i.Env)
 	typeEnv := make(map[string]interpreter.TypeValue)
 
@@ -279,7 +279,7 @@ func LoadParseModule(i *interpreter.Interpreter) (interpreter.ModuleValue, error
 	}, false)
 
 	mod := interpreter.ModuleValue{
-		Name:    "parse",
+		Name:    "conv",
 		Env:     env,
 		TypeEnv: typeEnv,
 	}
