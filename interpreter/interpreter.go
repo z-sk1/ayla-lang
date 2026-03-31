@@ -428,6 +428,8 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 				return SignalNone{}, err
 			}
 
+			lifetime = UnwrapFully(lifetime)
+
 			if lifetime.(IntValue).V > 0 {
 				i.Env.DefineWithLifetime(stmt.Name.Value, copyValue(val), lifetime.(IntValue).V+1, false) // +1 because the var statement itself also decrements it
 				return SignalNone{}, nil
@@ -470,6 +472,8 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			if err != nil {
 				return SignalNone{}, err
 			}
+
+			lifetime = UnwrapFully(lifetime)
 
 			if lifetime.(IntValue).V > 0 {
 				i.Env.DefineWithLifetime(stmt.Name.Value, copyValue(val), lifetime.(IntValue).V+1, false) // +1 because the var statement itself also decrements it
@@ -519,8 +523,11 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 						return SignalNone{}, err
 					}
 
+					lifetime = UnwrapFully(lifetime)
+
 					if lifetime.(IntValue).V > 0 {
 						i.Env.DefineWithLifetime(name.Value, copyValue(v), lifetime.(IntValue).V+1, false) // +1 because the var statement itself also decrements it
+						return SignalNone{}, nil
 					}
 				} else {
 					i.Env.Define(name.Value, copyValue(v), false)
@@ -587,14 +594,16 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			}
 
 			if stmt.Lifetime != nil {
-				lifetimeVal, err := i.EvalExpression(stmt.Lifetime)
+				lifetime, err := i.EvalExpression(stmt.Lifetime)
 				if err != nil {
 					return SignalNone{}, err
 				}
 
-				lifetime := lifetimeVal.(IntValue).V
-				if lifetime > 0 {
-					i.Env.DefineWithLifetime(name.Value, copyValue(v), lifetime+1, false)
+				lifetime = UnwrapFully(lifetime)
+
+				if lifetime.(IntValue).V > 0 {
+					i.Env.DefineWithLifetime(name.Value, copyValue(v), lifetime.(IntValue).V+1, false) // +1 because the var statement itself also decrements it
+					return SignalNone{}, nil
 				}
 			} else {
 				i.Env.Define(name.Value, copyValue(v), false)
@@ -649,14 +658,16 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			}
 
 			if stmt.Lifetime != nil {
-				lifetimeVal, err := i.EvalExpression(stmt.Lifetime)
+				lifetime, err := i.EvalExpression(stmt.Lifetime)
 				if err != nil {
 					return SignalNone{}, err
 				}
 
-				lifetime := lifetimeVal.(IntValue).V
-				if lifetime > 0 {
-					i.Env.DefineWithLifetime(name.Value, copyValue(values[idx]), lifetime+1, false)
+				lifetime = UnwrapFully(lifetime)
+
+				if lifetime.(IntValue).V > 0 {
+					i.Env.DefineWithLifetime(name.Value, copyValue(values[idx]), lifetime.(IntValue).V+1, false) // +1 because the var statement itself also decrements it
+					return SignalNone{}, nil
 				}
 			} else {
 				i.Env.Define(name.Value, copyValue(values[idx]), false)
@@ -720,8 +731,10 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 				return SignalNone{}, err
 			}
 
+			lifetime = UnwrapFully(lifetime)
+
 			if lifetime.(IntValue).V > 0 {
-				i.Env.DefineWithLifetime(stmt.Name.Value, copyValue(val), lifetime.(IntValue).V+1, true) // +1 because the var statement itself also decrements it
+				i.Env.DefineWithLifetime(stmt.Name.Value, copyValue(val), lifetime.(IntValue).V+1, false) // +1 because the var statement itself also decrements it
 				return SignalNone{}, nil
 			}
 		}
@@ -802,14 +815,16 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			}
 
 			if stmt.Lifetime != nil {
-				lifetimeVal, err := i.EvalExpression(stmt.Lifetime)
+				lifetime, err := i.EvalExpression(stmt.Lifetime)
 				if err != nil {
 					return SignalNone{}, err
 				}
 
-				lifetime := lifetimeVal.(IntValue).V
-				if lifetime > 0 {
-					i.Env.DefineWithLifetime(name.Value, copyValue(v), lifetime+1, true)
+				lifetime = UnwrapFully(lifetime)
+
+				if lifetime.(IntValue).V > 0 {
+					i.Env.DefineWithLifetime(name.Value, copyValue(v), lifetime.(IntValue).V+1, false) // +1 because the var statement itself also decrements it
+					return SignalNone{}, nil
 				}
 			} else {
 				i.Env.Define(name.Value, copyValue(v), true)
@@ -964,6 +979,8 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 			}
 		}
 
+		switchVal = UnwrapFully(switchVal)
+
 		for _, c := range stmt.Cases {
 			matched := false
 			for _, expr := range c.Exprs {
@@ -971,6 +988,9 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 				if err != nil {
 					return SignalNone{}, err
 				}
+
+				caseVal = UnwrapFully(caseVal)
+
 				if valuesEqual(switchVal, caseVal) {
 					matched = true
 					break
@@ -2364,17 +2384,10 @@ func (i *Interpreter) evalMemberExpression(node parser.Expression, left Value, f
 			}, nil
 		}
 
-		if v, ok := orig.(*PointerValue); ok {
-			return BoundMethodValue{
-				Receiver: v,
-				Func:     fn,
-			}, nil
-		}
-
 		tmp := &Variable{Value: orig}
 		return BoundMethodValue{
 			Receiver: &PointerValue{
-				Target:   tmp,
+				Target:   VariableTarget{Var: tmp},
 				ElemType: recvType,
 			},
 			Func: fn,
@@ -2382,10 +2395,15 @@ func (i *Interpreter) evalMemberExpression(node parser.Expression, left Value, f
 	}
 
 	if ptr, ok := left.(*PointerValue); ok {
-		if ptr.Target == nil || ptr.Target.Value == nil {
+		val, err := ptr.Target.Get(i)
+		if err != nil {
+			return NilValue{}, err
+		}
+
+		if _, ok := val.(NilValue); ok || ptr.Target == nil {
 			return NilValue{}, NewRuntimeError(node, "nil pointer dereference")
 		}
-		left = ptr.Target.Value
+		left = val
 	}
 
 	switch obj := left.(type) {
@@ -2888,18 +2906,11 @@ func (i *Interpreter) evalPrefix(node *parser.PrefixExpression, op string, right
 			if !ok {
 				return NilValue{}, NewRuntimeError(node, "undefined variable")
 			}
-			ti := i.TypeInfoFromValue(v.Value)
-			if ti.Kind == TypePointer {
-				ti = ti.Elem
-			}
 
-			return &PointerValue{
-				Target:   v,
-				ElemType: ti,
-			}, nil
+			target := VariableTarget{Name: expr.Value, Var: v}
 
-		case *parser.CompositeLiteral:
-			val, err := i.EvalExpression(expr)
+			val, err := target.Get(i)
+
 			if err != nil {
 				return NilValue{}, err
 			}
@@ -2909,10 +2920,8 @@ func (i *Interpreter) evalPrefix(node *parser.PrefixExpression, op string, right
 				ti = ti.Elem
 			}
 
-			tmp := &Variable{Value: val}
-
 			return &PointerValue{
-				Target:   tmp,
+				Target:   target,
 				ElemType: ti,
 			}, nil
 
@@ -2930,6 +2939,25 @@ func (i *Interpreter) evalPrefix(node *parser.PrefixExpression, op string, right
 			}
 			return ptr, nil
 
+		case *parser.CompositeLiteral:
+			val, err := i.EvalExpression(expr)
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			tmp := &Variable{Value: val}
+			target := VariableTarget{Var: tmp}
+
+			ti := i.TypeInfoFromValue(val)
+			if ti.Kind == TypePointer {
+				ti = ti.Elem
+			}
+
+			return &PointerValue{
+				Target:   target,
+				ElemType: ti,
+			}, nil
+
 		default:
 			return NilValue{}, NewRuntimeError(node, "cannot take address of expression")
 		}
@@ -2937,12 +2965,14 @@ func (i *Interpreter) evalPrefix(node *parser.PrefixExpression, op string, right
 	case "*":
 		ptr, ok := right.(*PointerValue)
 		if !ok {
-			return NilValue{}, NewRuntimeError(node, "cannot dereference a non-pointer")
+			return NilValue{}, NewRuntimeError(node, "cannot dereference non-pointer")
 		}
+
 		if ptr.Target == nil {
 			return NilValue{}, NewRuntimeError(node, "nil pointer dereference")
 		}
-		return ptr.Target.Value, nil
+
+		return ptr.Target.Get(i)
 	}
 
 	return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unknown prefix operator: %s", node.Operator))
@@ -2955,7 +2985,10 @@ func (i *Interpreter) evalAddressableMember(node *parser.MemberExpression) (*Poi
 	}
 
 	if ptr, ok := left.(*PointerValue); ok {
-		left = ptr.Target.Value
+		left, err = ptr.Target.Get(i)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	sv, ok := left.(*StructValue)
@@ -2976,42 +3009,25 @@ func (i *Interpreter) evalAddressableMember(node *parser.MemberExpression) (*Poi
 	tmp := &Variable{Value: val}
 
 	return &PointerValue{
-		Target:   tmp,
+		Target:   VariableTarget{Var: tmp},
 		ElemType: ti,
 	}, nil
 }
 
-func (i *Interpreter) evalAddressableIndex(node *parser.IndexExpression) (*PointerValue, error) {
-	left, err := i.EvalExpression(node.Left)
+func (i *Interpreter) evalAddressableIndex(expr *parser.IndexExpression) (*PointerValue, error) {
+	target, err := i.resolveAssignableTarget(expr)
 	if err != nil {
 		return nil, err
 	}
-
-	idxVal, err := i.EvalExpression(node.Index)
+	val, err := target.Get(i)
 	if err != nil {
 		return nil, err
 	}
-
-	idxVal = UnwrapFully(idxVal)
-
-	idx := idxVal.(IntValue).V
-
-	switch arr := left.(type) {
-
-	case ArrayValue:
-		if idx < 0 || idx >= len(arr.Elements) {
-			return nil, NewRuntimeError(node, "index out of range")
-		}
-
-		tmp := &Variable{Value: arr.Elements[idx]}
-
-		return &PointerValue{
-			Target:   tmp,
-			ElemType: i.TypeInfoFromValue(arr.Elements[idx]),
-		}, nil
-	}
-
-	return nil, NewRuntimeError(node, "cannot take address of index")
+	ti := UnwrapAlias(i.TypeInfoFromValue(val))
+	return &PointerValue{
+		Target:   target,
+		ElemType: ti,
+	}, nil
 }
 
 func (i *Interpreter) evalPostfix(node *parser.PostfixExpression, left Value, op string) (Value, error) {

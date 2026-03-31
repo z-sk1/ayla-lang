@@ -1,38 +1,34 @@
-fun add(x float, y float) {
-    back x + y
-}
-
-fun multiply(x, y) {
-    back x * y
-}
-
-fun subtract(x, y) {
-    back x - y
-}
-
-fun divide(x, y) {
-    back x / y
-}
-
 egg firstNum
 egg oper
 egg secondNum
 
 putln("Firstnum")
-scanln(firstNum)
+scanln(&firstNum)
 
 putln("Operator")
-scanln(oper)
+scanln(&oper)
 
 putln("Secondnum")
-scanln(secondNum)
+scanln(&secondNum)
 
-ayla oper == "+" {
-    putln(firstNum + oper + secondNum + "=" + toString(add(toFloat(firstNum), toFloat(secondNum))))
-} elen ayla oper == "-" {
-    putln(firstNum + oper + secondNum + "=" + toString(subtract(toFloat(firstNum), toFloat(secondNum))))
-} elen ayla oper == "*" {
-    putln(firstNum + oper + secondNum + "=" + toString(multiply(toFloat(firstNum), toFloat(secondNum))))
-} elen ayla oper == "/" {
-    putln(firstNum + oper + secondNum + "=" + toString(divide(toFloat(firstNum), toFloat(secondNum))))
+putln(oper)
+putln(typeof(oper))
+
+choose oper {
+    when "+" {
+        putf("%v %s %v = %v", firstNum, oper, secondNum, firstNum + secondNum)
+    }
+
+    when "-" {
+        putf("%v %s %v = %v", firstNum, oper, secondNum, firstNum - secondNum)
+    }
+
+    when "*" {
+        putf("%v %s %v = %v", firstNum, oper, secondNum, firstNum * secondNum)
+    }
+
+    when "/" {
+        putf("%v %s %v = %v", firstNum, oper, secondNum, firstNum / secondNum)
+    }
+
 }

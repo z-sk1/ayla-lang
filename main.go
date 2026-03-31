@@ -47,6 +47,7 @@ func main() {
 	cmds := []string{
 		"run: ayla run [--debug] [--timed] <file>, runs the ayla script",
 		"build: ayla build <file> [-o <output>], turns the ayla script into a standalone executable",
+		"fmt: ayla fmt <file>, formats the ayla script",
 		"install: ayla run install <url>, installs an ayla module and makes it global",
 		"--version: ayla --version, returns the current version",
 		"--help: ayla --help, returns all the available commands",
@@ -67,6 +68,26 @@ func main() {
 
 		run()
 
+	case "build":
+		if len(os.Args) < 3 {
+			fmt.Println("usage: ayla build <file>")
+			return
+		}
+
+		build()
+
+	case "fmt":
+		if len(os.Args) < 3 {
+			fmt.Println("usage: ayla fmt <file>")
+			return
+		}
+
+		err := runFmt(os.Args[2])
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
 	case "install":
 		if len(os.Args) < 3 {
 			fmt.Println("usage: ayla install <url>")
@@ -74,14 +95,6 @@ func main() {
 		}
 
 		install()
-
-	case "build":
-		if len(os.Args) < 3 {
-			fmt.Println("usage ayla build <file>")
-			return
-		}
-
-		build()
 
 	case "--version":
 		fmt.Println("ayla-lang v1.5.0")
@@ -135,7 +148,7 @@ func repl() {
 	}
 }
 
-func readSourceFile(name string) (string, error) {
+func readSourceFile(name string) (string, string, error) {
 	candidates := []string{
 		name,
 		name + ".ayl",
@@ -145,11 +158,11 @@ func readSourceFile(name string) (string, error) {
 	for _, file := range candidates {
 		data, err := os.ReadFile(file)
 		if err == nil {
-			return string(data), nil
+			return string(data), file, nil
 		}
 	}
 
-	return "", fmt.Errorf("file not found: %s (.ayla or .ayl)", name)
+	return "", "", fmt.Errorf("file not found: %s (.ayla or .ayl)", name)
 }
 
 func run() {
@@ -173,7 +186,7 @@ func run() {
 		return
 	}
 
-	source, err := readSourceFile(filename)
+	source, name, err := readSourceFile(filename)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -197,7 +210,7 @@ func run() {
 
 	if len(p.Errors()) > 0 {
 		for _, err := range p.Errors() {
-			fmt.Printf("%s: %v\n", filename, err)
+			fmt.Printf("%s: %v\n", name, err)
 		}
 		return
 	}
@@ -208,22 +221,22 @@ func run() {
 		started = time.Now()
 	}
 
-	interp := interpreter.New(filename)
+	interp := interpreter.New(name)
 
 	if err := interp.RegisterForward(program); err != nil {
-		fmt.Printf("\n%s: %v\n", filename, err)
+		fmt.Printf("\n%s: %v\n", name, err)
 		return
 	}
 
 	if err := interp.ResolveTypes(program); err != nil {
-		fmt.Printf("\n%s: %v\n", filename, err)
+		fmt.Printf("\n%s: %v\n", name, err)
 		return
 	}
 
 	_, err = interp.EvalStatements(program)
 
 	if err != nil {
-		fmt.Printf("\n%s: %v\n", filename, err)
+		fmt.Printf("\n%s: %v\n", name, err)
 		return
 	}
 
@@ -306,7 +319,7 @@ func build() {
 		output = name + ".exe"
 	}
 
-	src, err := readSourceFile(filename)
+	src, _, err := readSourceFile(filename)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -347,6 +360,28 @@ func build() {
 	out.Write(endMarker)
 
 	fmt.Println("built executable:", output)
+}
+
+func runFmt(path string) error {
+	src, name, err := readSourceFile(path)
+	if err != nil {
+		return err
+	}
+
+	l := lexer.New(string(src))
+	p := parser.New(l)
+	program := p.ParseProgram()
+
+	if len(p.Errors()) > 0 {
+		for _, e := range p.Errors() {
+			fmt.Println(e)
+		}
+		return fmt.Errorf("parse failed")
+	}
+
+	out := parser.FormatProgram(program)
+
+	return os.WriteFile(name, []byte(out), 0644)
 }
 
 func normalizeGitHubURL(url string) string {

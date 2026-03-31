@@ -16,11 +16,9 @@ type Parser struct {
 	peekTok token.Token // lookahead 1
 	peekBuf []token.Token
 
-	errors []error
-}
+	stopTokens map[token.TokenType]bool
 
-type ModuleMeta struct {
-	Types map[string]struct{}
+	errors []error
 }
 
 type ParseError struct {
@@ -173,7 +171,8 @@ func (p *Parser) isAssignToken(t token.TokenType) bool {
 
 func New(l *lexer.Lexer) *Parser {
 	p := &Parser{
-		l: l,
+		l:          l,
+		stopTokens: make(map[token.TokenType]bool),
 	}
 
 	p.nextToken()
@@ -550,17 +549,17 @@ func (p *Parser) parseVarStatement() *VarStatement {
 
 	// optional lifetime
 	if p.peekTok.Type == token.LT {
-		p.nextToken() // move to '<'
-		p.nextToken() // move to first token of lifetime expression
+		p.nextToken()
+		p.nextToken()
 
-		stmt.Lifetime = p.parseExpressionUntil(token.GT)
+		p.stopTokens[token.GT] = true
+		stmt.Lifetime = p.parseExpression(LOWEST)
+		p.stopTokens[token.GT] = false
 
 		if p.peekTok.Type != token.GT {
 			p.addError("expected '>' after lifetime expression")
 			return nil
 		}
-
-		p.nextToken() // move to '>'
 	}
 
 	// optional type
@@ -2398,6 +2397,10 @@ func (p *Parser) parseExpressionUntil(stop token.TokenType) Expression {
 func (p *Parser) parseExpression(precedence int) Expression {
 	left := p.parsePrimary()
 	for precedence < p.peekPrecedence() {
+		if p.stopTokens[p.peekTok.Type] {
+			break
+		}
+
 		switch p.peekTok.Type {
 		case token.LPAREN:
 			p.nextToken()

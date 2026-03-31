@@ -476,7 +476,10 @@ func (i *Interpreter) registerBuiltins() {
 			}
 
 			for idx := 0; idx < len(args) && idx < len(fields); idx++ {
-				ass, ok := args[idx].(Assignable)
+				arg := args[idx]
+
+				// unwrap pointer to get an assignable
+				ass, ok := resolveAssignableArg(arg)
 				if !ok {
 					return NilValue{}, NewRuntimeError(node, "scanln: assignable values expected")
 				}
@@ -485,9 +488,7 @@ func (i *Interpreter) registerBuiltins() {
 				if err != nil {
 					return NilValue{}, NewRuntimeError(node, err.Error())
 				}
-
 				input := fields[idx]
-
 				err = i.assignInput(node, ass, val, input, "scanln")
 				if err != nil {
 					return NilValue{}, err
@@ -506,9 +507,9 @@ func (i *Interpreter) registerBuiltins() {
 			reader := bufio.NewReader(os.Stdin)
 
 			for _, arg := range args {
-				ass, ok := arg.(Assignable)
+				ass, ok := resolveAssignableArg(arg)
 				if !ok {
-					return NilValue{}, NewRuntimeError(node, "scan: assignable values expected")
+					return NilValue{}, NewRuntimeError(node, "scanln: assignable values expected")
 				}
 
 				val, err := ass.Get(i)
@@ -555,10 +556,9 @@ func (i *Interpreter) registerBuiltins() {
 			var setters []func()
 
 			for _, arg := range args[1:] {
-
-				ass, ok := arg.(Assignable)
+				ass, ok := resolveAssignableArg(arg)
 				if !ok {
-					return NilValue{}, NewRuntimeError(node, "scanf: assignable value expected")
+					return NilValue{}, NewRuntimeError(node, "scanln: assignable values expected")
 				}
 
 				val, err := ass.Get(i)
@@ -618,9 +618,9 @@ func (i *Interpreter) registerBuiltins() {
 		Name:  "scankey",
 		Arity: 1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			ass, ok := args[0].(Assignable)
+			ass, ok := resolveAssignableArg(args[0])
 			if !ok {
-				return NilValue{}, NewRuntimeError(node, "scankey: first argument must be an assignable value")
+				return NilValue{}, NewRuntimeError(node, "scanln: assignable values expected")
 			}
 
 			v, err := ass.Get(i)

@@ -128,13 +128,15 @@ func (v VariableTarget) Set(i *Interpreter, val Value) error {
 	return nil
 }
 
-func (v VariableTarget) Get(i *Interpreter) (Value, error) {
-	val, ok, _ := i.Env.Get(v.Name)
-	if !ok {
-		return NilValue{}, fmt.Errorf("undefined variable: %s", v.Name)
+func (t VariableTarget) Get(i *Interpreter) (Value, error) {
+	if t.Var != nil {
+		return t.Var.Value, nil
 	}
-
-	return val, nil
+	v, ok := i.Env.GetVar(t.Name)
+	if !ok {
+		return NilValue{}, fmt.Errorf("undefined variable: %s", t.Name)
+	}
+	return v.Value, nil
 }
 
 type MemberTarget struct {
@@ -224,12 +226,17 @@ type PointerTarget struct {
 }
 
 func (p PointerTarget) Set(i *Interpreter, val Value) error {
-	p.Ptr.Target.Value = val
-	return nil
+	if p.Ptr.Target == nil {
+		return fmt.Errorf("nil pointer dereference")
+	}
+	return p.Ptr.Target.Set(i, val)
 }
 
 func (p PointerTarget) Get(i *Interpreter) (Value, error) {
-	return p.Ptr.Target.Value, nil
+	if p.Ptr.Target == nil {
+		return NilValue{}, fmt.Errorf("nil pointer dereference")
+	}
+	return p.Ptr.Target.Get(i)
 }
 
 func (i *Interpreter) assignToType(val Value, expected *TypeInfo) (Value, error) {
@@ -247,7 +254,11 @@ func (i *Interpreter) assignToType(val Value, expected *TypeInfo) (Value, error)
 	if expected.Kind != TypePointer && valType.Kind == TypePointer {
 		ptr := val.(*PointerValue)
 		if typesAssignable(ptr.ElemType, expected) {
-			val = ptr.Target.Value
+			val, err := ptr.Target.Get(i)
+			if err != nil {
+				return NilValue{}, err
+			}
+
 			valType = UnwrapAlias(i.TypeInfoFromValue(val))
 		}
 	}
@@ -343,7 +354,7 @@ func (b BuiltinFunc) String() string {
 }
 
 type PointerValue struct {
-	Target   *Variable
+	Target   Assignable
 	ElemType *TypeInfo
 }
 
@@ -355,7 +366,7 @@ func (p *PointerValue) String() string {
 	if p.Target == nil {
 		return "ptr(nil)"
 	}
-	return fmt.Sprintf("ptr(%p -> %v)", p.Target, p.Target.Value)
+	return fmt.Sprintf("ptr(%p)", p.Target)
 }
 
 type UntypedValue struct {

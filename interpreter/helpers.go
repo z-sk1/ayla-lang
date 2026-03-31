@@ -644,21 +644,21 @@ func (i *Interpreter) assignInput(node parser.Node, ass Assignable, val Value, i
 	case IntValue:
 		n, err := strconv.Atoi(input)
 		if err != nil {
-			return NewRuntimeError(node, "%s: invalid int input")
+			return NewRuntimeError(node, fmt.Sprintf("%s: invalid int input", name))
 		}
 		ass.Set(i, IntValue{V: n})
 
 	case FloatValue:
 		f, err := strconv.ParseFloat(input, 64)
 		if err != nil {
-			return NewRuntimeError(node, "%s: invalid float input")
+			return NewRuntimeError(node, fmt.Sprintf("%s: invalid float input", name))
 		}
 		ass.Set(i, FloatValue{V: f})
 
 	case BoolValue:
 		b, err := strconv.ParseBool(input)
 		if err != nil {
-			return NewRuntimeError(node, "%s: invalid bool input")
+			return NewRuntimeError(node, fmt.Sprintf("%s: invalid bool input", name))
 		}
 		ass.Set(i, BoolValue{V: b})
 
@@ -666,7 +666,12 @@ func (i *Interpreter) assignInput(node parser.Node, ass Assignable, val Value, i
 		ass.Set(i, StringValue{V: input})
 
 	default:
-		return NewRuntimeError(node, "%s: unsupported type")
+		err := inferAndAssign(ass, input, i)
+		if err != nil {
+			return NewRuntimeError(node, fmt.Sprintf("%s: %s", name, err.Error()))
+		}
+
+		return nil
 	}
 
 	return nil
@@ -688,6 +693,7 @@ func (i *Interpreter) tickLifetimes() {
 }
 
 func mapKey(v Value) string {
+	v = UnwrapFully(v)
 	switch x := v.(type) {
 
 	case IntValue:
@@ -1043,11 +1049,36 @@ func rangeMismatch(src, dst *TypeInfo) bool {
 	return false
 }
 
+func inferAndAssign(ass Assignable, input string, i *Interpreter) error {
+	if n, err := strconv.Atoi(input); err == nil {
+		return ass.Set(i, IntValue{V: n})
+	}
+	if f, err := strconv.ParseFloat(input, 64); err == nil {
+		return ass.Set(i, FloatValue{V: f})
+	}
+	if input == "yes" {
+		return ass.Set(i, BoolValue{V: true})
+	}
+	if input == "no" {
+		return ass.Set(i, BoolValue{V: false})
+	}
+	return ass.Set(i, StringValue{V: input})
+}
+
+func resolveAssignableArg(arg Value) (Assignable, bool) {
+	if ptr, ok := arg.(*PointerValue); ok {
+		return PointerTarget{Ptr: ptr}, true
+	}
+	ass, ok := arg.(Assignable)
+	return ass, ok
+}
+
 func (i *Interpreter) resolveAssignableTarget(expr parser.Expression) (Assignable, error) {
 
 	switch e := expr.(type) {
 
 	case *parser.Identifier:
+		fmt.Printf("resolving identifier: '%s'\n", e.Value)
 		v, ok := i.Env.GetVar(e.Value)
 		if !ok {
 			return nil, fmt.Errorf("undefined variable: %s", e.Value)
@@ -1067,7 +1098,10 @@ func (i *Interpreter) resolveAssignableTarget(expr parser.Expression) (Assignabl
 
 		// pointer auto deref
 		if ptr, ok := objVal.(*PointerValue); ok {
-			objVal = ptr.Target.Value
+			objVal, err = ptr.Target.Get(i)
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		structVal, ok := objVal.(*StructValue)
@@ -1096,16 +1130,24 @@ func (i *Interpreter) resolveAssignableTarget(expr parser.Expression) (Assignabl
 		}, nil
 
 	case *parser.IndexExpression:
+		var leftVal Value
+		var err error
 
-		leftVal, err := i.EvalExpression(e.Left)
-		if err != nil {
-			return nil, err
+		if ident, ok := e.Left.(*parser.Identifier); ok {
+			v, ok := i.Env.GetVar(ident.Value)
+			if !ok {
+				return nil, fmt.Errorf("undefined variable: %s", ident.Value)
+			}
+			leftVal = v.Value
+		} else {
+			leftVal, err = i.EvalExpression(e.Left)
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		indexVal, err := i.EvalExpression(e.Index)
-		if err != nil {
-			return nil, err
-		}
+		indexVal = UnwrapFully(indexVal)
 
 		switch val := leftVal.(type) {
 

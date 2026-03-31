@@ -1,8 +1,1 @@
-type Lol interface {
-    S()
-}
-
-type O int
-fun (o O) S() {}
-
-egg l Lol = O(2)
+fun s() {}
