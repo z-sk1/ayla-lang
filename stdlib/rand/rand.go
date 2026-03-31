@@ -99,7 +99,7 @@ func LoadRandModule(i *interpreter.Interpreter) (interpreter.ModuleValue, error)
 		Name:  "Choice",
 		Arity: 1,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			arr, err := interpreter.ArgArray(node, args, 0, "rand.Choice")
+			arr, err := interpreter.ArgArray(node, args, 0, "rand.Choice", "thing")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}

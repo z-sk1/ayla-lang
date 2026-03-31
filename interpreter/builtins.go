@@ -241,7 +241,7 @@ func (i *Interpreter) registerBuiltins() {
 		Name:  "append",
 		Arity: -1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
-			slice, err := ArgArray(node, args, 0, "append")
+			slice, err := ArgArray(node, args, 0, "append", "T")
 			if err != nil {
 				return NilValue{}, err
 			}

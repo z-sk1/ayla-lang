@@ -1078,7 +1078,6 @@ func (i *Interpreter) resolveAssignableTarget(expr parser.Expression) (Assignabl
 	switch e := expr.(type) {
 
 	case *parser.Identifier:
-		fmt.Printf("resolving identifier: '%s'\n", e.Value)
 		v, ok := i.Env.GetVar(e.Value)
 		if !ok {
 			return nil, fmt.Errorf("undefined variable: %s", e.Value)

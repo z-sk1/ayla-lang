@@ -1,0 +1,11 @@
+import term
+import time
+
+i := 0
+why i < 100 {
+    term.Spinner("Loading...", i)
+    i++
+    time.Sleep(0.1)
+}
+
+putln("\nDone!")

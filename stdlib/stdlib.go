@@ -6,4 +6,6 @@ import (
 	_ "github.com/z-sk1/ayla-lang/stdlib/math"
 	_ "github.com/z-sk1/ayla-lang/stdlib/rand"
 	_ "github.com/z-sk1/ayla-lang/stdlib/rl"
+	_ "github.com/z-sk1/ayla-lang/stdlib/term"
+	_ "github.com/z-sk1/ayla-lang/stdlib/time"
 )
