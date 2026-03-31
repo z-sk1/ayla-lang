@@ -108,6 +108,20 @@ func (l *Lexer) readFloatStartingWithDot(hadWhiteSpace bool) token.Token {
 	}
 }
 
+func (l *Lexer) readRawString() string {
+	pos := l.position + 1
+
+	for {
+		l.readChar()
+
+		if l.ch == '`' || l.ch == 0 {
+			break
+		}
+	}
+
+	return l.input[pos:l.position]
+}
+
 func (l *Lexer) readString() string {
 	// skip the opening quote
 	l.readChar()
@@ -243,6 +257,10 @@ func (l *Lexer) NextToken() token.Token {
 		str := unescapeString(l.readString())
 		tok = token.Token{Type: token.STRING, Literal: str, Line: l.line, Column: l.column, HadWhitespaceBefore: hadWhiteSpace}
 		return tok
+	case '`':
+		str := unescapeString(l.readRawString())
+		tok = token.Token{Type: token.STRING, Literal: str, Line: l.line, Column: l.column, HadWhitespaceBefore: hadWhiteSpace}
+		return tok
 	case ',':
 		tok = token.Token{Type: token.COMMA, Literal: ",", Line: l.line, Column: l.column, HadWhitespaceBefore: hadWhiteSpace}
 	case ':':
@@ -251,7 +269,7 @@ func (l *Lexer) NextToken() token.Token {
 		} else {
 			tok = token.Token{Type: token.COLON, Literal: ":", Line: l.line, Column: l.column, HadWhitespaceBefore: hadWhiteSpace}
 		}
-
+		
 	case '.':
 		line := l.line
 		col := l.column
