@@ -414,6 +414,52 @@ func (i *Interpreter) registerBuiltins() {
 		},
 	}
 
+	env.builtins["sput"] = &BuiltinFunc{
+		Name:  "sput",
+		Arity: -1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			vals := make([]any, len(args))
+			for i, a := range args {
+				vals[i] = a.String()
+			}
+			return StringValue{V: fmt.Sprint(vals...)}, nil
+		},
+	}
+
+	env.builtins["sputln"] = &BuiltinFunc{
+		Name:  "sputln",
+		Arity: -1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			vals := make([]any, len(args))
+			for i, a := range args {
+				vals[i] = a.String()
+			}
+			return StringValue{V: fmt.Sprintln(vals...)}, nil
+		},
+	}
+
+	env.builtins["sputf"] = &BuiltinFunc{
+		Name:  "sputf",
+		Arity: -1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			if len(args) == 0 {
+				return NilValue{}, NewRuntimeError(node, "putf: expected at least one argument")
+			}
+
+			format, err := ArgString(node, args, 0, "putf")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			goArgs := []any{}
+			for _, v := range args[1:] {
+				goArgs = append(goArgs, aylaValueToGoValue(v))
+			}
+
+			return StringValue{V: fmt.Sprintf(format, goArgs...)}, nil
+		},
+	}
+
 	env.builtins["explode"] = &BuiltinFunc{
 		Name:  "explode",
 		Arity: 1,

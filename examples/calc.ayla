@@ -11,9 +11,6 @@ scanln(&oper)
 putln("Secondnum")
 scanln(&secondNum)
 
-putln(oper)
-putln(typeof(oper))
-
 choose oper {
     when "+" {
         putf("%v %s %v = %v", firstNum, oper, secondNum, firstNum + secondNum)
