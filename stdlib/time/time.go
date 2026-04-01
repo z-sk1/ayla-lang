@@ -9,10 +9,10 @@ import (
 )
 
 func init() {
-	registry.Register("time", LoadTimeModule)
+	registry.Register("time", Load)
 }
 
-func LoadTimeModule(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
+func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 	env := interpreter.NewEnvironment(i.Env)
 
 	env.Define("Sleep", &interpreter.BuiltinFunc{

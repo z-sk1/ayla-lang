@@ -11,10 +11,10 @@ import (
 )
 
 func init() {
-	registry.Register("conv", LoadConvModule)
+	registry.Register("conv", Load)
 }
 
-func LoadConvModule(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
+func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 	env := interpreter.NewEnvironment(i.Env)
 	typeEnv := make(map[string]interpreter.TypeValue)
 

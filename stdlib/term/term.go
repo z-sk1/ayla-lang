@@ -12,10 +12,10 @@ import (
 )
 
 func init() {
-	registry.Register("term", LoadTermModule)
+	registry.Register("term", Load)
 }
 
-func LoadTermModule(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
+func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 	env := interpreter.NewEnvironment(i.Env)
 
 	env.Define("Clear", &interpreter.BuiltinFunc{
@@ -40,12 +40,12 @@ func LoadTermModule(i *interpreter.Interpreter) (interpreter.ModuleValue, error)
 		Name:  "Move",
 		Arity: 2,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			row, err := interpreter.ArgInt(node, args, 0, "term.Move")
+			row, err := interpreter.ArgInt(node, args, 0, "term.MoveTo")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			col, err := interpreter.ArgInt(node, args, 1, "term.Move")
+			col, err := interpreter.ArgInt(node, args, 1, "term.MoveTo")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}

@@ -8,10 +8,10 @@ import (
 )
 
 func init() {
-	registry.Register("rl", LoadRLModule)
+	registry.Register("rl", Load)
 }
 
-func LoadRLModule(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
+func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 	env := interpreter.NewEnvironment(i.Env)
 	TypeEnv := make(map[string]interpreter.TypeValue)
 

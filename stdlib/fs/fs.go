@@ -11,10 +11,10 @@ import (
 )
 
 func init() {
-	registry.Register("fs", LoadFSModule)
+	registry.Register("fs", Load)
 }
 
-func LoadFSModule(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
+func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 	env := interpreter.NewEnvironment(i.Env)
 
 	env.Define("Create", &interpreter.BuiltinFunc{

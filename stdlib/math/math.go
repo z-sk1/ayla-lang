@@ -8,10 +8,10 @@ import (
 )
 
 func init() {
-	registry.Register("math", LoadMathModule)
+	registry.Register("math", Load)
 }
 
-func LoadMathModule(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
+func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 	env := interpreter.NewEnvironment(i.Env)
 
 	// functions

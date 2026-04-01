@@ -5,6 +5,7 @@ import (
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 
+	"github.com/z-sk1/ayla-lang/interpreter"
 	"github.com/z-sk1/ayla-lang/parser"
 )
 
@@ -228,6 +229,178 @@ func WrapFloat2(name string, fn func(float64, float64) float64) *BuiltinFunc {
 			}
 
 			return FloatValue{V: fn(f1, f2)}, nil
+		},
+	}
+}
+
+func WrapString1(name string, fn func(string) string) *BuiltinFunc {
+	return &BuiltinFunc{
+		Name:  name,
+		Arity: 1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			s, err := ArgString(node, args, 0, name)
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			return StringValue{V: fn(s)}, nil
+		},
+	}
+}
+
+func WrapString1RSlice(name string, fn func(string) []string) *BuiltinFunc {
+	return &BuiltinFunc{
+		Name:  name,
+		Arity: 2,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			s, err := ArgString(node, args, 0, name)
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			arr := []interpreter.Value{}
+
+			for _, s := range fn(s) {
+				arr = append(arr, StringValue{V: s})
+			}
+
+			return ArrayValue{
+				Elements: arr,
+				ElemType: i.TypeEnv["string"].TypeInfo,
+			}, nil
+		},
+	}
+}
+
+func WrapString2(name string, fn func(string, string) string) *BuiltinFunc {
+	return &BuiltinFunc{
+		Name:  name,
+		Arity: 2,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			s, err := ArgString(node, args, 0, name)
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			s2, err := ArgString(node, args, 1, name)
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			return StringValue{V: fn(s, s2)}, nil
+		},
+	}
+}
+
+func WrapString2IntRSlice(name string, fn func(string, string, int) []string) *BuiltinFunc {
+	return &BuiltinFunc{
+		Name:  name,
+		Arity: 2,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			s, err := ArgString(node, args, 0, name)
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			s2, err := ArgString(node, args, 1, name)
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			n, err := ArgInt(node, args, 2, name)
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			arr := []interpreter.Value{}
+
+			for _, s := range fn(s, s2, n) {
+				arr = append(arr, StringValue{V: s})
+			}
+
+			return ArrayValue{
+				Elements: arr,
+				ElemType: i.TypeEnv["string"].TypeInfo,
+			}, nil
+		},
+	}
+}
+
+func WrapString2RSlice(name string, fn func(string, string) []string) *BuiltinFunc {
+	return &BuiltinFunc{
+		Name:  name,
+		Arity: 2,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			s, err := ArgString(node, args, 0, name)
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			s2, err := ArgString(node, args, 1, name)
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			arr := []interpreter.Value{}
+
+			for _, s := range fn(s, s2) {
+				arr = append(arr, StringValue{V: s})
+			}
+
+			return ArrayValue{
+				Elements: arr,
+				ElemType: i.TypeEnv["string"].TypeInfo,
+			}, nil
+		},
+	}
+}
+
+func WrapString2RInt(name string, fn func(string, string) int) *BuiltinFunc {
+	return &BuiltinFunc{
+		Name:  name,
+		Arity: 2,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			s, err := ArgString(node, args, 0, name)
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			s2, err := ArgString(node, args, 1, name)
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			return IntValue{V: fn(s, s2)}, nil
+		},
+	}
+}
+
+func WrapSliceStringRString(name string, fn func([]string, string) string) *BuiltinFunc {
+	return &BuiltinFunc{
+		Name:  name,
+		Arity: 2,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			sliceVal, err := ArgArray(node, args, 0, name, "string")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			slice := []string{}
+
+			for _, s := range sliceVal.Elements {
+				if _, ok := s.(StringValue); !ok {
+					return NilValue{}, NewRuntimeError(node, fmt.Sprintf("%s: first argument must be a []string"))
+				}
+
+				slice = append(slice, s.(StringValue).V)
+			}
+
+			s, err := ArgString(node, args, 1, name)
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			return StringValue{V: fn(slice, s)}, nil
 		},
 	}
 }

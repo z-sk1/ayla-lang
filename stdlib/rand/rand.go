@@ -9,10 +9,10 @@ import (
 )
 
 func init() {
-	registry.Register("rand", LoadRandModule)
+	registry.Register("rand", Load)
 }
 
-func LoadRandModule(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
+func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 	env := interpreter.NewEnvironment(i.Env)
 
 	env.Define("Int", &interpreter.BuiltinFunc{
