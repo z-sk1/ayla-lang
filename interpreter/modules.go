@@ -388,7 +388,7 @@ func WrapSliceStringRString(name string, fn func([]string, string) string) *Buil
 
 			for _, s := range sliceVal.Elements {
 				if _, ok := s.(StringValue); !ok {
-					return NilValue{}, NewRuntimeError(node, fmt.Sprintf("%s: first argument must be a []string"))
+					return NilValue{}, NewRuntimeError(node, fmt.Sprintf("%s: first argument must be a []string", name))
 				}
 
 				slice = append(slice, s.(StringValue).V)
