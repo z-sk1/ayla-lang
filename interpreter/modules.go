@@ -5,7 +5,6 @@ import (
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 
-	"github.com/z-sk1/ayla-lang/interpreter"
 	"github.com/z-sk1/ayla-lang/parser"
 )
 
@@ -258,7 +257,7 @@ func WrapString1RSlice(name string, fn func(string) []string) *BuiltinFunc {
 				return NilValue{}, err
 			}
 
-			arr := []interpreter.Value{}
+			arr := []Value{}
 
 			for _, s := range fn(s) {
 				arr = append(arr, StringValue{V: s})
@@ -312,7 +311,7 @@ func WrapString2IntRSlice(name string, fn func(string, string, int) []string) *B
 				return NilValue{}, err
 			}
 
-			arr := []interpreter.Value{}
+			arr := []Value{}
 
 			for _, s := range fn(s, s2, n) {
 				arr = append(arr, StringValue{V: s})
@@ -341,7 +340,7 @@ func WrapString2RSlice(name string, fn func(string, string) []string) *BuiltinFu
 				return NilValue{}, err
 			}
 
-			arr := []interpreter.Value{}
+			arr := []Value{}
 
 			for _, s := range fn(s, s2) {
 				arr = append(arr, StringValue{V: s})
