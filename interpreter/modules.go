@@ -93,7 +93,7 @@ func ArgColor(node parser.Node, TypeEnv map[string]TypeValue, args []Value, i in
 		return rl.Color{}, err
 	}
 
-	if !typesAssignable(sv.TypeName, colTI) {
+	if !TypesAssignable(sv.TypeName, colTI) {
 		return rl.Color{}, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be rl.Color", name, i+1))
 	}
 
@@ -110,7 +110,7 @@ func ArgVector2(node parser.Node, i *Interpreter, TypeEnv map[string]TypeValue, 
 		return rl.Vector2{}, NewRuntimeError(node, name+": argument must be rl.Vector2")
 	}
 
-	if !typesAssignable(i.TypeInfoFromValue(vecVal), vecTI) {
+	if !TypesAssignable(i.TypeInfoFromValue(vecVal), vecTI) {
 		return rl.Vector2{}, NewRuntimeError(node, name+": argument must be rl.Vector2")
 	}
 
@@ -123,23 +123,23 @@ func ArgVector2(node parser.Node, i *Interpreter, TypeEnv map[string]TypeValue, 
 	}, nil
 }
 
-func ArgSound(node parser.Node, i *Interpreter, TypeEnv map[string]TypeValue, args []Value, idx int, name string) (rl.Sound, error) {
+func ArgSound(node parser.Node, i *Interpreter, TypeEnv map[string]TypeValue, args []Value, idx int, name string) (*rl.Sound, error) {
 	soundTI := TypeEnv["Sound"].TypeInfo
 
 	v := UnwrapFully(args[idx])
 
 	soundVal, ok := v.(*StructValue)
 	if !ok {
-		return rl.Sound{}, NewRuntimeError(node, fmt.Sprintf("%s: argument must be rl.Sound", name))
+		return &rl.Sound{}, NewRuntimeError(node, fmt.Sprintf("%s: argument must be rl.Sound", name))
 	}
 
-	if !typesAssignable(i.TypeInfoFromValue(soundVal), soundTI) {
-		return rl.Sound{}, NewRuntimeError(node, fmt.Sprintf("%s: argument must be rl.Sound", name))
+	if !TypesAssignable(i.TypeInfoFromValue(soundVal), soundTI) {
+		return &rl.Sound{}, NewRuntimeError(node, fmt.Sprintf("%s: argument must be rl.Sound", name))
 	}
 
-	sound, ok := soundVal.Native.(rl.Sound)
+	sound, ok := soundVal.Native.(*rl.Sound)
 	if !ok {
-		return rl.Sound{}, NewRuntimeError(node, fmt.Sprintf("%s: argument must be rl.Sound", name))
+		return &rl.Sound{}, NewRuntimeError(node, fmt.Sprintf("%s: argument must be rl.Sound", name))
 	}
 
 	return sound, nil
@@ -155,13 +155,59 @@ func ArgMusic(node parser.Node, i *Interpreter, TypeEnv map[string]TypeValue, ar
 		return &rl.Music{}, NewRuntimeError(node, fmt.Sprintf("%s: argument must be rl.Music", name))
 	}
 
-	if !typesAssignable(i.TypeInfoFromValue(musVal), musTI) {
+	if !TypesAssignable(i.TypeInfoFromValue(musVal), musTI) {
 		return &rl.Music{}, NewRuntimeError(node, fmt.Sprintf("%s: argument must be rl.Music", name))
 	}
 
 	mus, ok := musVal.Native.(*rl.Music)
 	if !ok {
 		return &rl.Music{}, NewRuntimeError(node, fmt.Sprintf("%s: argument must be rl.Music", name))
+	}
+
+	return mus, nil
+}
+
+func ArgRectangle(node parser.Node, i *Interpreter, TypeEnv map[string]TypeValue, args []Value, idx int, name string) (rl.Rectangle, error) {
+	rectTI := TypeEnv["Music"].TypeInfo
+
+	v := UnwrapFully(args[idx])
+
+	rectVal, ok := v.(*StructValue)
+	if !ok {
+		return rl.Rectangle{}, NewRuntimeError(node, fmt.Sprintf("%s: argument must be rl.Music", name))
+	}
+
+	if !TypesAssignable(i.TypeInfoFromValue(rectVal), rectTI) {
+		return rl.Rectangle{}, NewRuntimeError(node, fmt.Sprintf("%s: argument must be rl.Music", name))
+	}
+
+	rect := rl.Rectangle{
+		X:      float32(rectVal.Fields["X"].(FloatValue).V),
+		Y:      float32(rectVal.Fields["Y"].(FloatValue).V),
+		Width:  float32(rectVal.Fields["Width"].(FloatValue).V),
+		Height: float32(rectVal.Fields["Height"].(FloatValue).V),
+	}
+
+	return rect, nil
+}
+
+func ArgTexture(node parser.Node, i *Interpreter, TypeEnv map[string]TypeValue, args []Value, idx int, name string) (rl.Texture2D, error) {
+	texTI := TypeEnv["Texture2D"].TypeInfo
+
+	v := UnwrapFully(args[idx])
+
+	texVal, ok := v.(*StructValue)
+	if !ok {
+		return rl.Texture2D{}, NewRuntimeError(node, fmt.Sprintf("%s: argument must be rl.Music", name))
+	}
+
+	if !TypesAssignable(i.TypeInfoFromValue(texVal), texTI) {
+		return rl.Texture2D{}, NewRuntimeError(node, fmt.Sprintf("%s: argument must be rl.Music", name))
+	}
+
+	mus, ok := texVal.Native.(rl.Texture2D)
+	if !ok {
+		return rl.Texture2D{}, NewRuntimeError(node, fmt.Sprintf("%s: argument must be rl.Music", name))
 	}
 
 	return mus, nil

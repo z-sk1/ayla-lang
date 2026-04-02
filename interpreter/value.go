@@ -253,7 +253,7 @@ func (i *Interpreter) assignToType(val Value, expected *TypeInfo) (Value, error)
 
 	if expected.Kind != TypePointer && valType.Kind == TypePointer {
 		ptr := val.(*PointerValue)
-		if typesAssignable(ptr.ElemType, expected) {
+		if TypesAssignable(ptr.ElemType, expected) {
 			val, err := ptr.Target.Get(i)
 			if err != nil {
 				return NilValue{}, err
@@ -263,7 +263,7 @@ func (i *Interpreter) assignToType(val Value, expected *TypeInfo) (Value, error)
 		}
 	}
 
-	if !typesAssignable(valType, expected) {
+	if !TypesAssignable(valType, expected) {
 		return nil, fmt.Errorf(
 			"type mismatch: expected %s but got %s",
 			expected.Name,

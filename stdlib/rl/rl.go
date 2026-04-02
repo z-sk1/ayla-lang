@@ -26,6 +26,28 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		IsComparable: true,
 	}
 
+	TypeEnv["Rectangle"] = interpreter.TypeValue{
+		TypeInfo: &interpreter.TypeInfo{
+			Name: "Rectangle",
+			Kind: interpreter.TypeStruct,
+			Fields: map[string]*interpreter.TypeInfo{
+				"X":      i.TypeEnv["float"].TypeInfo,
+				"Y":      i.TypeEnv["float"].TypeInfo,
+				"Width":  i.TypeEnv["float"].TypeInfo,
+				"Height": i.TypeEnv["float"].TypeInfo,
+			},
+		},
+	}
+
+	TypeEnv["Texture2D"] = interpreter.TypeValue{
+		TypeInfo: &interpreter.TypeInfo{
+			Name:   "Texture2D",
+			Kind:   interpreter.TypeStruct,
+			Fields: nil,
+			Opaque: true,
+		},
+	}
+
 	TypeEnv["Color"] = interpreter.TypeValue{
 		TypeInfo: &interpreter.TypeInfo{
 			Name: "Color",
@@ -488,21 +510,203 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		},
 	}, false)
 
-	env.Define("DrawRect", &interpreter.BuiltinFunc{
+	env.Define("NewRectangle", &interpreter.BuiltinFunc{
+		Name:  "NewRectangle",
+		Arity: 4,
+		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
+			pos, err := interpreter.ArgVector2(node, i, TypeEnv, args, 0, "rl.NewRectangle")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			size, err := interpreter.ArgVector2(node, i, TypeEnv, args, 1, "rl.NewRectangle")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			return &interpreter.StructValue{
+				TypeName: TypeEnv["Rectangle"].TypeInfo,
+				Fields: map[string]interpreter.Value{
+					"X":      interpreter.FloatValue{V: float64(pos.X)},
+					"Y":      interpreter.FloatValue{V: float64(pos.Y)},
+					"Width":  interpreter.FloatValue{V: float64(size.X)},
+					"Height": interpreter.FloatValue{V: float64(size.Y)},
+				},
+			}, nil
+		},
+	}, false)
+
+	env.Define("LoadTexture", &interpreter.BuiltinFunc{
+		Name:  "LoadTexture",
+		Arity: 1,
+		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
+			path, err := interpreter.ArgString(node, args, 0, "rl.LoadTexture")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			return &interpreter.StructValue{
+				TypeName: TypeEnv["Texture2D"].TypeInfo,
+				Native:   rl.LoadTexture(path),
+			}, nil
+		},
+	}, false)
+
+	env.Define("UnloadTexture", &interpreter.BuiltinFunc{
+		Name:  "UnloadTexture",
+		Arity: 1,
+		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
+			tex, err := interpreter.ArgTexture(node, i, TypeEnv, args, 0, "rl.UnloadTexture")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			rl.UnloadTexture(tex)
+			return interpreter.NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("DrawTexture", &interpreter.BuiltinFunc{
+		Name:  "DrawTexture",
+		Arity: 3,
+		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
+			tex, err := interpreter.ArgTexture(node, i, TypeEnv, args, 0, "rl.DrawTexture")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			pos, err := interpreter.ArgVector2(node, i, TypeEnv, args, 1, "rl.DrawTexture")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			tint, err := interpreter.ArgColor(node, TypeEnv, args, 2, "rl.DrawTexture")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			rl.DrawTexture(tex, int32(pos.X), int32(pos.Y), tint)
+			return interpreter.NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("DrawTextureRec", &interpreter.BuiltinFunc{
+		Name:  "DrawTextureRec",
+		Arity: 4,
+		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
+			tex, err := interpreter.ArgTexture(node, i, TypeEnv, args, 0, "rl.DrawTextureRec")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			src, err := interpreter.ArgRectangle(node, i, TypeEnv, args, 1, "rl.DrawTextureRec")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			pos, err := interpreter.ArgVector2(node, i, TypeEnv, args, 2, "rl.DrawTextureRec")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			tint, err := interpreter.ArgColor(node, TypeEnv, args, 3, "rl.DrawTectureRec")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			rl.DrawTextureRec(tex, src, pos, tint)
+			return interpreter.NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("DrawTextureEx", &interpreter.BuiltinFunc{
+		Name:  "DrawTextureEx",
+		Arity: 5,
+		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
+			tex, err := interpreter.ArgTexture(node, i, TypeEnv, args, 0, "rl.DrawTextureEx")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			pos, err := interpreter.ArgVector2(node, i, TypeEnv, args, 1, "rl.DrawTextureEx")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			rot, err := interpreter.ArgFloat(node, args, 2, "rl.DrawTextureEx")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			scale, err := interpreter.ArgFloat(node, args, 3, "rl.DrawTextureEx")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			tint, err := interpreter.ArgColor(node, TypeEnv, args, 4, "rl.DrawTextureEx")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			rl.DrawTextureEx(tex, pos, float32(rot), float32(scale), tint)
+			return interpreter.NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("DrawTexturePro", &interpreter.BuiltinFunc{
+		Name:  "DrawTexturePro",
+		Arity: 6,
+		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
+			tex, err := interpreter.ArgTexture(node, i, TypeEnv, args, 0, "rl.DrawTexturePro")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			src, err := interpreter.ArgRectangle(node, i, TypeEnv, args, 1, "rl.DrawTexturePro")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			dest, err := interpreter.ArgRectangle(node, i, TypeEnv, args, 2, "rl.DrawTexturePro")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			org, err := interpreter.ArgVector2(node, i, TypeEnv, args, 3, "rl.DrawTexturePro")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			rot, err := interpreter.ArgFloat(node, args, 4, "rl.DrawTexturePro")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			tint, err := interpreter.ArgColor(node, TypeEnv, args, 5, "rl.DrawTexturePro")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			rl.DrawTexturePro(tex, src, dest, org, float32(rot), tint)
+			return interpreter.NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("DrawRectangle", &interpreter.BuiltinFunc{
 		Name:  "DrawRect",
 		Arity: 3,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			pv, err := interpreter.ArgVector2(node, i, TypeEnv, args, 0, "rl.DrawRect")
+			pv, err := interpreter.ArgVector2(node, i, TypeEnv, args, 0, "rl.DrawRectangle")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			sv, err := interpreter.ArgVector2(node, i, TypeEnv, args, 1, "rl.DrawRect")
+			sv, err := interpreter.ArgVector2(node, i, TypeEnv, args, 1, "rl.DrawRectangle")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			col, err := interpreter.ArgColor(node, TypeEnv, args, 2, "rl.DrawRect")
+			col, err := interpreter.ArgColor(node, TypeEnv, args, 2, "rl.DrawRectangle")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -512,26 +716,258 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		},
 	}, false)
 
-	env.Define("DrawRectLines", &interpreter.BuiltinFunc{
+	env.Define("DrawRectangleRec", &interpreter.BuiltinFunc{
+		Name:  "DrawRect",
+		Arity: 3,
+		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
+			rec, err := interpreter.ArgRectangle(node, i, TypeEnv, args, 0, "rl.DrawRectangleRec")
+
+			col, err := interpreter.ArgColor(node, TypeEnv, args, 2, "rl.DrawRectangleRec")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			rl.DrawRectangleRec(rec, col)
+			return interpreter.NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("DrawRectanglePro", &interpreter.BuiltinFunc{
+		Name:  "DrawRectanglePro",
+		Arity: 4,
+		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
+			rec, err := interpreter.ArgRectangle(node, i, TypeEnv, args, 0, "rl.DrawRectanglePro")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			org, err := interpreter.ArgVector2(node, i, TypeEnv, args, 1, "rl.DrawRectanglePro")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			rot, err := interpreter.ArgFloat(node, args, 2, "rl.DrawRectanglePro")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			col, err := interpreter.ArgColor(node, TypeEnv, args, 3, "rl.DrawRectanglePro")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			rl.DrawRectanglePro(rec, org, float32(rot), col)
+			return interpreter.NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("DrawRectangleLines", &interpreter.BuiltinFunc{
 		Name:  "DrawRectLines",
 		Arity: 3,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			pv, err := interpreter.ArgVector2(node, i, TypeEnv, args, 0, "rl.DrawRectLines")
+			pv, err := interpreter.ArgVector2(node, i, TypeEnv, args, 0, "rl.DrawRectangleLines")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			sv, err := interpreter.ArgVector2(node, i, TypeEnv, args, 1, "rl.DrawRectLines")
+			sv, err := interpreter.ArgVector2(node, i, TypeEnv, args, 1, "rl.DrawRectangleLines")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			col, err := interpreter.ArgColor(node, TypeEnv, args, 2, "rl.DrawRectLines")
+			col, err := interpreter.ArgColor(node, TypeEnv, args, 2, "rl.DrawRectangleLines")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
 			rl.DrawRectangleLines(int32(pv.X), int32(pv.Y), int32(sv.X), int32(sv.Y), col)
+			return interpreter.NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("DrawRectangleLinesRec", &interpreter.BuiltinFunc{
+		Name:  "DrawRectLinesRec",
+		Arity: 3,
+		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
+			rec, err := interpreter.ArgRectangle(node, i, TypeEnv, args, 0, "rl.DrawRectangleLinesRec")
+
+			col, err := interpreter.ArgColor(node, TypeEnv, args, 1, "rl.DrawRectangleLinesRec")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			rl.DrawRectangleLines(int32(rec.X), int32(rec.Y), int32(rec.X), int32(rec.Y), col)
+			return interpreter.NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("DrawRectangleLinesEx", &interpreter.BuiltinFunc{
+		Name:  "DrawRectangleLinesEx",
+		Arity: 3,
+		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
+			rec, err := interpreter.ArgRectangle(node, i, TypeEnv, args, 0, "rl.DrawRectangleLinesEx")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			lineT, err := interpreter.ArgFloat(node, args, 1, "rl.DrawRectangleLinesEx")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			col, err := interpreter.ArgColor(node, TypeEnv, args, 2, "rl.DrawRectangleLinesEx")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			rl.DrawRectangleLinesEx(rec, float32(lineT), col)
+			return interpreter.NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("DrawRectangleRounded", &interpreter.BuiltinFunc{
+		Name:  "DrawRectangleRounded",
+		Arity: 3,
+		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
+			rec, err := interpreter.ArgRectangle(node, i, TypeEnv, args, 0, "rl.DrawRectangleRounded")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			round, err := interpreter.ArgFloat(node, args, 1, "rl.DrawRectangleRounded")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			segs, err := interpreter.ArgInt(node, args, 2, "rl.DrawRectangleRounded")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			col, err := interpreter.ArgColor(node, TypeEnv, args, 3, "rl.DrawRectangleRounded")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			rl.DrawRectangleRounded(rec, float32(round), int32(segs), col)
+			return interpreter.NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("DrawRectangleRoundedLines", &interpreter.BuiltinFunc{
+		Name:  "DrawRectangleRoundedLines",
+		Arity: 3,
+		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
+			rec, err := interpreter.ArgRectangle(node, i, TypeEnv, args, 0, "rl.DrawRectangleRoundedLines")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			round, err := interpreter.ArgFloat(node, args, 1, "rl.DrawRectangleRoundedLines")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			segs, err := interpreter.ArgInt(node, args, 2, "rl.DrawRectangleRoundedLines")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			col, err := interpreter.ArgColor(node, TypeEnv, args, 3, "rl.DrawRectangleRoundedLines")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			rl.DrawRectangleRoundedLines(rec, float32(round), int32(segs), col)
+			return interpreter.NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("DrawRectangleGradientH", &interpreter.BuiltinFunc{
+		Name:  "rl.DrawRectangleGradientH",
+		Arity: 3,
+		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
+			pv, err := interpreter.ArgVector2(node, i, TypeEnv, args, 0, "rl.DrawRectangleGradientH")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			sv, err := interpreter.ArgVector2(node, i, TypeEnv, args, 1, "rl.DrawRectangleGradientH")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			lcol, err := interpreter.ArgColor(node, TypeEnv, args, 2, "rl.DrawRectangleGradientH")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			rcol, err := interpreter.ArgColor(node, TypeEnv, args, 3, "rl.DrawRectangleGradientH")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			rl.DrawRectangleGradientH(int32(pv.X), int32(pv.X), int32(sv.X), int32(sv.Y), lcol, rcol)
+			return interpreter.NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("DrawRectangleGradientV", &interpreter.BuiltinFunc{
+		Name:  "rl.DrawRectangleGradientV",
+		Arity: 3,
+		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
+			pv, err := interpreter.ArgVector2(node, i, TypeEnv, args, 0, "rl.DrawRectangleGradientV")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			sv, err := interpreter.ArgVector2(node, i, TypeEnv, args, 1, "rl.DrawRectangleGradientV")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			lcol, err := interpreter.ArgColor(node, TypeEnv, args, 2, "rl.DrawRectangleGradientV")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			rcol, err := interpreter.ArgColor(node, TypeEnv, args, 3, "rl.DrawRectangleGradientV")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			rl.DrawRectangleGradientV(int32(pv.X), int32(pv.X), int32(sv.X), int32(sv.Y), lcol, rcol)
+			return interpreter.NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("DrawRectangleGradientEx", &interpreter.BuiltinFunc{
+		Name:  "rl.DrawRectangleGradientEx",
+		Arity: 3,
+		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
+			rec, err := interpreter.ArgRectangle(node, i, TypeEnv, args, 0, "rl.DrawRectangleGradientEx")
+
+			tlcol, err := interpreter.ArgColor(node, TypeEnv, args, 1, "rl.DrawRectangleGradientEx")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			blcol, err := interpreter.ArgColor(node, TypeEnv, args, 2, "rl.DrawRectangleGradientEx")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			trcol, err := interpreter.ArgColor(node, TypeEnv, args, 3, "rl.DrawRectangleGradientEx")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			brcol, err := interpreter.ArgColor(node, TypeEnv, args, 4, "rl.DrawRectangleGradientEx")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			rl.DrawRectangleGradientEx(rec, tlcol, blcol, trcol, brcol)
 			return interpreter.NilValue{}, nil
 		},
 	}, false)
@@ -584,6 +1020,115 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 			r := float32(rVal)
 
 			rl.DrawCircleLinesV(pv, r, col)
+			return interpreter.NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("DrawCircleGradient", &interpreter.BuiltinFunc{
+		Name:  "DrawCircleGradient",
+		Arity: 3,
+		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
+			pv, err := interpreter.ArgVector2(node, i, TypeEnv, args, 0, "rl.DrawCircle")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			rVal, err := interpreter.ArgFloat(node, args, 1, "rl.DrawCircle")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			icol, err := interpreter.ArgColor(node, TypeEnv, args, 2, "rl.DrawCircle")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			ocol, err := interpreter.ArgColor(node, TypeEnv, args, 2, "rl.DrawCircle")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			r := float32(rVal)
+
+			rl.DrawCircleGradient(int32(pv.X), int32(pv.Y), r, icol, ocol)
+			return interpreter.NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("DrawCircleSector", &interpreter.BuiltinFunc{
+		Name:  "DrawCircleSector",
+		Arity: 3,
+		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
+			pv, err := interpreter.ArgVector2(node, i, TypeEnv, args, 0, "rl.DrawCircleSector")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			r, err := interpreter.ArgFloat(node, args, 1, "rl.DrawCircleSector")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			startA, err := interpreter.ArgFloat(node, args, 2, "rl.DrawCircleSector")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			endA, err := interpreter.ArgFloat(node, args, 3, "rl.DrawCircleSector")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			segs, err := interpreter.ArgInt(node, args, 4, "rl.DrawCircleSector")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			col, err := interpreter.ArgColor(node, TypeEnv, args, 5, "rl.DrawCircleSector")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			rl.DrawCircleSector(pv, float32(r), float32(startA), float32(endA), int32(segs), col)
+			return interpreter.NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("DrawCircleSectorLines", &interpreter.BuiltinFunc{
+		Name:  "DrawCircleSectorLines",
+		Arity: 3,
+		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
+			pv, err := interpreter.ArgVector2(node, i, TypeEnv, args, 0, "rl.DrawCircleSectorLines")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			r, err := interpreter.ArgFloat(node, args, 1, "rl.DrawCircleSectorLines")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			startA, err := interpreter.ArgFloat(node, args, 2, "rl.DrawCircleSectorLines")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			endA, err := interpreter.ArgFloat(node, args, 3, "rl.DrawCircleSectorLines")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			segs, err := interpreter.ArgInt(node, args, 4, "rl.DrawCircleSectorLines")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			col, err := interpreter.ArgColor(node, TypeEnv, args, 5, "rl.DrawCircleSectorLines")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			rl.DrawCircleSectorLines(pv, float32(r), float32(startA), float32(endA), int32(segs), col)
 			return interpreter.NilValue{}, nil
 		},
 	}, false)
@@ -646,6 +1191,68 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		},
 	}, false)
 
+	env.Define("DrawLineBezier", &interpreter.BuiltinFunc{
+		Name:  "DrawLineBezier",
+		Arity: 3,
+		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
+			pv, err := interpreter.ArgVector2(node, i, TypeEnv, args, 0, "rl.DrawLineBezier")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			sv, err := interpreter.ArgVector2(node, i, TypeEnv, args, 1, "rl.DrawLineBezier")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			thick, err := interpreter.ArgFloat(node, args, 2, "rl.DrawLineBezier")
+
+			col, err := interpreter.ArgColor(node, TypeEnv, args, 3, "rl.DrawLineBezier")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			rl.DrawLineBezier(pv, sv, float32(thick), col)
+			return interpreter.NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("DrawLineStrip", &interpreter.BuiltinFunc{
+		Name:  "DrawLineStrip",
+		Arity: 3,
+		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
+			arr, err := interpreter.ArgArray(node, args, 0, "rl.DrawLineStrip", "rl.Vector2")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			vectors := []rl.Vector2{}
+
+			for _, v := range arr.Elements {
+				if _, ok := v.(*interpreter.StructValue); !ok {
+					return interpreter.NilValue{}, interpreter.NewRuntimeError(node, "rl.DrawLineStrip: first argument must be a []rl.Vector2")
+				}
+
+				if !interpreter.TypesAssignable(v.(*interpreter.StructValue).TypeName, TypeEnv["Vector2"].TypeInfo) {
+					return interpreter.NilValue{}, interpreter.NewRuntimeError(node, "rl.DrawLineStrip: first argument must be a []rl.Vector2")
+				}
+
+				vectors = append(vectors, rl.Vector2{
+					X: float32(v.(*interpreter.StructValue).Fields["X"].(interpreter.FloatValue).V),
+					Y: float32(v.(*interpreter.StructValue).Fields["Y"].(interpreter.FloatValue).V),
+				})
+			}
+
+			col, err := interpreter.ArgColor(node, TypeEnv, args, 2, "rl.DrawLineStrip")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			rl.DrawLineStrip(vectors, col)
+			return interpreter.NilValue{}, nil
+		},
+	}, false)
+
 	env.Define("DrawTriangle", &interpreter.BuiltinFunc{
 		Name:  "DrawTriangle",
 		Arity: 4,
@@ -700,6 +1307,42 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 			}
 
 			rl.DrawTriangleLines(pv1, pv3, pv2, col)
+			return interpreter.NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("DrawTriangleStrip", &interpreter.BuiltinFunc{
+		Name:  "DrawTriangleStrip",
+		Arity: 3,
+		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
+			arr, err := interpreter.ArgArray(node, args, 0, "rl.DrawTriangleStrip", "rl.Vector2")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			vectors := []rl.Vector2{}
+
+			for _, v := range arr.Elements {
+				if _, ok := v.(*interpreter.StructValue); !ok {
+					return interpreter.NilValue{}, interpreter.NewRuntimeError(node, "rl.DrawTriangleStrip: first argument must be a []rl.Vector2")
+				}
+
+				if !interpreter.TypesAssignable(v.(*interpreter.StructValue).TypeName, TypeEnv["Vector2"].TypeInfo) {
+					return interpreter.NilValue{}, interpreter.NewRuntimeError(node, "rl.DrawTriangleStrip: first argument must be a []rl.Vector2")
+				}
+
+				vectors = append(vectors, rl.Vector2{
+					X: float32(v.(*interpreter.StructValue).Fields["X"].(interpreter.FloatValue).V),
+					Y: float32(v.(*interpreter.StructValue).Fields["Y"].(interpreter.FloatValue).V),
+				})
+			}
+
+			col, err := interpreter.ArgColor(node, TypeEnv, args, 2, "rl.DrawTriangleStrip")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			rl.DrawTriangleStrip(vectors, col)
 			return interpreter.NilValue{}, nil
 		},
 	}, false)
@@ -909,7 +1552,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 				return interpreter.NilValue{}, err
 			}
 
-			rl.UnloadSound(sound)
+			rl.UnloadSound(*sound)
 			return interpreter.NilValue{}, nil
 		},
 	}, false)
@@ -923,7 +1566,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 				return interpreter.NilValue{}, err
 			}
 
-			rl.PlaySound(sound)
+			rl.PlaySound(*sound)
 			return interpreter.NilValue{}, nil
 		},
 	}, false)
@@ -937,7 +1580,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 				return interpreter.NilValue{}, err
 			}
 
-			rl.StopSound(sound)
+			rl.StopSound(*sound)
 			return interpreter.NilValue{}, nil
 		},
 	}, false)
@@ -951,7 +1594,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 				return interpreter.NilValue{}, err
 			}
 
-			return interpreter.BoolValue{V: rl.IsSoundPlaying(sound)}, nil
+			return interpreter.BoolValue{V: rl.IsSoundPlaying(*sound)}, nil
 		},
 	}, false)
 
@@ -964,7 +1607,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 				return interpreter.NilValue{}, err
 			}
 
-			rl.PauseSound(sound)
+			rl.PauseSound(*sound)
 			return interpreter.NilValue{}, nil
 		},
 	}, false)
@@ -978,7 +1621,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 				return interpreter.NilValue{}, err
 			}
 
-			rl.ResumeSound(sound)
+			rl.ResumeSound(*sound)
 			return interpreter.NilValue{}, nil
 		},
 	}, false)
@@ -997,7 +1640,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 				return interpreter.NilValue{}, err
 			}
 
-			rl.SetSoundVolume(sound, float32(volume))
+			rl.SetSoundVolume(*sound, float32(volume))
 			return interpreter.NilValue{}, nil
 		},
 	}, false)
@@ -1016,7 +1659,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 				return interpreter.NilValue{}, err
 			}
 
-			rl.SetSoundPitch(sound, float32(pitch))
+			rl.SetSoundPitch(*sound, float32(pitch))
 			return interpreter.NilValue{}, nil
 		},
 	}, false)

@@ -250,7 +250,7 @@ func (i *Interpreter) registerBuiltins() {
 
 			for idx, arg := range args[1:] {
 				ArgType := i.TypeInfoFromValue(arg)
-				if !typesAssignable(ArgType, elemType) {
+				if !TypesAssignable(ArgType, elemType) {
 					return NilValue{}, NewRuntimeError(node, fmt.Sprintf("append: arg %d expected '%s' but got '%s'", idx, elemType.Name, ArgType.Name))
 				}
 
@@ -329,7 +329,7 @@ func (i *Interpreter) registerBuiltins() {
 			for _, v := range args {
 				ti := UnwrapAlias(i.TypeInfoFromValue(v))
 
-				if ti != nil && typesAssignable(ti, i.TypeEnv["error"].TypeInfo) {
+				if ti != nil && TypesAssignable(ti, i.TypeEnv["error"].TypeInfo) {
 					method, ok := i.Env.GetMethod(ti, "Error")
 					if ok {
 						receiver := v
@@ -365,7 +365,7 @@ func (i *Interpreter) registerBuiltins() {
 
 				ti := UnwrapAlias(i.TypeInfoFromValue(v))
 
-				if ti != nil && typesAssignable(ti, i.TypeEnv["error"].TypeInfo) {
+				if ti != nil && TypesAssignable(ti, i.TypeEnv["error"].TypeInfo) {
 					method, ok := i.Env.GetMethod(ti, "Error")
 					if ok {
 						receiver := v
@@ -470,7 +470,7 @@ func (i *Interpreter) registerBuiltins() {
 			case StringValue:
 				msg = v.V
 			case InterfaceValue:
-				if typesAssignable(v.TypeInfo, i.TypeEnv["error"].TypeInfo) {
+				if TypesAssignable(v.TypeInfo, i.TypeEnv["error"].TypeInfo) {
 					msg = v.Value.(Error).Error()
 				}
 			default:

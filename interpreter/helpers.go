@@ -291,7 +291,7 @@ func toFloat(v Value) (float64, bool) {
 	}
 }
 
-func typesAssignable(from, to *TypeInfo) bool {
+func TypesAssignable(from, to *TypeInfo) bool {
 	from = UnwrapAlias(from)
 	to = UnwrapAlias(to)
 
@@ -346,10 +346,10 @@ func typesAssignable(from, to *TypeInfo) bool {
 		return typesIdentical(from.Elem, to.Elem)
 
 	case from.Kind == TypeArray && to.Kind == TypeArray:
-		return typesAssignable(from.Elem, to.Elem)
+		return TypesAssignable(from.Elem, to.Elem)
 
 	case from.Kind == TypeFixedArray && to.Kind == TypeFixedArray:
-		return typesAssignable(from.Elem, to.Elem) &&
+		return TypesAssignable(from.Elem, to.Elem) &&
 			from.Size == to.Size
 
 	case from.Kind == TypeMap && to.Kind == TypeMap:
@@ -563,7 +563,7 @@ func implementsInterface(ti, iface *TypeInfo) bool {
 			}
 			actual = m.TypeName
 		}
-		if !typesAssignable(actual, expected) {
+		if !TypesAssignable(actual, expected) {
 			return false
 		}
 	}
@@ -852,7 +852,7 @@ func (i *Interpreter) assignWithType(node parser.Node, v Value, expected *TypeIn
 		}
 	}
 
-	if !typesAssignable(actual, baseExpected) {
+	if !TypesAssignable(actual, baseExpected) {
 		if node == nil {
 			return NilValue{}, fmt.Errorf(
 				"type mismatch: expected '%s' but got '%s'",
@@ -948,7 +948,7 @@ func (i *Interpreter) paramWithType(node parser.Node, pname string, v Value, exp
 		}
 	}
 
-	if !typesAssignable(actual, baseExpected) {
+	if !TypesAssignable(actual, baseExpected) {
 		if node == nil {
 			return NilValue{}, fmt.Errorf(
 				"type mismatch: param '%s' expected '%s' but got '%s'",
@@ -1162,7 +1162,7 @@ func (i *Interpreter) resolveAssignableTarget(expr parser.Expression) (Assignabl
 
 			} else {
 
-				if !typesAssignable(keyType, val.KeyType) {
+				if !TypesAssignable(keyType, val.KeyType) {
 					return nil, fmt.Errorf(
 						"map index expected %s but got %s",
 						val.KeyType.Name,

@@ -1458,7 +1458,7 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (Value, error) {
 		inner := UnwrapFully(val)
 		actualTI := UnwrapAlias(i.TypeInfoFromValue(inner))
 
-		if !typesAssignable(actualTI, targetTI) {
+		if !TypesAssignable(actualTI, targetTI) {
 			return NilValue{}, NewRuntimeError(expr,
 				fmt.Sprintf("type mismatch: '%s' asserted as '%s'",
 					actualTI.Name, targetTI.Name))
@@ -1636,7 +1636,7 @@ func (i *Interpreter) evalStructLiteral(expr *parser.CompositeLiteral, typeInfo 
 		actualTI := UnwrapAlias(i.TypeInfoFromValue(v))
 		expectedTI := UnwrapAlias(expectedType)
 
-		if !typesAssignable(actualTI, expectedTI) {
+		if !TypesAssignable(actualTI, expectedTI) {
 			return NilValue{}, NewRuntimeError(
 				expr,
 				fmt.Sprintf(
@@ -1696,7 +1696,7 @@ func (i *Interpreter) evalArrayLiteral(expr *parser.CompositeLiteral, ti *TypeIn
 
 		valType := UnwrapAlias(i.TypeInfoFromValue(val))
 
-		if !typesAssignable(valType, elemType) {
+		if !TypesAssignable(valType, elemType) {
 			return nil, NewRuntimeError(
 				expr,
 				fmt.Sprintf(
@@ -1779,12 +1779,12 @@ func (i *Interpreter) evalMapLiteral(expr *parser.CompositeLiteral, expected *Ty
 			return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("map key type %s is not comparable", keyTI.Name))
 		}
 
-		if !typesAssignable(keyTI, expected.Key) {
+		if !TypesAssignable(keyTI, expected.Key) {
 			return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("type mismatch: map key 0 expected %s but got %s", expected.Key.Name, keyTI.Name))
 		}
 		keyTI = expected.Key
 
-		if !typesAssignable(valTI, expected.Value) {
+		if !TypesAssignable(valTI, expected.Value) {
 			return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("type mismatch: map value 0 expected %s but got %s", expected.Value.Name, valTI.Name))
 		}
 		valTI = expected.Value
@@ -1811,11 +1811,11 @@ func (i *Interpreter) evalMapLiteral(expr *parser.CompositeLiteral, expected *Ty
 			return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("map key %d is not comparable", idx))
 		}
 
-		if !typesAssignable(kt, keyTI) {
+		if !TypesAssignable(kt, keyTI) {
 			return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("map key %d expected %s but got %s", idx, keyTI.Name, kt.Name))
 		}
 
-		if !typesAssignable(vt, valTI) {
+		if !TypesAssignable(vt, valTI) {
 			return NilValue{}, NewRuntimeError(expr, fmt.Sprintf("map value %d expected %s but got %s", idx, valTI.Name, vt.Name))
 		}
 
@@ -2183,7 +2183,7 @@ func (i *Interpreter) evalIndexExpression(node parser.Expression, left, idx Valu
 
 		elemType := UnwrapAlias(i.TypeInfoFromValue(elem))
 
-		if !typesAssignable(elemType, arr.ElemType) {
+		if !TypesAssignable(elemType, arr.ElemType) {
 			return NilValue{}, NewRuntimeError(node,
 				fmt.Sprintf("array element expected %s but got %s",
 					arr.ElemType.Name, elemType.Name))
@@ -2223,7 +2223,7 @@ func (i *Interpreter) evalIndexExpression(node parser.Expression, left, idx Valu
 				)
 			}
 		} else {
-			if !typesAssignable(keyType, mv.KeyType) {
+			if !TypesAssignable(keyType, mv.KeyType) {
 				return NilValue{}, NewRuntimeError(
 					node,
 					fmt.Sprintf(
@@ -2246,7 +2246,7 @@ func (i *Interpreter) evalIndexExpression(node parser.Expression, left, idx Valu
 
 		valType := UnwrapAlias(i.TypeInfoFromValue(val))
 
-		if !typesAssignable(valType, mv.ValueType) {
+		if !TypesAssignable(valType, mv.ValueType) {
 			return NilValue{}, NewRuntimeError(node,
 				fmt.Sprintf("map value expected %s but got %s",
 					mv.ValueType.Name, valType.Name))
@@ -2441,7 +2441,7 @@ func (i *Interpreter) evalMemberExpression(node parser.Expression, left Value, f
 		actualTI := UnwrapAlias(i.TypeInfoFromValue(val))
 		expectedTI := UnwrapAlias(expectedType)
 
-		if !typesAssignable(actualTI, expectedTI) {
+		if !TypesAssignable(actualTI, expectedTI) {
 			return NilValue{}, NewRuntimeError(node,
 				fmt.Sprintf("field '%s' expected '%s' but got '%s'",
 					field, expectedType.Name, actualTI.Name))
