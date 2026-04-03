@@ -26,6 +26,30 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		IsComparable: true,
 	}
 
+	TypeEnv["Color"] = interpreter.TypeValue{
+		TypeInfo: &interpreter.TypeInfo{
+			Name: "Color",
+			Kind: interpreter.TypeStruct,
+			Fields: map[string]*interpreter.TypeInfo{
+				"R": uint8Type,
+				"G": uint8Type,
+				"B": uint8Type,
+				"A": uint8Type,
+			},
+		},
+	}
+
+	TypeEnv["Vector2"] = interpreter.TypeValue{
+		TypeInfo: &interpreter.TypeInfo{
+			Name: "Vector2",
+			Kind: interpreter.TypeStruct,
+			Fields: map[string]*interpreter.TypeInfo{
+				"X": i.TypeEnv["float"].TypeInfo,
+				"Y": i.TypeEnv["float"].TypeInfo,
+			},
+		},
+	}
+
 	TypeEnv["Rectangle"] = interpreter.TypeValue{
 		TypeInfo: &interpreter.TypeInfo{
 			Name: "Rectangle",
@@ -48,26 +72,15 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		},
 	}
 
-	TypeEnv["Color"] = interpreter.TypeValue{
+	TypeEnv["Camera2D"] = interpreter.TypeValue{
 		TypeInfo: &interpreter.TypeInfo{
-			Name: "Color",
+			Name: "Camera2D",
 			Kind: interpreter.TypeStruct,
 			Fields: map[string]*interpreter.TypeInfo{
-				"R": uint8Type,
-				"G": uint8Type,
-				"B": uint8Type,
-				"A": uint8Type,
-			},
-		},
-	}
-
-	TypeEnv["Vector2"] = interpreter.TypeValue{
-		TypeInfo: &interpreter.TypeInfo{
-			Name: "Vector2",
-			Kind: interpreter.TypeStruct,
-			Fields: map[string]*interpreter.TypeInfo{
-				"X": i.TypeEnv["float"].TypeInfo,
-				"Y": i.TypeEnv["float"].TypeInfo,
+				"Offset":   TypeEnv["Vector2"].TypeInfo,
+				"Target":   TypeEnv["Vector2"].TypeInfo,
+				"Rotation": i.TypeEnv["float"].TypeInfo,
+				"Zoom":     i.TypeEnv["float"].TypeInfo,
 			},
 		},
 	}
@@ -224,16 +237,16 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		},
 	}, false)
 
-	env.Define("SetWindowPos", &interpreter.BuiltinFunc{
-		Name:  "SetWindowPos",
+	env.Define("SetWindowPosition", &interpreter.BuiltinFunc{
+		Name:  "SetWindowPosition",
 		Arity: 2,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			x, err := interpreter.ArgInt(node, args, 0, "rl.SetWindowPos")
+			x, err := interpreter.ArgInt(node, args, 0, "rl.SetWindowPosition")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			y, err := interpreter.ArgInt(node, args, 1, "rl.SetWindowPos")
+			y, err := interpreter.ArgInt(node, args, 1, "rl.SetWindowPosition")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -243,17 +256,11 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		},
 	}, false)
 
-	env.Define("GetWindowPos", &interpreter.BuiltinFunc{
-		Name:  "GetWindowPos",
+	env.Define("GetWindowPosition", &interpreter.BuiltinFunc{
+		Name:  "GetWindowPosition",
 		Arity: 0,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			return &interpreter.StructValue{
-				TypeName: TypeEnv["Vector2"].TypeInfo,
-				Fields: map[string]interpreter.Value{
-					"X": interpreter.IntValue{V: int(rl.GetWindowPosition().X)},
-					"Y": interpreter.IntValue{V: int(rl.GetWindowPosition().Y)},
-				},
-			}, nil
+			return interpreter.MakeVector2(rl.GetWindowPosition(), TypeEnv), nil
 		},
 	}, false)
 
@@ -510,9 +517,93 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		},
 	}, false)
 
+	env.Define("Vector2Add", interpreter.WrapVector2D2("rl.Vector2Add", TypeEnv, rl.Vector2Add), false)
+	env.Define("Vector2Subtract", interpreter.WrapVector2D2("rl.Vector2Subtract", TypeEnv, rl.Vector2Subtract), false)
+	env.Define("Vector2Multiply", interpreter.WrapVector2D2("rl.Vector2Multiply", TypeEnv, rl.Vector2Multiply), false)
+	env.Define("Vector2Divide", interpreter.WrapVector2D2("rl.Vector2Divide", TypeEnv, rl.Vector2Divide), false)
+	env.Define("Vector2Scale", interpreter.WrapVector2DFloat("rl.Vector2Scale", TypeEnv, rl.Vector2Scale), false)
+	env.Define("Vector2Negate", interpreter.WrapVector2D1("rl.Vector2Negate", TypeEnv, rl.Vector2Negate), false)
+	env.Define("Vector2Length", interpreter.WrapVector2D1RFloat("rl.Vector2Length", TypeEnv, rl.Vector2Length), false)
+	env.Define("Vector2LengthSqr", interpreter.WrapVector2D1RFloat("rl.Vector2LengthSqr", TypeEnv, rl.Vector2LengthSqr), false)
+	env.Define("Vector2Distance", interpreter.WrapVector2D2RFloat("rl.Vector2Distance", TypeEnv, rl.Vector2Distance), false)
+	env.Define("Vector2DistanceSqr", interpreter.WrapVector2D2RFloat("rl.Vector2DistanceSqr", TypeEnv, rl.Vector2DistanceSqr), false)
+	env.Define("Vector2Normalize", interpreter.WrapVector2D1("rl.Vector2Normalize", TypeEnv, rl.Vector2Normalize), false)
+	env.Define("Vector2Dot", interpreter.WrapVector2D2RFloat("rl.Vector2Dot", TypeEnv, rl.Vector2DotProduct), false)
+	env.Define("Vector2Angle", interpreter.WrapVector2D2RFloat("rl.Vector2Angle", TypeEnv, rl.Vector2Angle), false)
+	env.Define("Vector2Lerp", &interpreter.BuiltinFunc{
+		Name:  "Vector2Lerp",
+		Arity: 3,
+		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
+			v, err := interpreter.ArgVector2(node, i, TypeEnv, args, 0, "rl.Vector2Lerp")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			v2, err := interpreter.ArgVector2(node, i, TypeEnv, args, 1, "rl.Vector2Lerp")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			t, err := interpreter.ArgFloat(node, args, 2, "rl.Vector2Lerp")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			return interpreter.MakeVector2(rl.Vector2Lerp(v, v2, float32(t)), TypeEnv), nil
+		}}, false)
+	env.Define("Vector2Equals", &interpreter.BuiltinFunc{
+		Name:  "Vector2Equals",
+		Arity: 2,
+		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
+			v, err := interpreter.ArgVector2(node, i, TypeEnv, args, 0, "rl.Vector2Equals")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			v2, err := interpreter.ArgVector2(node, i, TypeEnv, args, 1, "rl.Vector2Equals")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			return interpreter.BoolValue{V: rl.Vector2Equals(v, v2)}, nil
+		}}, false)
+	env.Define("Vector2Zero", &interpreter.BuiltinFunc{
+		Name:  "Vector2Zero",
+		Arity: 0,
+		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
+			return interpreter.MakeVector2(rl.Vector2Zero(), TypeEnv), nil
+		}}, false)
+	env.Define("Vector2One", &interpreter.BuiltinFunc{
+		Name:  "Vector2One",
+		Arity: 0,
+		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
+			return interpreter.MakeVector2(rl.Vector2Zero(), TypeEnv), nil
+		}}, false)
+	env.Define("Vector2Clamp", &interpreter.BuiltinFunc{
+		Name:  "Vector2Clamp",
+		Arity: 3,
+		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
+			v, err := interpreter.ArgVector2(node, i, TypeEnv, args, 0, "rl.Vector2Clamp")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			min, err := interpreter.ArgVector2(node, i, TypeEnv, args, 1, "rl.Vector2Clamp")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			max, err := interpreter.ArgVector2(node, i, TypeEnv, args, 2, "rl.Vector2Clamp")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			return interpreter.MakeVector2(rl.Vector2Clamp(v, min, max), TypeEnv), nil
+		}}, false)
+
 	env.Define("NewRectangle", &interpreter.BuiltinFunc{
 		Name:  "NewRectangle",
-		Arity: 4,
+		Arity: 2,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
 			pos, err := interpreter.ArgVector2(node, i, TypeEnv, args, 0, "rl.NewRectangle")
 			if err != nil {
@@ -536,6 +627,103 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		},
 	}, false)
 
+	env.Define("NewCamera2D", &interpreter.BuiltinFunc{
+		Name:  "NewCamera2D",
+		Arity: 4,
+		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
+			offset, err := interpreter.ArgVector2(node, i, TypeEnv, args, 0, "rl.NewCamera2D")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			target, err := interpreter.ArgVector2(node, i, TypeEnv, args, 1, "rl.NewCamera2D")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			rot, err := interpreter.ArgFloat(node, args, 2, "rl.NewCamera2D")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			zoom, err := interpreter.ArgFloat(node, args, 3, "rl.NewCamera2D")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			return &interpreter.StructValue{
+				TypeName: TypeEnv["Camera2D"].TypeInfo,
+				Fields: map[string]interpreter.Value{
+					"Offset":   interpreter.MakeVector2(offset, TypeEnv),
+					"Target":   interpreter.MakeVector2(target, TypeEnv),
+					"Rotation": interpreter.FloatValue{V: rot},
+					"Zoom":     interpreter.FloatValue{V: zoom},
+				},
+			}, nil
+		},
+	}, false)
+
+	env.Define("BeginMode2D", &interpreter.BuiltinFunc{
+		Name:  "BeginMode2D",
+		Arity: 1,
+		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
+			cam, err := interpreter.ArgCamera2D(node, i, TypeEnv, args, 0, "rl.BeginMode2D")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			rl.BeginMode2D(cam)
+			return interpreter.NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("EndMode2D", &interpreter.BuiltinFunc{
+		Name:  "EndMode2D",
+		Arity: 0,
+		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
+			rl.EndMode2D()
+			return interpreter.NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("GetWorldToScreen2D", &interpreter.BuiltinFunc{
+		Name:  "GetWorldToScreen2D",
+		Arity: 2,
+		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
+			pos, err := interpreter.ArgVector2(node, i, TypeEnv, args, 0, "rl.GetWorldToScreen2D")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			cam, err := interpreter.ArgCamera2D(node, i, TypeEnv, args, 1, "rl.GetWorldToScreen2D")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			res := rl.GetWorldToScreen2D(pos, cam)
+			return interpreter.MakeVector2(res, TypeEnv), nil
+		},
+	}, false)
+
+	env.Define("GetScreenToWorld2D", &interpreter.BuiltinFunc{
+		Name:  "GetScreenToWorld2D",
+		Arity: 2,
+		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
+			pos, err := interpreter.ArgVector2(node, i, TypeEnv, args, 0, "rl.GetScreenToWorld2D")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			cam, err := interpreter.ArgCamera2D(node, i, TypeEnv, args, 1, "rl.GetScreenToWorld2D")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			res := rl.GetScreenToWorld2D(pos, cam)
+			return interpreter.MakeVector2(res, TypeEnv), nil
+		},
+	}, false)
+
 	env.Define("LoadTexture", &interpreter.BuiltinFunc{
 		Name:  "LoadTexture",
 		Arity: 1,
@@ -556,7 +744,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "UnloadTexture",
 		Arity: 1,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			tex, err := interpreter.ArgTexture(node, i, TypeEnv, args, 0, "rl.UnloadTexture")
+			tex, err := interpreter.ArgTexture2D(node, i, TypeEnv, args, 0, "rl.UnloadTexture")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -570,7 +758,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "DrawTexture",
 		Arity: 3,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			tex, err := interpreter.ArgTexture(node, i, TypeEnv, args, 0, "rl.DrawTexture")
+			tex, err := interpreter.ArgTexture2D(node, i, TypeEnv, args, 0, "rl.DrawTexture")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -594,7 +782,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "DrawTextureRec",
 		Arity: 4,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			tex, err := interpreter.ArgTexture(node, i, TypeEnv, args, 0, "rl.DrawTextureRec")
+			tex, err := interpreter.ArgTexture2D(node, i, TypeEnv, args, 0, "rl.DrawTextureRec")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -623,7 +811,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "DrawTextureEx",
 		Arity: 5,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			tex, err := interpreter.ArgTexture(node, i, TypeEnv, args, 0, "rl.DrawTextureEx")
+			tex, err := interpreter.ArgTexture2D(node, i, TypeEnv, args, 0, "rl.DrawTextureEx")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -657,7 +845,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "DrawTexturePro",
 		Arity: 6,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			tex, err := interpreter.ArgTexture(node, i, TypeEnv, args, 0, "rl.DrawTexturePro")
+			tex, err := interpreter.ArgTexture2D(node, i, TypeEnv, args, 0, "rl.DrawTexturePro")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -887,27 +1075,19 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "rl.DrawRectangleGradientH",
 		Arity: 3,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			pv, err := interpreter.ArgVector2(node, i, TypeEnv, args, 0, "rl.DrawRectangleGradientH")
+			rec, err := interpreter.ArgRectangle(node, i, TypeEnv, args, 0, "rl.DrawRectangleGradientH")
+
+			lcol, err := interpreter.ArgColor(node, TypeEnv, args, 1, "rl.DrawRectangleGradientH")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			sv, err := interpreter.ArgVector2(node, i, TypeEnv, args, 1, "rl.DrawRectangleGradientH")
+			rcol, err := interpreter.ArgColor(node, TypeEnv, args, 2, "rl.DrawRectangleGradientH")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			lcol, err := interpreter.ArgColor(node, TypeEnv, args, 2, "rl.DrawRectangleGradientH")
-			if err != nil {
-				return interpreter.NilValue{}, err
-			}
-
-			rcol, err := interpreter.ArgColor(node, TypeEnv, args, 3, "rl.DrawRectangleGradientH")
-			if err != nil {
-				return interpreter.NilValue{}, err
-			}
-
-			rl.DrawRectangleGradientH(int32(pv.X), int32(pv.X), int32(sv.X), int32(sv.Y), lcol, rcol)
+			rl.DrawRectangleGradientH(int32(rec.X), int32(rec.Y), int32(rec.Width), int32(rec.Height), lcol, rcol)
 			return interpreter.NilValue{}, nil
 		},
 	}, false)
@@ -916,36 +1096,31 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "rl.DrawRectangleGradientV",
 		Arity: 3,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			pv, err := interpreter.ArgVector2(node, i, TypeEnv, args, 0, "rl.DrawRectangleGradientV")
+			rec, err := interpreter.ArgRectangle(node, i, TypeEnv, args, 0, "rl.DrawRectangleGradientV")
+
+			lcol, err := interpreter.ArgColor(node, TypeEnv, args, 1, "rl.DrawRectangleGradientV")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			sv, err := interpreter.ArgVector2(node, i, TypeEnv, args, 1, "rl.DrawRectangleGradientV")
+			rcol, err := interpreter.ArgColor(node, TypeEnv, args, 2, "rl.DrawRectangleGradientV")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			lcol, err := interpreter.ArgColor(node, TypeEnv, args, 2, "rl.DrawRectangleGradientV")
-			if err != nil {
-				return interpreter.NilValue{}, err
-			}
-
-			rcol, err := interpreter.ArgColor(node, TypeEnv, args, 3, "rl.DrawRectangleGradientV")
-			if err != nil {
-				return interpreter.NilValue{}, err
-			}
-
-			rl.DrawRectangleGradientV(int32(pv.X), int32(pv.X), int32(sv.X), int32(sv.Y), lcol, rcol)
+			rl.DrawRectangleGradientH(int32(rec.X), int32(rec.Y), int32(rec.Width), int32(rec.Height), lcol, rcol)
 			return interpreter.NilValue{}, nil
 		},
 	}, false)
 
 	env.Define("DrawRectangleGradientEx", &interpreter.BuiltinFunc{
 		Name:  "rl.DrawRectangleGradientEx",
-		Arity: 3,
+		Arity: 5,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
 			rec, err := interpreter.ArgRectangle(node, i, TypeEnv, args, 0, "rl.DrawRectangleGradientEx")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
 
 			tlcol, err := interpreter.ArgColor(node, TypeEnv, args, 1, "rl.DrawRectangleGradientEx")
 			if err != nil {
@@ -1459,16 +1634,16 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		},
 	}, false)
 
-	env.Define("SetMousePos", &interpreter.BuiltinFunc{
-		Name:  "SetMousePos",
+	env.Define("SetMousePosition", &interpreter.BuiltinFunc{
+		Name:  "SetMousePosition",
 		Arity: 2,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			x, err := interpreter.ArgInt(node, args, 0, "rl.SetMousePos")
+			x, err := interpreter.ArgInt(node, args, 0, "rl.SetMousePosition")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			y, err := interpreter.ArgInt(node, args, 1, "rl.SetMousePos")
+			y, err := interpreter.ArgInt(node, args, 1, "rl.SetMousePosition")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -1478,11 +1653,10 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		},
 	}, false)
 
-	env.Define("GetMousePos", &interpreter.BuiltinFunc{
-		Name:  "GetMousePos",
+	env.Define("GetMousePosition", &interpreter.BuiltinFunc{
+		Name:  "GetMousePosition",
 		Arity: 0,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-
 			return &interpreter.StructValue{
 				TypeName: TypeEnv["Vector2"].TypeInfo,
 				Fields: map[string]interpreter.Value{

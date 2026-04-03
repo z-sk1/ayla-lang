@@ -103,19 +103,17 @@ func ArgColor(node parser.Node, TypeEnv map[string]TypeValue, args []Value, i in
 func ArgVector2(node parser.Node, i *Interpreter, TypeEnv map[string]TypeValue, args []Value, idx int, name string) (rl.Vector2, error) {
 	vecTI := TypeEnv["Vector2"].TypeInfo
 
-	v := UnwrapFully(args[idx])
-
-	vecVal, ok := v.(*StructValue)
-	if !ok {
-		return rl.Vector2{}, NewRuntimeError(node, name+": argument must be rl.Vector2")
+	sv, err := ArgStruct(node, args, idx, name, "rl.Vector2")
+	if err != nil {
+		return rl.Vector2{}, err
 	}
 
-	if !TypesAssignable(i.TypeInfoFromValue(vecVal), vecTI) {
-		return rl.Vector2{}, NewRuntimeError(node, name+": argument must be rl.Vector2")
+	if !TypesAssignable(i.TypeInfoFromValue(sv), vecTI) {
+		return rl.Vector2{}, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be rl.Vector2", name, idx+1))
 	}
 
-	x, _ := toFloat(UnwrapUntyped(vecVal.Fields["X"]))
-	y, _ := toFloat(UnwrapUntyped(vecVal.Fields["Y"]))
+	x, _ := toFloat(UnwrapUntyped(sv.Fields["X"]))
+	y, _ := toFloat(UnwrapUntyped(sv.Fields["Y"]))
 
 	return rl.Vector2{
 		X: float32(x),
@@ -126,20 +124,18 @@ func ArgVector2(node parser.Node, i *Interpreter, TypeEnv map[string]TypeValue, 
 func ArgSound(node parser.Node, i *Interpreter, TypeEnv map[string]TypeValue, args []Value, idx int, name string) (*rl.Sound, error) {
 	soundTI := TypeEnv["Sound"].TypeInfo
 
-	v := UnwrapFully(args[idx])
-
-	soundVal, ok := v.(*StructValue)
-	if !ok {
-		return &rl.Sound{}, NewRuntimeError(node, fmt.Sprintf("%s: argument must be rl.Sound", name))
+	sv, err := ArgStruct(node, args, idx, name, "rl.Sound")
+	if err != nil {
+		return &rl.Sound{}, err
 	}
 
-	if !TypesAssignable(i.TypeInfoFromValue(soundVal), soundTI) {
-		return &rl.Sound{}, NewRuntimeError(node, fmt.Sprintf("%s: argument must be rl.Sound", name))
+	if !TypesAssignable(i.TypeInfoFromValue(sv), soundTI) {
+		return &rl.Sound{}, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be rl.Sound", name, idx+1))
 	}
 
-	sound, ok := soundVal.Native.(*rl.Sound)
+	sound, ok := sv.Native.(*rl.Sound)
 	if !ok {
-		return &rl.Sound{}, NewRuntimeError(node, fmt.Sprintf("%s: argument must be rl.Sound", name))
+		return &rl.Sound{}, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be rl.Sound", name, idx+1))
 	}
 
 	return sound, nil
@@ -148,37 +144,35 @@ func ArgSound(node parser.Node, i *Interpreter, TypeEnv map[string]TypeValue, ar
 func ArgMusic(node parser.Node, i *Interpreter, TypeEnv map[string]TypeValue, args []Value, idx int, name string) (*rl.Music, error) {
 	musTI := TypeEnv["Music"].TypeInfo
 
-	v := UnwrapFully(args[idx])
-
-	musVal, ok := v.(*StructValue)
-	if !ok {
-		return &rl.Music{}, NewRuntimeError(node, fmt.Sprintf("%s: argument must be rl.Music", name))
+	sv, err := ArgStruct(node, args, idx, name, "rl.Music")
+	if err != nil {
+		return &rl.Music{}, err
 	}
 
-	if !TypesAssignable(i.TypeInfoFromValue(musVal), musTI) {
-		return &rl.Music{}, NewRuntimeError(node, fmt.Sprintf("%s: argument must be rl.Music", name))
+	if !TypesAssignable(i.TypeInfoFromValue(sv), musTI) {
+		return &rl.Music{}, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be rl.Music", name, idx+1))
 	}
 
-	mus, ok := musVal.Native.(*rl.Music)
+	mus, ok := sv.Native.(*rl.Music)
 	if !ok {
-		return &rl.Music{}, NewRuntimeError(node, fmt.Sprintf("%s: argument must be rl.Music", name))
+		return &rl.Music{}, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be rl.Music", name, idx+1))
 	}
 
 	return mus, nil
 }
 
 func ArgRectangle(node parser.Node, i *Interpreter, TypeEnv map[string]TypeValue, args []Value, idx int, name string) (rl.Rectangle, error) {
-	rectTI := TypeEnv["Music"].TypeInfo
+	rectTI := TypeEnv["Rectangle"].TypeInfo
 
 	v := UnwrapFully(args[idx])
 
 	rectVal, ok := v.(*StructValue)
 	if !ok {
-		return rl.Rectangle{}, NewRuntimeError(node, fmt.Sprintf("%s: argument must be rl.Music", name))
+		return rl.Rectangle{}, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be rl.Rectangle", name, idx+1))
 	}
 
 	if !TypesAssignable(i.TypeInfoFromValue(rectVal), rectTI) {
-		return rl.Rectangle{}, NewRuntimeError(node, fmt.Sprintf("%s: argument must be rl.Music", name))
+		return rl.Rectangle{}, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be rl.Rectangle", name, idx+1))
 	}
 
 	rect := rl.Rectangle{
@@ -191,26 +185,96 @@ func ArgRectangle(node parser.Node, i *Interpreter, TypeEnv map[string]TypeValue
 	return rect, nil
 }
 
-func ArgTexture(node parser.Node, i *Interpreter, TypeEnv map[string]TypeValue, args []Value, idx int, name string) (rl.Texture2D, error) {
+func ArgTexture2D(node parser.Node, i *Interpreter, TypeEnv map[string]TypeValue, args []Value, idx int, name string) (rl.Texture2D, error) {
 	texTI := TypeEnv["Texture2D"].TypeInfo
 
 	v := UnwrapFully(args[idx])
 
 	texVal, ok := v.(*StructValue)
 	if !ok {
-		return rl.Texture2D{}, NewRuntimeError(node, fmt.Sprintf("%s: argument must be rl.Music", name))
+		return rl.Texture2D{}, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be rl.Texture2D", name, idx+1))
 	}
 
 	if !TypesAssignable(i.TypeInfoFromValue(texVal), texTI) {
-		return rl.Texture2D{}, NewRuntimeError(node, fmt.Sprintf("%s: argument must be rl.Music", name))
+		return rl.Texture2D{}, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be rl.Texture2D", name, idx+1))
 	}
 
 	mus, ok := texVal.Native.(rl.Texture2D)
 	if !ok {
-		return rl.Texture2D{}, NewRuntimeError(node, fmt.Sprintf("%s: argument must be rl.Music", name))
+		return rl.Texture2D{}, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be rl.Texture2D", name, idx+1))
 	}
 
 	return mus, nil
+}
+
+func ArgCamera2D(node *parser.FuncCall, i *Interpreter, typeEnv map[string]TypeValue, args []Value, idx int, name string) (rl.Camera2D, error) {
+	camTI := typeEnv["Camera2D"].TypeInfo
+	vecTI := typeEnv["Vector2"].TypeInfo
+
+	sv, err := ArgStruct(node, args, idx, name, "rl.Camera2D")
+
+	if err != nil {
+		return rl.Camera2D{}, err
+	}
+
+	if !TypesAssignable(i.TypeInfoFromValue(sv), camTI) {
+		return rl.Camera2D{}, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be rl.Camera2D", name, idx+1))
+	}
+
+	if _, ok := sv.Fields["Offset"].(*StructValue); !ok {
+		return rl.Camera2D{}, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be rl.Camera2D", name, idx+1))
+	}
+
+	if !TypesAssignable(sv.Fields["Offset"].(*StructValue).TypeName, vecTI) {
+		return rl.Camera2D{}, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be rl.Camera2D", name, idx+1))
+	}
+
+	offsetVal := sv.Fields["Offset"].(*StructValue)
+
+	offset := rl.Vector2{
+		X: float32(offsetVal.Fields["X"].(FloatValue).V),
+		Y: float32(offsetVal.Fields["Y"].(FloatValue).V),
+	}
+
+	if _, ok := sv.Fields["Target"].(*StructValue); !ok {
+		return rl.Camera2D{}, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be rl.Camera2D", name, idx+1))
+	}
+
+	if !TypesAssignable(sv.Fields["Target"].(*StructValue).TypeName, vecTI) {
+		return rl.Camera2D{}, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be rl.Camera2D", name, idx+1))
+	}
+
+	targetVal := sv.Fields["Target"].(*StructValue)
+
+	target := rl.Vector2{
+		X: float32(targetVal.Fields["X"].(FloatValue).V),
+		Y: float32(targetVal.Fields["Y"].(FloatValue).V),
+	}
+
+	if _, ok := sv.Fields["Rotation"].(FloatValue); !ok {
+		return rl.Camera2D{}, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be rl.Camera2D", name, idx+1))
+	}
+
+	rotVal := sv.Fields["Rotation"].(FloatValue)
+
+	rot := float32(rotVal.V)
+
+	if _, ok := sv.Fields["Zoom"].(FloatValue); !ok {
+		return rl.Camera2D{}, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be rl.Camera2D", name, idx+1))
+	}
+
+	zoomVal := sv.Fields["Zoom"].(FloatValue)
+
+	zoom := float32(zoomVal.V)
+
+	cam := rl.Camera2D{
+		Offset:   offset,
+		Target:   target,
+		Rotation: rot,
+		Zoom:     zoom,
+	}
+
+	return cam, nil
 }
 
 func ColorFromValue(v Value) (rl.Color, error) {
@@ -241,6 +305,16 @@ func UnwrapVector2(v Value) (float32, float32) {
 	}
 
 	return float32(x), float32(y)
+}
+
+func MakeVector2(v rl.Vector2, TypeEnv map[string]TypeValue) Value {
+	return &StructValue{
+		TypeName: TypeEnv["Vector2"].TypeInfo,
+		Fields: map[string]Value{
+			"X": FloatValue{V: float64(v.X)},
+			"Y": FloatValue{V: float64(v.Y)},
+		},
+	}
 }
 
 func WrapFloat1(name string, fn func(float64) float64) *BuiltinFunc {
@@ -446,6 +520,96 @@ func WrapSliceStringRString(name string, fn func([]string, string) string) *Buil
 			}
 
 			return StringValue{V: fn(slice, s)}, nil
+		},
+	}
+}
+
+func WrapVector2D1(name string, TypeEnv map[string]TypeValue, fn func(rl.Vector2) rl.Vector2) *BuiltinFunc {
+	return &BuiltinFunc{
+		Name:  name,
+		Arity: 1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			v, err := ArgVector2(node, i, TypeEnv, args, 0, name)
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			return MakeVector2(fn(v), TypeEnv), nil
+		},
+	}
+}
+
+func WrapVector2D1RFloat(name string, TypeEnv map[string]TypeValue, fn func(rl.Vector2) float32) *BuiltinFunc {
+	return &BuiltinFunc{
+		Name:  name,
+		Arity: 1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			v, err := ArgVector2(node, i, TypeEnv, args, 0, name)
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			return FloatValue{V: float64(fn(v))}, nil
+		},
+	}
+}
+
+func WrapVector2D2(name string, TypeEnv map[string]TypeValue, fn func(rl.Vector2, rl.Vector2) rl.Vector2) *BuiltinFunc {
+	return &BuiltinFunc{
+		Name:  name,
+		Arity: 1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			v, err := ArgVector2(node, i, TypeEnv, args, 0, name)
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			v2, err := ArgVector2(node, i, TypeEnv, args, 1, name)
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			return MakeVector2(fn(v, v2), TypeEnv), nil
+		},
+	}
+}
+
+func WrapVector2D2RFloat(name string, TypeEnv map[string]TypeValue, fn func(rl.Vector2, rl.Vector2) float32) *BuiltinFunc {
+	return &BuiltinFunc{
+		Name:  name,
+		Arity: 1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			v, err := ArgVector2(node, i, TypeEnv, args, 0, name)
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			v2, err := ArgVector2(node, i, TypeEnv, args, 1, name)
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			return FloatValue{V: float64(fn(v, v2))}, nil
+		},
+	}
+}
+
+func WrapVector2DFloat(name string, TypeEnv map[string]TypeValue, fn func(rl.Vector2, float32) rl.Vector2) *BuiltinFunc {
+	return &BuiltinFunc{
+		Name:  name,
+		Arity: 1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			v, err := ArgVector2(node, i, TypeEnv, args, 0, name)
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			f, err := ArgFloat(node, args, 1, name)
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			return MakeVector2(fn(v, float32(f)), TypeEnv), nil
 		},
 	}
 }

@@ -1636,6 +1636,10 @@ func (i *Interpreter) evalStructLiteral(expr *parser.CompositeLiteral, typeInfo 
 		actualTI := UnwrapAlias(i.TypeInfoFromValue(v))
 		expectedTI := UnwrapAlias(expectedType)
 
+		v = i.promoteValueToType(v, expectedTI)
+
+		actualTI = UnwrapAlias(i.TypeInfoFromValue(v))
+
 		if !TypesAssignable(actualTI, expectedTI) {
 			return NilValue{}, NewRuntimeError(
 				expr,
@@ -2423,30 +2427,27 @@ func (i *Interpreter) evalMemberExpression(node parser.Expression, left Value, f
 		if structTI.Kind == TypeNamed {
 			structTI = structTI.Underlying
 		}
-
 		if structTI.Opaque {
 			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("type '%s' is opaque and its fields cannot be accessed", structTI.Name))
 		}
-
 		val, ok := obj.Fields[field]
 		if !ok {
 			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unknown field %s", field))
 		}
-
 		expectedType, ok := structTI.Fields[field]
 		if !ok {
 			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unknown field %s", field))
 		}
-
+		// skip type check if type info is missing
 		actualTI := UnwrapAlias(i.TypeInfoFromValue(val))
 		expectedTI := UnwrapAlias(expectedType)
-
-		if !TypesAssignable(actualTI, expectedTI) {
-			return NilValue{}, NewRuntimeError(node,
-				fmt.Sprintf("field '%s' expected '%s' but got '%s'",
-					field, expectedType.Name, actualTI.Name))
+		if actualTI != nil && expectedTI != nil {
+			if !TypesAssignable(actualTI, expectedTI) {
+				return NilValue{}, NewRuntimeError(node,
+					fmt.Sprintf("field '%s' expected '%s' but got '%s'",
+						field, expectedType.Name, actualTI.Name))
+			}
 		}
-
 		return val, nil
 
 	case TypeValue:
@@ -2879,6 +2880,8 @@ func evalStructInfix(node *parser.InfixExpression, left *StructValue, op string,
 }
 
 func (i *Interpreter) evalPrefix(node *parser.PrefixExpression, op string, right Value) (Value, error) {
+	right = UnwrapFully(right)
+
 	switch op {
 
 	case "!":
