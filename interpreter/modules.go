@@ -161,6 +161,26 @@ func ArgMusic(node parser.Node, i *Interpreter, TypeEnv map[string]TypeValue, ar
 	return mus, nil
 }
 
+func ArgFont(node parser.Node, i *Interpreter, TypeEnv map[string]TypeValue, args []Value, idx int, name string) (rl.Font, error) {
+	fontTI := TypeEnv["Font"].TypeInfo
+
+	sv, err := ArgStruct(node, args, idx, name, "rl.Font")
+	if err != nil {
+		return rl.Font{}, err
+	}
+
+	if !TypesAssignable(i.TypeInfoFromValue(sv), fontTI) {
+		return rl.Font{}, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be rl.Font", name, idx+1))
+	}
+
+	font, ok := sv.Native.(rl.Font)
+	if !ok {
+		return rl.Font{}, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be rl.Font", name, idx+1))
+	}
+
+	return font, nil
+}
+
 func ArgRectangle(node parser.Node, i *Interpreter, TypeEnv map[string]TypeValue, args []Value, idx int, name string) (rl.Rectangle, error) {
 	rectTI := TypeEnv["Rectangle"].TypeInfo
 

@@ -103,6 +103,15 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		},
 	}
 
+	TypeEnv["Font"] = interpreter.TypeValue{
+		TypeInfo: &interpreter.TypeInfo{
+			Name:   "Font",
+			Kind:   interpreter.TypeStruct,
+			Fields: nil,
+			Opaque: true,
+		},
+	}
+
 	env.Define("SetWindowFlags", &interpreter.BuiltinFunc{
 		Name:  "SetWindowFlags",
 		Arity: 1,
@@ -724,6 +733,47 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		},
 	}, false)
 
+	env.Define("LoadFont", &interpreter.BuiltinFunc{
+		Name:  "LoadFont",
+		Arity: 1,
+		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
+			path, err := interpreter.ArgString(node, args, 0, "rl.LoadFont")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			return &interpreter.StructValue{
+				TypeName: TypeEnv["Font"].TypeInfo,
+				Native:   rl.LoadFont(path),
+			}, nil
+		},
+	}, false)
+
+	env.Define("UnloadFont", &interpreter.BuiltinFunc{
+		Name:  "UnloadFont",
+		Arity: 1,
+		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
+			font, err := interpreter.ArgFont(node, i, TypeEnv, args, 0, "rl.UnloadFont")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			rl.UnloadFont(font)
+			return interpreter.NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("GetFontDefault", &interpreter.BuiltinFunc{
+		Name:  "GetFontDefault",
+		Arity: 0,
+		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
+			return &interpreter.StructValue{
+				TypeName: TypeEnv["Font"].TypeInfo,
+				Native:   rl.GetFontDefault(),
+			}, nil
+		},
+	}, false)
+
 	env.Define("LoadTexture", &interpreter.BuiltinFunc{
 		Name:  "LoadTexture",
 		Arity: 1,
@@ -1342,6 +1392,153 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		},
 	}, false)
 
+	env.Define("DrawTextEx", &interpreter.BuiltinFunc{
+		Name:  "DrawTextEx",
+		Arity: 6,
+		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
+			fontVal, err := interpreter.ArgFont(node, i, TypeEnv, args, 0, "rl.DrawTextEx")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			txtVal, err := interpreter.ArgString(node, args, 1, "rl.DrawTextEx")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			pv, err := interpreter.ArgVector2(node, i, TypeEnv, args, 2, "rl.DrawTextEx")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			sizeVal, err := interpreter.ArgInt(node, args, 3, "rl.DrawTextEx")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			spaceVal, err := interpreter.ArgInt(node, args, 4, "rl.DrawTextEx")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			col, err := interpreter.ArgColor(node, TypeEnv, args, 5, "rl.DrawTextEx")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			font := fontVal
+			txt := txtVal
+			size := float32(sizeVal)
+			space := float32(spaceVal)
+
+			rl.DrawTextEx(font, txt, pv, size, space, col)
+			return interpreter.NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("DrawTextPro", &interpreter.BuiltinFunc{
+		Name:  "DrawTextPro",
+		Arity: 8,
+		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
+			fontVal, err := interpreter.ArgFont(node, i, TypeEnv, args, 0, "rl.DrawTextPro")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			txtVal, err := interpreter.ArgString(node, args, 1, "rl.DrawTextPro")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			pv, err := interpreter.ArgVector2(node, i, TypeEnv, args, 2, "rl.DrawTextPro")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			ov, err := interpreter.ArgVector2(node, i, TypeEnv, args, 3, "rl.DrawTextPro")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			rotVal, err := interpreter.ArgFloat(node, args, 4, "rl.DrawTextPro")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			sizeVal, err := interpreter.ArgInt(node, args, 5, "rl.DrawTextPro")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			spaceVal, err := interpreter.ArgInt(node, args, 6, "rl.DrawTextPro")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			col, err := interpreter.ArgColor(node, TypeEnv, args, 7, "rl.DrawTextPro")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			font := fontVal
+			txt := txtVal
+			rot := float32(rotVal)
+			size := float32(sizeVal)
+			space := float32(spaceVal)
+
+			rl.DrawTextPro(font, txt, pv, ov, rot, size, space, col)
+			return interpreter.NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("MeasureText", &interpreter.BuiltinFunc{
+		Name:  "MeasureText",
+		Arity: 4,
+		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
+			text, err := interpreter.ArgString(node, args, 0, "rl.MeasureText")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			size, err := interpreter.ArgInt(node, args, 1, "rl.MeasureText")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			res := rl.MeasureText(text, int32(size))
+			return interpreter.IntValue{V: int(res)}, nil
+		},
+	}, false)
+
+	env.Define("MeasureTextEx", &interpreter.BuiltinFunc{
+		Name:  "MeasureTextEx",
+		Arity: 4,
+		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
+			font, err := interpreter.ArgFont(node, i, TypeEnv, args, 0, "rl.MeasureTextEx")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			text, err := interpreter.ArgString(node, args, 1, "rl.MeasureTextEx")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			size, err := interpreter.ArgFloat(node, args, 2, "rl.MeasureTextEx")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			spacing, err := interpreter.ArgFloat(node, args, 3, "rl.MeasureTextEx")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			result := rl.MeasureTextEx(font, text, float32(size), float32(spacing))
+			return interpreter.MakeVector2(result, TypeEnv), nil
+		},
+	}, false)
+
 	env.Define("DrawLine", &interpreter.BuiltinFunc{
 		Name:  "DrawLine",
 		Arity: 3,
@@ -1362,6 +1559,32 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 			}
 
 			rl.DrawLineV(pv, sv, col)
+			return interpreter.NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("DrawLineEx", &interpreter.BuiltinFunc{
+		Name:  "DrawLineEx",
+		Arity: 4,
+		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
+			pv, err := interpreter.ArgVector2(node, i, TypeEnv, args, 0, "rl.DrawLineEx")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			sv, err := interpreter.ArgVector2(node, i, TypeEnv, args, 1, "rl.DrawLineEx")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			thick, err := interpreter.ArgFloat(node, args, 2, "rl.DrawLineEx")
+
+			col, err := interpreter.ArgColor(node, TypeEnv, args, 3, "rl.DrawLineEx")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			rl.DrawLineEx(pv, sv, float32(thick), col)
 			return interpreter.NilValue{}, nil
 		},
 	}, false)
