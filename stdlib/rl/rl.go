@@ -72,6 +72,15 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		},
 	}
 
+	TypeEnv["RenderTexture2D"] = interpreter.TypeValue{
+		TypeInfo: &interpreter.TypeInfo{
+			Name:   "RenderTexture2D",
+			Kind:   interpreter.TypeStruct,
+			Fields: nil,
+			Opaque: true,
+		},
+	}
+
 	TypeEnv["Camera2D"] = interpreter.TypeValue{
 		TypeInfo: &interpreter.TypeInfo{
 			Name: "Camera2D",
@@ -206,7 +215,6 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 			case 0:
 				rl.BeginDrawing()
 				rl.ClearBackground(rl.Black)
-
 				return interpreter.NilValue{}, nil
 			case 1:
 				col, err := interpreter.ArgColor(node, TypeEnv, args, 0, "rl.Clear")
@@ -770,6 +778,80 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 			return &interpreter.StructValue{
 				TypeName: TypeEnv["Font"].TypeInfo,
 				Native:   rl.GetFontDefault(),
+			}, nil
+		},
+	}, false)
+
+	env.Define("LoadRenderTexture", &interpreter.BuiltinFunc{
+		Name:  "LoadRenderTexture",
+		Arity: 2,
+		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
+			w, err := interpreter.ArgInt(node, args, 0, "rl.LoadRenderTexture")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			h, err := interpreter.ArgInt(node, args, 1, "rl.LoadRenderTexture")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			return &interpreter.StructValue{
+				TypeName: TypeEnv["RenderTexture2D"].TypeInfo,
+				Native:   rl.LoadRenderTexture(int32(w), int32(h)),
+			}, nil
+		},
+	}, false)
+
+	env.Define("UnloadRenderTexture", &interpreter.BuiltinFunc{
+		Name:  "UnloadRenderTexture",
+		Arity: 1,
+		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
+			ren, err := interpreter.ArgRenderTexture2D(node, i, TypeEnv, args, 0, "rl.UnloadRenderTexture")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			rl.UnloadRenderTexture(ren)
+			return interpreter.NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("BeginTextureMode", &interpreter.BuiltinFunc{
+		Name:  "BeginTextureMode",
+		Arity: 1,
+		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
+			rt, err := interpreter.ArgRenderTexture2D(node, i, TypeEnv, args, 0, "rl.BeginTextureMode")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			rl.BeginTextureMode(rt)
+			return interpreter.NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("EndTextureMode", &interpreter.BuiltinFunc{
+		Name:  "EndTextureMode",
+		Arity: 0,
+		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
+			rl.EndTextureMode()
+			return interpreter.NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("GetTextureFromRender", &interpreter.BuiltinFunc{
+		Name:  "GetTextureFromRender",
+		Arity: 1,
+		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
+			rt, err := interpreter.ArgRenderTexture2D(node, i, TypeEnv, args, 0, "rl.GetTextureFromRender")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			return &interpreter.StructValue{
+				TypeName: TypeEnv["RenderTexture2D"].TypeInfo,
+				Native:   rt.Texture,
 			}, nil
 		},
 	}, false)

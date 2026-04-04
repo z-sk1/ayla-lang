@@ -219,12 +219,34 @@ func ArgTexture2D(node parser.Node, i *Interpreter, TypeEnv map[string]TypeValue
 		return rl.Texture2D{}, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be rl.Texture2D", name, idx+1))
 	}
 
-	mus, ok := texVal.Native.(rl.Texture2D)
+	tex, ok := texVal.Native.(rl.Texture2D)
 	if !ok {
 		return rl.Texture2D{}, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be rl.Texture2D", name, idx+1))
 	}
 
-	return mus, nil
+	return tex, nil
+}
+
+func ArgRenderTexture2D(node parser.Node, i *Interpreter, TypeEnv map[string]TypeValue, args []Value, idx int, name string) (rl.RenderTexture2D, error) {
+	texTI := TypeEnv["RenderTexture2D"].TypeInfo
+
+	v := UnwrapFully(args[idx])
+
+	texVal, ok := v.(*StructValue)
+	if !ok {
+		return rl.RenderTexture2D{}, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be rl.RenderTexture2D", name, idx+1))
+	}
+
+	if !TypesAssignable(i.TypeInfoFromValue(texVal), texTI) {
+		return rl.RenderTexture2D{}, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be rl.RenderTexture2D", name, idx+1))
+	}
+
+	tex, ok := texVal.Native.(rl.RenderTexture2D)
+	if !ok {
+		return rl.RenderTexture2D{}, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be rl.RenderTexture2D", name, idx+1))
+	}
+
+	return tex, nil
 }
 
 func ArgCamera2D(node *parser.FuncCall, i *Interpreter, typeEnv map[string]TypeValue, args []Value, idx int, name string) (rl.Camera2D, error) {
