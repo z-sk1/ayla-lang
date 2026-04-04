@@ -1827,6 +1827,113 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		},
 	}, false)
 
+	env.Define("DrawPoly", &interpreter.BuiltinFunc{
+		Name:  "DrawPoly",
+		Arity: 5,
+		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
+			center, err := interpreter.ArgVector2(node, i, TypeEnv, args, 0, "rl.DrawPoly")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			sides, err := interpreter.ArgInt(node, args, 1, "rl.DrawPoly")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			radius, err := interpreter.ArgFloat(node, args, 2, "rl.DrawPoly")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			rot, err := interpreter.ArgFloat(node, args, 3, "rl.DrawPoly")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			col, err := interpreter.ArgColor(node, TypeEnv, args, 4, "rl.DrawPoly")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			rl.DrawPoly(center, int32(sides), float32(radius), float32(rot), col)
+			return interpreter.NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("DrawPolyLines", &interpreter.BuiltinFunc{
+		Name:  "DrawPolyLines",
+		Arity: 5,
+		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
+			center, err := interpreter.ArgVector2(node, i, TypeEnv, args, 0, "rl.DrawPolyLines")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			sides, err := interpreter.ArgInt(node, args, 1, "rl.DrawPolyLines")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			radius, err := interpreter.ArgFloat(node, args, 2, "rl.DrawPolyLines")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			rot, err := interpreter.ArgFloat(node, args, 3, "rl.DrawPolyLines")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			col, err := interpreter.ArgColor(node, TypeEnv, args, 4, "rl.DrawPolyLines")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			rl.DrawPolyLines(center, int32(sides), float32(radius), float32(rot), col)
+			return interpreter.NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("DrawPolyLinesEx", &interpreter.BuiltinFunc{
+		Name:  "DrawPolyLinesEx",
+		Arity: 6,
+		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
+			center, err := interpreter.ArgVector2(node, i, TypeEnv, args, 0, "rl.DrawPolyLinesEx")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			sides, err := interpreter.ArgInt(node, args, 1, "rl.DrawPolyLinesEx")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			radius, err := interpreter.ArgFloat(node, args, 2, "rl.DrawPolyLinesEx")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			rot, err := interpreter.ArgFloat(node, args, 3, "rl.DrawPolyLinesEx")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			thick, err := interpreter.ArgFloat(node, args, 4, "rl.DrawPolyLinesEx")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			col, err := interpreter.ArgColor(node, TypeEnv, args, 5, "rl.DrawPolyLinesEx")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			rl.DrawPolyLinesEx(center, int32(sides), float32(radius), float32(rot), float32(thick), col)
+			return interpreter.NilValue{}, nil
+		},
+	}, false)
+
 	env.Define("IsKeyDown", &interpreter.BuiltinFunc{
 		Name:  "IsKeyDown",
 		Arity: 1,

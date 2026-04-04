@@ -345,11 +345,11 @@ type BuiltinFunc struct {
 	Fn    func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error)
 }
 
-func (b BuiltinFunc) Type() ValueType {
+func (b *BuiltinFunc) Type() ValueType {
 	return FUNCTION
 }
 
-func (b BuiltinFunc) String() string {
+func (b *BuiltinFunc) String() string {
 	return fmt.Sprintf("%s()", b.Name)
 }
 
