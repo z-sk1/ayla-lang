@@ -443,10 +443,10 @@ func (i *Interpreter) registerBuiltins() {
 		Arity: -1,
 		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
 			if len(args) == 0 {
-				return NilValue{}, NewRuntimeError(node, "putf: expected at least one argument")
+				return NilValue{}, NewRuntimeError(node, "sputf: expected at least one argument")
 			}
 
-			format, err := ArgString(node, args, 0, "putf")
+			format, err := ArgString(node, args, 0, "sputf")
 			if err != nil {
 				return NilValue{}, err
 			}
@@ -457,6 +457,28 @@ func (i *Interpreter) registerBuiltins() {
 			}
 
 			return StringValue{V: fmt.Sprintf(format, goArgs...)}, nil
+		},
+	}
+	
+	env.builtins["errorf"] = &BuiltinFunc{
+		Name:  "sputf",
+		Arity: -1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			if len(args) == 0 {
+				return NilValue{}, NewRuntimeError(node, "errorf: expected at least one argument")
+			}
+
+			format, err := ArgString(node, args, 0, "errorf")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			goArgs := []any{}
+			for _, v := range args[1:] {
+				goArgs = append(goArgs, aylaValueToGoValue(v))
+			}
+
+			return Error{Message: fmt.Errorf(format, goArgs...).Error()}, nil
 		},
 	}
 
