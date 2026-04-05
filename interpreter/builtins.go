@@ -290,7 +290,7 @@ func (i *Interpreter) registerBuiltins() {
 				return NilValue{}, err
 			}
 
-			delete(val.(MapValue).Entries, mapKey(key))
+			delete(val.(MapValue).Entries, MapKey(key))
 			i.Env.Set(ident.Value, val)
 			return NilValue{}, nil
 		},

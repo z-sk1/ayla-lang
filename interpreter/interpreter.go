@@ -1831,8 +1831,8 @@ func (i *Interpreter) evalMapLiteral(expr *parser.CompositeLiteral, expected *Ty
 			return NilValue{}, err
 		}
 
-		elems[mapKey(k)] = v
-		keys[mapKey(k)] = k
+		elems[MapKey(k)] = v
+		keys[MapKey(k)] = k
 	}
 
 	return MapValue{
@@ -2243,7 +2243,7 @@ func (i *Interpreter) evalIndexExpression(node parser.Expression, left, idx Valu
 			}
 		}
 
-		val, ok := mv.Entries[mapKey(idx)]
+		val, ok := mv.Entries[MapKey(idx)]
 		if !ok {
 			return NilValue{}, nil
 		}

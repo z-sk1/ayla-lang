@@ -209,12 +209,12 @@ func (m MapIndexTarget) Set(i *Interpreter, val Value) error {
 		return fmt.Errorf("map value %s", err)
 	}
 
-	m.Map.Entries[mapKey(key)] = newVal
+	m.Map.Entries[MapKey(key)] = newVal
 	return nil
 }
 
 func (m MapIndexTarget) Get(i *Interpreter) (Value, error) {
-	if val, ok := m.Map.Entries[mapKey(m.Key)]; ok {
+	if val, ok := m.Map.Entries[MapKey(m.Key)]; ok {
 		return val, nil
 	}
 
@@ -510,7 +510,7 @@ func (m MapValue) String() string {
 
 	parts := make([]string, 0, len(keys))
 	for _, k := range keys {
-		v := m.Entries[mapKey(k)]
+		v := m.Entries[MapKey(k)]
 		parts = append(parts, fmt.Sprintf("%s: %s", k.String(), v.String()))
 	}
 

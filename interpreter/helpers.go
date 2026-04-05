@@ -692,7 +692,7 @@ func (i *Interpreter) tickLifetimes() {
 	}
 }
 
-func mapKey(v Value) string {
+func MapKey(v Value) string {
 	v = UnwrapFully(v)
 	switch x := v.(type) {
 

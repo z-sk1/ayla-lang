@@ -80,6 +80,9 @@ func ArgArray(node parser.Node, args []Value, i int, name string, slice string) 
 	v := UnwrapFully(args[i])
 	av, ok := v.(ArrayValue)
 	if !ok {
+		if slice == "" {
+			return ArrayValue{}, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be an array or slice", name, i+1))
+		}
 		return ArrayValue{}, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be a []%s", name, i+1, slice))
 	}
 	return av, nil
