@@ -252,6 +252,15 @@ func ArgRenderTexture2D(node parser.Node, i *Interpreter, TypeEnv map[string]Typ
 	return tex, nil
 }
 
+func toFloat32(i *Interpreter, v Value) (float32, bool) {
+	fv := i.promoteValueToType(v, i.TypeEnv["float"].TypeInfo)
+	f, ok := fv.(FloatValue)
+	if !ok {
+		return 0, false
+	}
+	return float32(f.V), true
+}
+
 func ArgCamera2D(node *parser.FuncCall, i *Interpreter, typeEnv map[string]TypeValue, args []Value, idx int, name string) (rl.Camera2D, error) {
 	camTI := typeEnv["Camera2D"].TypeInfo
 	vecTI := typeEnv["Vector2"].TypeInfo
@@ -276,9 +285,19 @@ func ArgCamera2D(node *parser.FuncCall, i *Interpreter, typeEnv map[string]TypeV
 
 	offsetVal := sv.Fields["Offset"].(*StructValue)
 
+	x, ok := toFloat32(i, offsetVal.Fields["X"])
+	if !ok {
+		return rl.Camera2D{}, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be rl.Camera2D", name, idx+1))
+	}
+
+	y, ok := toFloat32(i, offsetVal.Fields["Y"])
+	if !ok {
+		return rl.Camera2D{}, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be rl.Camera2D", name, idx+1))
+	}
+
 	offset := rl.Vector2{
-		X: float32(offsetVal.Fields["X"].(FloatValue).V),
-		Y: float32(offsetVal.Fields["Y"].(FloatValue).V),
+		X: x,
+		Y: y,
 	}
 
 	if _, ok := sv.Fields["Target"].(*StructValue); !ok {
@@ -291,26 +310,41 @@ func ArgCamera2D(node *parser.FuncCall, i *Interpreter, typeEnv map[string]TypeV
 
 	targetVal := sv.Fields["Target"].(*StructValue)
 
-	target := rl.Vector2{
-		X: float32(targetVal.Fields["X"].(FloatValue).V),
-		Y: float32(targetVal.Fields["Y"].(FloatValue).V),
+	x, ok = toFloat32(i, targetVal.Fields["X"])
+	if !ok {
+		return rl.Camera2D{}, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be rl.Camera2D", name, idx+1))
 	}
 
+	y, ok = toFloat32(i, targetVal.Fields["Y"])
+	if !ok {
+		return rl.Camera2D{}, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be rl.Camera2D", name, idx+1))
+	}
+
+	target := rl.Vector2{
+		X: x,
+		Y: y,
+	}
+
+	rotVal := i.promoteValueToType(sv.Fields["Rotation"], i.TypeEnv["float"].TypeInfo)
 	if _, ok := sv.Fields["Rotation"].(FloatValue); !ok {
 		return rl.Camera2D{}, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be rl.Camera2D", name, idx+1))
 	}
 
-	rotVal := sv.Fields["Rotation"].(FloatValue)
+	rot, ok := toFloat32(i, rotVal)
+	if !ok {
+		return rl.Camera2D{}, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be rl.Camera2D", name, idx+1))
+	}
 
-	rot := float32(rotVal.V)
+	zoomVal := i.promoteValueToType(sv.Fields["Zoom"], i.TypeEnv["float"].TypeInfo)
 
 	if _, ok := sv.Fields["Zoom"].(FloatValue); !ok {
 		return rl.Camera2D{}, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be rl.Camera2D", name, idx+1))
 	}
 
-	zoomVal := sv.Fields["Zoom"].(FloatValue)
-
-	zoom := float32(zoomVal.V)
+	zoom, ok := toFloat32(i, zoomVal)
+	if !ok {
+		return rl.Camera2D{}, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be rl.Camera2D", name, idx+1))
+	}
 
 	cam := rl.Camera2D{
 		Offset:   offset,

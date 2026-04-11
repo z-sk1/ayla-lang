@@ -313,6 +313,7 @@ type Func struct {
 	Body     []parser.Statement
 	Env      *Environment
 	TypeName *TypeInfo
+	TypeEnv  map[string]TypeValue
 }
 
 func (f Func) Type() ValueType {
@@ -700,9 +701,6 @@ func (i *Interpreter) resolveTypeNode(t parser.TypeNode) (*TypeInfo, error) {
 
 	case *parser.QualifiedType:
 		modVal, ok, _ := i.Env.Get(tn.Module.Value)
-		if !ok {
-			return nil, NewRuntimeError(tn, fmt.Sprintf("unknown module '%s'", tn.Module.Value))
-		}
 
 		mod, ok := modVal.(ModuleValue)
 		if !ok {
@@ -1124,7 +1122,30 @@ func (i *Interpreter) defaultValueFromTypeInfo(node parser.Node, ti *TypeInfo) (
 	case TypeInterface:
 		return NilValue{}, nil
 	case TypeNamed:
-		return i.defaultValueFromTypeInfo(node, ti.Underlying)
+		v, err := i.defaultValueFromTypeInfo(node, ti.Underlying)
+		if err != nil {
+			return NilValue{}, err
+		}
+
+		switch val := v.(type) {
+
+		case *StructValue:
+			val.TypeName = ti
+			return val, nil
+
+		case ArrayValue:
+			val.ElemType = ti.Underlying.Elem
+			return NamedValue{
+				TypeName: ti,
+				Value:    val,
+			}, nil
+
+		default:
+			return NamedValue{
+				TypeName: ti,
+				Value:    v,
+			}, nil
+		}
 	default:
 		return NilValue{}, NewRuntimeError(node, "cannot create default value for "+ti.Name)
 	}

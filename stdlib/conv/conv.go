@@ -22,7 +22,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "Int",
 		Arity: 1,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			v := interpreter.UnwrapUntyped(args[0])
+			v := interpreter.UnwrapFully(args[0])
 
 			ti := interpreter.UnwrapAlias(i.TypeInfoFromValue(v))
 
@@ -47,7 +47,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 					return interpreter.TupleValue{
 						Values: []interpreter.Value{
 							interpreter.IntValue{V: n},
-							interpreter.Error{Message: fmt.Sprintf("parse.Int: %s", err.Error())},
+							interpreter.Error{Message: fmt.Sprintf("conv.Int: %s", err.Error())},
 						},
 					}, nil
 				}
@@ -75,7 +75,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 					},
 				}, nil
 			default:
-				return interpreter.NilValue{}, interpreter.NewRuntimeError(node, "parse.Int: cannot convert to int")
+				return interpreter.NilValue{}, interpreter.NewRuntimeError(node, fmt.Sprintf("conv.Int: cannot convert type '%s' to int", i.TypeInfoFromValue(args[0]).Name))
 			}
 		},
 	}, false)
@@ -84,7 +84,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "Float",
 		Arity: 1,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			v := interpreter.UnwrapUntyped(args[0])
+			v := interpreter.UnwrapFully(args[0])
 
 			ti := interpreter.UnwrapAlias(i.TypeInfoFromValue(v))
 
@@ -109,7 +109,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 					return interpreter.TupleValue{
 						Values: []interpreter.Value{
 							interpreter.NilValue{},
-							interpreter.Error{Message: fmt.Sprintf("parse.Float: %s", err.Error())},
+							interpreter.Error{Message: fmt.Sprintf("conv.Float: %s", err.Error())},
 						},
 					}, nil
 				}
@@ -137,7 +137,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 					},
 				}, nil
 			default:
-				return interpreter.NilValue{}, interpreter.NewRuntimeError(node, "parse.Float: cannot convert to float")
+				return interpreter.NilValue{}, interpreter.NewRuntimeError(node, fmt.Sprintf("conv.Float: cannot convert type '%s' to float", i.TypeInfoFromValue(args[0]).Name))
 			}
 		},
 	}, false)
@@ -146,7 +146,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "String",
 		Arity: 1,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			v := interpreter.UnwrapUntyped(args[0])
+			v := interpreter.UnwrapFully(args[0])
 
 			ti := interpreter.UnwrapAlias(i.TypeInfoFromValue(v))
 
@@ -167,7 +167,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 
 				return interpreter.StringValue{V: "no"}, nil
 			default:
-				return interpreter.NilValue{}, interpreter.NewRuntimeError(node, "parse.String: cannot convert to string")
+				return interpreter.NilValue{}, interpreter.NewRuntimeError(node, fmt.Sprintf("conv.String: cannot convert type '%s' to string", i.TypeInfoFromValue(args[0]).Name))
 			}
 		},
 	}, false)
@@ -176,7 +176,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "Bool",
 		Arity: 1,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			v := interpreter.UnwrapUntyped(args[0])
+			v := interpreter.UnwrapFully(args[0])
 
 			ti := interpreter.UnwrapAlias(i.TypeInfoFromValue(v))
 
@@ -242,16 +242,16 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 				if s == "true" {
 					return interpreter.TupleValue{
 						Values: []interpreter.Value{
+							interpreter.BoolValue{V: true},
 							interpreter.NilValue{},
-							interpreter.Error{Message: "parse.Bool: invalid boolean string"},
 						},
 					}, nil
 				}
 				if s == "false" {
 					return interpreter.TupleValue{
 						Values: []interpreter.Value{
+							interpreter.BoolValue{V: false},
 							interpreter.NilValue{},
-							interpreter.Error{Message: "parse.Bool: invalid boolean string"},
 						},
 					}, nil
 				}
@@ -261,7 +261,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 					return interpreter.TupleValue{
 						Values: []interpreter.Value{
 							interpreter.NilValue{},
-							interpreter.Error{Message: "parse.Bool: invalid boolean string"},
+							interpreter.Error{Message: "conv.Bool: invalid boolean string"},
 						},
 					}, nil
 				}
@@ -273,7 +273,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 					},
 				}, nil
 			default:
-				return interpreter.NilValue{}, interpreter.NewRuntimeError(node, "parse.Bool: cannot convert to bool")
+				return interpreter.NilValue{}, interpreter.NewRuntimeError(node, fmt.Sprintf("conv.Bool: cannot convert type '%s' to bool", i.TypeInfoFromValue(args[0]).Name))
 			}
 		},
 	}, false)

@@ -459,7 +459,7 @@ func (i *Interpreter) registerBuiltins() {
 			return StringValue{V: fmt.Sprintf(format, goArgs...)}, nil
 		},
 	}
-	
+
 	env.builtins["errorf"] = &BuiltinFunc{
 		Name:  "sputf",
 		Arity: -1,
@@ -493,7 +493,7 @@ func (i *Interpreter) registerBuiltins() {
 				msg = v.V
 			case InterfaceValue:
 				if TypesAssignable(v.TypeInfo, i.TypeEnv["error"].TypeInfo) {
-					msg = v.Value.(Error).Error()
+					msg = v.Value.(InterfaceValue).Value.(Error).Error()
 				}
 			default:
 				msg = v.String()

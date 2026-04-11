@@ -74,12 +74,15 @@ func (i *Interpreter) resolveModule(name string) (string, error) {
 
 	wd, _ := os.Getwd()
 
+	ud, _ := os.UserHomeDir()
+
 	searchPaths := []string{
-		i.currentDir,
 		filepath.Join(i.currentDir, name),
 		filepath.Join(i.currentDir, "lib"),
+		i.currentDir,
 		filepath.Join(i.currentDir, "lib", name),
 		filepath.Join(wd, "lib", name),
+		filepath.Join(ud, ".ayla", "lib", name),
 	}
 
 	searchPaths = append(searchPaths, i.modulePaths...)
@@ -132,14 +135,27 @@ func (i *Interpreter) loadModule(name string) (Value, error) {
 	modInterp := NewWithEnv(Env, path)
 	modInterp.currentDir = filepath.Dir(path)
 
+	if err := modInterp.RegisterForward(program); err != nil {
+		return NilValue{}, err
+	}
+
+	if err := modInterp.ResolveTypes(program); err != nil {
+		return NilValue{}, err
+	}
+
 	_, err = modInterp.EvalStatements(program)
 	if err != nil {
 		return NilValue{}, err
 	}
 
 	module := ModuleValue{
-		Name: name,
-		Env:  Env,
+		Name:    name,
+		Env:     Env,
+		TypeEnv: modInterp.TypeEnv,
+	}
+
+	for name, typ := range modInterp.TypeEnv {
+		i.TypeEnv[name] = typ
 	}
 
 	i.Env.Define(name, module, false)
@@ -253,6 +269,7 @@ func (i *Interpreter) RegisterForward(stmts []parser.Statement) error {
 				Body:     stmt.Body,
 				Env:      i.Env,
 				TypeName: typeInfo,
+				TypeEnv:  i.TypeEnv,
 			})
 
 		case *parser.FuncStatement:
@@ -298,7 +315,7 @@ func (i *Interpreter) RegisterForward(stmts []parser.Statement) error {
 				Params:  paramTypes,
 			}
 
-			i.Env.Define(stmt.Name.Value, &Func{Params: stmt.Params, Body: stmt.Body, TypeName: typeInfo, Env: i.Env}, false)
+			i.Env.Define(stmt.Name.Value, &Func{Params: stmt.Params, Body: stmt.Body, TypeName: typeInfo, Env: i.Env, TypeEnv: i.TypeEnv}, false)
 		}
 	}
 
@@ -445,9 +462,11 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 
 	case *parser.VarStatementBlock:
 		for _, decl := range stmt.Decls {
-			i.EvalStatement(decl)
+			_, err := i.EvalStatement(decl)
+			if err != nil {
+				return SignalNone{}, err
+			}
 		}
-
 		return SignalNone{}, nil
 
 	case *parser.VarStatementNoKeyword:
@@ -678,7 +697,10 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 
 	case *parser.ConstStatementBlock:
 		for _, decl := range stmt.Decls {
-			i.EvalStatement(decl)
+			_, err := i.EvalStatement(decl)
+			if err != nil {
+				return SignalNone{}, err
+			}
 		}
 
 		return SignalNone{}, nil
@@ -1672,9 +1694,6 @@ func (i *Interpreter) evalStructLiteral(expr *parser.CompositeLiteral, typeInfo 
 	}
 
 	valueType := typeInfo
-	if typeInfo.Kind == TypeStruct {
-		valueType = structType
-	}
 
 	v := &StructValue{
 		TypeName: valueType,
@@ -1874,7 +1893,7 @@ func (i *Interpreter) evalTypeCast(target *TypeInfo, arg parser.Expression, node
 		case FloatValue:
 			val = int(v.V)
 		default:
-			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("int type cast does not support %s, try the function toInt to parse non-numeric types", string(v.Type())))
+			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("%s type cast does not support %s", target.Name, i.TypeInfoFromValue(v).Name))
 		}
 
 		return IntValue{V: val}, nil
@@ -1887,7 +1906,7 @@ func (i *Interpreter) evalTypeCast(target *TypeInfo, arg parser.Expression, node
 		case FloatValue:
 			val = v.V
 		default:
-			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("float type cast does not support %s, try the function toFloat to parse non-numeric types", string(v.Type())))
+			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("%s type cast does not support %s", target.Name, i.TypeInfoFromValue(v).Name))
 		}
 
 		return FloatValue{V: val}, nil
@@ -1896,7 +1915,7 @@ func (i *Interpreter) evalTypeCast(target *TypeInfo, arg parser.Expression, node
 			return s, nil
 		}
 
-		return NilValue{}, NewRuntimeError(node, fmt.Sprintf("string cast does not support %s, try the function toString to parse other types", string(v.Type())))
+		return NilValue{}, NewRuntimeError(node, fmt.Sprintf("%s type cast does not support %s", target.Name, i.TypeInfoFromValue(v).Name))
 	case TypeBool:
 		var val bool
 
@@ -1904,7 +1923,7 @@ func (i *Interpreter) evalTypeCast(target *TypeInfo, arg parser.Expression, node
 		case BoolValue:
 			val = v.V
 		default:
-			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("bool type cast does not support %s, try the function toBool to parse other types", string(v.Type())))
+			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("%s type cast does not support %s", target.Name, i.TypeInfoFromValue(v).Name))
 		}
 
 		return BoolValue{V: val}, nil
@@ -1914,7 +1933,7 @@ func (i *Interpreter) evalTypeCast(target *TypeInfo, arg parser.Expression, node
 			return a, nil
 		}
 
-		return NilValue{}, NewRuntimeError(node, fmt.Sprintf("array cast does not support %s, try the function toArr to construct arrays", string(v.Type())))
+		return NilValue{}, NewRuntimeError(node, fmt.Sprintf("%s type cast does not support %s", target.Name, i.TypeInfoFromValue(v).Name))
 	case TypeNamed:
 		base := target.Underlying
 
@@ -2102,10 +2121,16 @@ func (i *Interpreter) callFunction(fn *Func, args []Value, callNode parser.Node)
 	prevEnv := i.Env
 	i.Env = newEnv
 
+	prevTypeEnv := i.TypeEnv
+	if fn.TypeEnv != nil {
+		i.TypeEnv = fn.TypeEnv
+	}
+
 	sig, err := i.EvalBlock(fn.Body, false)
 
 	deferErr := i.runDefers(newEnv)
 
+	i.TypeEnv = prevTypeEnv
 	i.Env = prevEnv
 
 	if err != nil {
@@ -2365,6 +2390,10 @@ func (i *Interpreter) evalMemberExpression(node parser.Expression, left Value, f
 			return NilValue{}, NewRuntimeError(node, "nil interface value")
 		}
 		return i.evalMemberExpression(node, iv.Value, field)
+	}
+
+	if nv, ok := left.(NamedValue); ok {
+		return i.evalMemberExpression(node, nv.Value, field)
 	}
 
 	orig := left

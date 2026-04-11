@@ -886,6 +886,19 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		},
 	}, false)
 
+	env.Define("GetTextureSize", &interpreter.BuiltinFunc{
+		Name:  "GetTextureSize",
+		Arity: 1,
+		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
+			tex, err := interpreter.ArgTexture2D(node, i, TypeEnv, args, 0, "rl.GetTextureSize")
+			if err != nil {
+				return interpreter.NilValue{}, err
+			}
+
+			return interpreter.MakeVector2(rl.Vector2{X: float32(tex.Width), Y: float32(tex.Height)}, TypeEnv), nil
+		},
+	}, false)
+
 	env.Define("DrawTexture", &interpreter.BuiltinFunc{
 		Name:  "DrawTexture",
 		Arity: 3,
@@ -2094,7 +2107,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 	}, false)
 
 	env.Define("InitAudio", &interpreter.BuiltinFunc{
-		Name:  "InitSound",
+		Name:  "InitAudio",
 		Arity: 0,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
 			rl.InitAudioDevice()
