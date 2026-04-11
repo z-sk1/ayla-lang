@@ -43,7 +43,6 @@ func New(path string) *Interpreter {
 
 	i := &Interpreter{
 		Env:          env,
-		modules:      make(map[string]ModuleValue),
 		pointerCache: make(map[*TypeInfo]*TypeInfo),
 		currentDir:   dir,
 	}
@@ -82,7 +81,6 @@ func NewWithEnv(env *Environment, path string) *Interpreter {
 
 	i := &Interpreter{
 		Env:          env,
-		modules:      make(map[string]ModuleValue),
 		pointerCache: make(map[*TypeInfo]*TypeInfo),
 		currentDir:   dir,
 	}

@@ -275,7 +275,7 @@ func (i *Interpreter) assignToType(val Value, expected *TypeInfo) (Value, error)
 		return nil, err
 	}
 
-	return val, nil
+	return i.promoteValueToType(val, expected), nil
 }
 
 type ControlSignal any
@@ -446,7 +446,7 @@ func (i InterfaceValue) Type() ValueType {
 }
 
 func (i InterfaceValue) String() string {
-	return i.TypeInfo.Name
+	return i.Value.String()
 }
 
 type ArrayValue struct {

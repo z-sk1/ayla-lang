@@ -25,13 +25,13 @@ type Environment struct {
 type Interpreter struct {
 	Env          *Environment
 	TypeEnv      map[string]TypeValue
-	modules      map[string]ModuleValue
 	pointerCache map[*TypeInfo]*TypeInfo
 	modulePaths  []string
 	currentDir   string
 	projectRoot  string
 }
 
+var GlobalModules map[string]ModuleValue = map[string]ModuleValue{}
 var NativeModules map[string]NativeLoader = map[string]NativeLoader{}
 
 type RuntimeError struct {
@@ -100,7 +100,8 @@ func (i *Interpreter) resolveModule(name string) (string, error) {
 }
 
 func (i *Interpreter) loadModule(name string) (Value, error) {
-	if mod, ok := i.modules[name]; ok {
+	if mod, ok := GlobalModules[name]; ok {
+		i.Env.Define(name, mod, false)
 		return mod, nil
 	}
 
@@ -110,7 +111,7 @@ func (i *Interpreter) loadModule(name string) (Value, error) {
 			return NilValue{}, err
 		}
 
-		i.modules[name] = mod
+		GlobalModules[name] = mod
 		i.Env.Define(name, mod, false)
 		return mod, nil
 	}
@@ -133,6 +134,7 @@ func (i *Interpreter) loadModule(name string) (Value, error) {
 	Env := NewEnvironment(i.Env)
 
 	modInterp := NewWithEnv(Env, path)
+	modInterp.TypeEnv = i.TypeEnv
 	modInterp.currentDir = filepath.Dir(path)
 
 	if err := modInterp.RegisterForward(program); err != nil {
@@ -167,9 +169,12 @@ func (i *Interpreter) RegisterForward(stmts []parser.Statement) error {
 	for _, stmt := range stmts {
 		switch stmt := stmt.(type) {
 		case *parser.ImportStatement:
-			if _, err := i.loadModule(stmt.Name); err != nil {
+			mod, err := i.loadModule(stmt.Name)
+			if err != nil {
 				return err
 			}
+
+			i.Env.Define(stmt.Name, mod, false)
 
 		case *parser.TypeStatement:
 			ti := &TypeInfo{
