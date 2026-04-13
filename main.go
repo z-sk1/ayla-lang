@@ -1,4 +1,4 @@
-fsgezpackage main
+package main
 
 import (
 	"bufio"
