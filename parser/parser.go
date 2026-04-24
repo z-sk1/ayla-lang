@@ -171,8 +171,12 @@ func (p *Parser) isAssignToken(t token.TokenType) bool {
 
 func New(l *lexer.Lexer) *Parser {
 	p := &Parser{
-		l:          l,
-		stopTokens: make(map[token.TokenType]bool),
+		l: l,
+		stopTokens: map[token.TokenType]bool{
+			token.COMMA:    true,
+			token.RPAREN:   true,
+			token.RBRACKET: true,
+		},
 	}
 
 	p.nextToken()
@@ -2009,6 +2013,7 @@ func (p *Parser) parseForVarNoKeyword() *VarStatementNoKeyword {
 func (p *Parser) parseForPost() Statement {
 	return p.parseAssignOrExprStatement()
 }
+
 func (p *Parser) parseBreakStatement() *BreakStatement {
 	stmt := &BreakStatement{}
 	stmt.NodeBase = NodeBase{Token: p.curTok}
@@ -2249,11 +2254,13 @@ func (p *Parser) parseIndexExpression(left Expression) Expression {
 		}
 	}
 
-	if p.peekTok.Type != token.RBRACKET {
-		p.addError("expected ']' after slice expression")
-		return nil
+	if p.curTok.Type != token.RBRACKET {
+		if p.peekTok.Type != token.RBRACKET {
+			p.addError("expected ']' after slice expression")
+			return nil
+		}
+		p.nextToken() // move to ']'
 	}
-	p.nextToken() // consume ']'
 
 	return &SliceExpression{
 		NodeBase: NodeBase{Token: tok},
@@ -2347,6 +2354,11 @@ func (p *Parser) parseArgList(end token.TokenType) []Expression {
 
 		list = append(list, expr)
 
+		if _, ok := expr.(*PostfixExpression); ok && expr.(*PostfixExpression).Operator == "..." && p.peekTok.Type == token.COMMA {
+			p.addError("variadic argument must be last")
+			return nil
+		}
+
 		p.consumeTerminators()
 
 		if p.peekTok.Type == token.COMMA {
@@ -2364,7 +2376,7 @@ func (p *Parser) parseArgList(end token.TokenType) []Expression {
 
 		if p.peekTok.Type == end {
 			p.nextToken() // move to ')'
-			break
+			return list
 		}
 
 		p.addError(fmt.Sprintf("expected ',' or '%s'", end))
@@ -2375,10 +2387,11 @@ func (p *Parser) parseArgList(end token.TokenType) []Expression {
 }
 
 func (p *Parser) parseCallExpression(callee Expression) Expression {
+	tok := p.curTok
 	args := p.parseArgList(token.RPAREN)
 
 	return &FuncCall{
-		NodeBase: NodeBase{Token: p.curTok},
+		NodeBase: NodeBase{Token: tok},
 		Callee:   callee,
 		Args:     args,
 	}

@@ -145,6 +145,10 @@ func (i *Interpreter) loadModule(name string) (Value, error) {
 		return NilValue{}, err
 	}
 
+	if err := modInterp.TypeCheck(program); err != nil {
+		return NilValue{}, err
+	}
+
 	_, err = modInterp.EvalStatements(program)
 	if err != nil {
 		return NilValue{}, err
@@ -215,6 +219,101 @@ func (i *Interpreter) RegisterForward(stmts []parser.Statement) error {
 		case *parser.MethodStatement:
 			recvType, err := i.resolveTypeNode(stmt.Receiver.Type)
 			if err != nil {
+				return err
+			}
+
+			recvType = UnwrapAlias(recvType)
+
+			i.Env.SetMethod(recvType, stmt.Name.Value, &Func{
+				Body:    stmt.Body,
+				Env:     i.Env,
+				TypeEnv: i.TypeEnv,
+			})
+
+		case *parser.FuncStatement:
+			i.Env.Define(stmt.Name.Value, &Func{
+				Params:  stmt.Params,
+				Body:    stmt.Body,
+				Env:     i.Env,
+				TypeEnv: i.TypeEnv,
+			}, false)
+
+		}
+	}
+
+	return nil
+}
+
+func (i *Interpreter) ResolveTypes(stmts []parser.Statement) error {
+	for _, stmt := range stmts {
+		switch stmt := stmt.(type) {
+
+		case *parser.TypeStatement:
+			tv := i.TypeEnv[stmt.Name.Value]
+			ti := tv.TypeInfo
+
+			underlying, err := i.resolveTypeNode(stmt.Type)
+			if err != nil {
+				return err
+			}
+
+			ti.Underlying = underlying
+		}
+	}
+	return nil
+}
+
+func (i *Interpreter) TypeCheck(stmts []parser.Statement) error {
+	for _, stmt := range stmts {
+		switch stmt := stmt.(type) {
+
+		case *parser.FuncStatement:
+			paramTypes := []*TypeInfo{}
+			paramNames := []string{}
+			returnTypes := []*TypeInfo{}
+			returnNames := []string{}
+
+			for _, typ := range stmt.ReturnTypes {
+				ti, err := i.resolveTypeNode(typ)
+				if err != nil {
+					return err
+				}
+				ti = UnwrapAlias(ti)
+				returnTypes = append(returnTypes, ti)
+				returnNames = append(returnNames, ti.Name)
+			}
+
+			for _, param := range stmt.Params {
+				ti, err := i.resolveTypeNode(param.Type)
+				if err != nil {
+					return err
+				}
+				ti = UnwrapAlias(ti)
+				paramTypes = append(paramTypes, ti)
+				paramNames = append(paramNames, ti.Name)
+			}
+
+			typeInfo := &TypeInfo{
+				Name:    fmt.Sprintf("fun(%s) (%s)", strings.Join(paramNames, ", "), strings.Join(returnNames, ", ")),
+				Kind:    TypeFunc,
+				Returns: returnTypes,
+				Params:  paramTypes,
+			}
+
+			variable, ok := i.Env.GetVar(stmt.Name.Value)
+			if !ok {
+				return fmt.Errorf("function not found: %s", stmt.Name.Value)
+			}
+
+			variable.Value.(*Func).TypeName = typeInfo
+
+			if err := i.checkFuncStatement(stmt); err != nil {
+				return err
+			}
+
+		case *parser.MethodStatement:
+			recvType, err := i.resolveTypeNode(stmt.Receiver.Type)
+			if err != nil {
 				return NewRuntimeError(stmt, err.Error())
 			}
 
@@ -269,78 +368,17 @@ func (i *Interpreter) RegisterForward(stmts []parser.Statement) error {
 				Params:  paramTypes,
 			}
 
-			i.Env.SetMethod(recvType, stmt.Name.Value, &Func{
-				Params:   params,
-				Body:     stmt.Body,
-				Env:      i.Env,
-				TypeName: typeInfo,
-				TypeEnv:  i.TypeEnv,
-			})
+			method, ok := recvType.Methods[stmt.Name.Value]
+			if !ok {
+				return fmt.Errorf("method not found: %s", stmt.Name.Value)
+			}
 
-		case *parser.FuncStatement:
-			paramTypes := make([]*TypeInfo, 0)
-			paramNames := make([]string, 0)
+			method.Params = params
+			method.TypeName = typeInfo
 
-			returnTypes := make([]*TypeInfo, 0)
-			returnNames := make([]string, 0)
-
-			err := i.checkFuncStatement(stmt)
-			if err != nil {
+			if err := i.checkMethodStatement(stmt); err != nil {
 				return err
 			}
-
-			for _, typ := range stmt.ReturnTypes {
-				ti, err := i.resolveTypeNode(typ)
-				if err != nil {
-					return err
-				}
-
-				ti = UnwrapAlias(ti)
-
-				returnTypes = append(returnTypes, ti)
-				paramNames = append(paramNames, ti.Name)
-			}
-
-			for _, param := range stmt.Params {
-				ti, err := i.resolveTypeNode(param.Type)
-				if err != nil {
-					return err
-				}
-
-				ti = UnwrapAlias(ti)
-
-				paramTypes = append(paramTypes, ti)
-				paramNames = append(paramNames, ti.Name)
-			}
-
-			typeInfo := &TypeInfo{
-				Name:    fmt.Sprintf("fun(%s) (%s)", strings.Join(paramNames, ", "), strings.Join(returnNames, ", ")),
-				Kind:    TypeFunc,
-				Returns: returnTypes,
-				Params:  paramTypes,
-			}
-
-			i.Env.Define(stmt.Name.Value, &Func{Params: stmt.Params, Body: stmt.Body, TypeName: typeInfo, Env: i.Env, TypeEnv: i.TypeEnv}, false)
-		}
-	}
-
-	return nil
-}
-
-func (i *Interpreter) ResolveTypes(stmts []parser.Statement) error {
-	for _, stmt := range stmts {
-		switch stmt := stmt.(type) {
-
-		case *parser.TypeStatement:
-			tv := i.TypeEnv[stmt.Name.Value]
-			ti := tv.TypeInfo
-
-			underlying, err := i.resolveTypeNode(stmt.Type)
-			if err != nil {
-				return err
-			}
-
-			ti.Underlying = underlying
 		}
 	}
 	return nil

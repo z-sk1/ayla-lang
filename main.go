@@ -233,6 +233,11 @@ func run() {
 		return
 	}
 
+	if err := interp.TypeCheck(program); err != nil {
+		fmt.Printf("\n%s: %v\n", name, err)
+		return
+	}
+
 	_, err = interp.EvalStatements(program)
 
 	if err != nil {
@@ -275,6 +280,11 @@ func runEmbedded(source string) {
 	}
 
 	if err := interp.ResolveTypes(program); err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	if err := interp.TypeCheck(program); err != nil {
 		fmt.Println(err)
 		return
 	}
