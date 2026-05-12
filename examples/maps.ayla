@@ -1,7 +1,9 @@
-egg x = map[string]int{"a": 1, "b": 2}
+say x = map[string]int{"a": 1, "b": 2}
 
-putln(x)
+y, ok := x["b"]
+putln(y, ok)
 
 delete(x, "b")
 
-putln(x)
+y, ok := x["b"]
+putln(y, ok)

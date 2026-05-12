@@ -1,11 +1,2 @@
-fun sum(nums ...int) (int) {
-    total := 0
-    four _, n := range nums {
-        total = total + n
-    }
-    back total
-}
-
-numbers := []int{1, 2, 3, 4}
-
-putln(sum(numbers))
+numbers := make([]int, 5)
+numbers = []int{1, 2, 3, 4, 5}

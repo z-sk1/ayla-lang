@@ -19,8 +19,8 @@ would declare a pointer type to `int`
 use `&` to get the `reference` (`address`) of a `variable`.
 
 ```ayla
-egg x int = 10
-egg p *int = &x
+say x int = 10
+say p *int = &x
 
 putln(x)
 putln(p)
@@ -40,8 +40,8 @@ ptr(0x... -> 10)
 to access the value stored at a `pointer`, use `*`.
 
 ```ayla
-egg x int = 10
-egg p *int = &x
+say x int = 10
+say p *int = &x
 
 putln(*p)
 ```
@@ -63,8 +63,8 @@ So:
 Pointers allow you to change the original variable.
 
 ```ayla
-egg x int = 10
-egg p *int = &x
+say x int = 10
+say p *int = &x
 
 *p = 20
 
@@ -83,7 +83,7 @@ fun increment(n *int) {
     *n += 1
 }
 
-egg x int = 5
+say x int = 5
 increment(&x)
 
 putln(x)
@@ -101,7 +101,7 @@ fun change(x int) {
     x = 20
 }
 
-egg n int = 10
+say n int = 10
 change(n)
 
 putln(n)
@@ -118,7 +118,7 @@ fun change(x *int) {
     *x = 20
 }
 
-egg n int = 10
+say n int = 10
 change(&n)
 
 putln(n)
@@ -142,8 +142,8 @@ fun swap(a *int, b *int) {
     *b = temp
 }
 
-egg x int = 3
-egg y int = 7
+say x int = 3
+say y int = 7
 
 swap(&x, &y)
 

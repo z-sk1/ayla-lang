@@ -13,8 +13,8 @@ Ayla also supports type casting for custom types
 ```ayla
 type Foo int
 
-egg a = 5
-egg b = Foo(a)
+say a = 5
+say b = Foo(a)
 ```
 
 here `a` is an `int` and `b` is a `Foo`
@@ -26,14 +26,14 @@ For example, this will produce a `type error` due to the fact that they are not 
 ```ayla
 type Foo int
 
-egg x Foo = 5
-egg y int = x
+say x Foo = 5
+say y int = x
 ```
 > output: runtime error: type mismatch: 'Foo' assigned to 'int'
 
 to convert back just do:
 ```ayla
-egg y int = int(x)
+say y int = int(x)
 ```
 
 ## composites
@@ -46,7 +46,7 @@ Lets make a `Names` slice type and use it!
 ```ayla
 type Names []string
 
-egg x = Names{"Ziad", "Ayla", "Elen"}
+say x = Names{"Ziad", "Ayla", "Elen"}
 ```
 This works because the composite literal,
 

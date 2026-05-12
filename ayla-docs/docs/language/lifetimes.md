@@ -4,13 +4,13 @@ this is a gimmicky very experimental feature which allows you to determine a var
 
 for example in this snippet
 ```ayla
-egg x<2> = 5
+say x<2> = 5
 ```
 
 the variable x will exist for 2 lines then will delete itself
 
 ```ayla
-egg x<2> = 5
+say x<2> = 5
 
 putln(x) // 5
 putln(x) // 5
@@ -25,7 +25,7 @@ runtime error at 6:7: undefined variable: x
 
 you can also use it with multi assignment and type annotation like so
 ```ayla
-egg a, b <3> int = 4, 2
+say a, b <3> int = 4, 2
 
 putln(a) // 4
 putln(b) // 2
@@ -45,7 +45,7 @@ lifetimes tick based on statements executed, not on uses of that specific variab
 
 Example:
 ```ayla
-egg x <2> = 1
+say x <2> = 1
 
 putln(5) // 5
 putln(2) // 2

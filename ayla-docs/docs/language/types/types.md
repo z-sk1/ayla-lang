@@ -15,23 +15,23 @@ Currently ayla provides these built in types
 you can specify a variable's type during declaration
 
 ```ayla
-egg x int = 3
+say x int = 3
 putln(x)
 ```
 
-type annotations work for both `egg` (mutable) and `rock` (constant)
+type annotations work for both `say` (mutable) and `keep` (constant)
 
 ```ayla
-rock name string = "ayla"
+keep name string = "ayla"
 ```
 
 ## type inferrence
 if no type is specified, ayla infers it from the assigned value
 
 ```ayla
-egg x = 3 // inferred as int
-egg y = 3.0 // inferred as float
-egg z = "hello" // inferred as string
+say x = 3 // inferred as int
+say y = 3.0 // inferred as float
+say z = "hello" // inferred as string
 ```
 
 ## default values
@@ -39,12 +39,12 @@ egg z = "hello" // inferred as string
 when a variable is declared without an initial value, it receives one based on its type
 
 ```ayla
-egg a int // 0
-egg b float // 0.0
-egg c string // ""
-egg d bool // no
-egg e error // nil
-egg f // nil
+say a int // 0
+say b float // 0.0
+say c string // ""
+say d bool // no
+say e error // nil
+say f // nil
 ```
 
 | Type     | Default |
@@ -59,7 +59,7 @@ egg f // nil
 
 for example
 ```ayla
-egg x int
+say x int
 putln(x)
 ```
 > output: 0
@@ -68,7 +68,7 @@ putln(x)
 if you assign a value of the wrong type it results in a runtime error
 
 ```ayla
-egg x string = 5
+say x string = 5
 ```
 > output: runtime error at 1:5: type mismatch: 'int' assigned to a 'string'
 
@@ -76,7 +76,7 @@ egg x string = 5
 when declaring multiple variables, one annotation at the end applies to the rest of the variables
 
 ```ayla
-egg a, b, c int
+say a, b, c int
 
 putln(typeof(a), typeof(b), typeof(c))
 ```
@@ -87,9 +87,9 @@ putln(typeof(a), typeof(b), typeof(c))
 use function style syntax to convert values between types
 
 ```ayla
-egg x float = 5.3
+say x float = 5.3
 
-egg y int = int(x)
+say y int = int(x)
 
 putln(y)
 ```
@@ -103,9 +103,9 @@ however notice that some casts cant be performed!
 
 for example, you cant cast a `string` to an `int` since `strings` are not numerical values
 ```ayla
-egg x string = "hi"
+say x string = "hi"
 
-egg y int = int(x)
+say y int = int(x)
 ```
 > output: runtime error at 3:16: int type cast does not support 'string'
 
@@ -115,8 +115,8 @@ type casting converts between compatible numeric types (such as float to int).
 
 to convert non-numeric types (like string) into numbers, you must use a parsing function:
 ```ayla
-egg x string = "2"
-egg y int = toInt(x)
+say x string = "2"
+say y int = toInt(x)
 putln(y)
 ```
 > output: 2
@@ -129,7 +129,7 @@ the `thing` type is equivalent to `any` from TypeScript or Go
 you can assign any value to it
 
 ```ayla
-egg x thing = 2
+say x thing = 2
 
 put(x)
 ```
@@ -139,7 +139,7 @@ put(x)
 
 but, you must use `type assertion` to do operations with `thing`
 ```ayla
-egg x thing = 2
+say x thing = 2
 
 put(x.(int) + 1)
 ```
@@ -147,7 +147,7 @@ put(x.(int) + 1)
 
 otherwise you will come across a `Runtime error`
 ```ayla
-egg x thing = 2
+say x thing = 2
 
 put(x + 1)
 ```
@@ -155,7 +155,7 @@ put(x + 1)
 
 type assertions protect against type mismatches, so they produce a `Runtime error` when a `thing` is asserted incorrectly
 ```ayla
-egg x thing = 2
+say x thing = 2
 
 put(x.(string) + "2")
 ```

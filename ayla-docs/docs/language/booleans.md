@@ -11,7 +11,7 @@ in Ayla, a boolean can be either:
 booleans are often produced by comparisons:
 
 ```ayla
-egg x = 5
+say x = 5
 
 putln(x > 3)   // yes
 putln(x == 10) // no
@@ -34,8 +34,8 @@ comparison operators include:
 You can combine boolean values:
 
 ```ayla
-egg a = yes
-egg b = no
+say a = yes
+say b = no
 
 putln(a && b)  // no
 putln(a || b)  // yes

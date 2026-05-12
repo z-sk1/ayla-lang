@@ -119,7 +119,7 @@ Sometimes you already have an `array` or a `slice` and want to pass its values i
 For this, Ayla supports flattening using `...` when calling
 
 ```ayla
-egg numbers = []int{1, 2, 3, 4}
+say numbers = []int{1, 2, 3, 4}
 
 putln(sum(numbers...))
 ```
@@ -159,7 +159,7 @@ fun printAll(values ...string) {
     }
 }
 
-egg words = []string{"Ayla", "is", "cool"}
+say words = []string{"Ayla", "is", "cool"}
 
 printAll("Hello")
 printAll(words...)

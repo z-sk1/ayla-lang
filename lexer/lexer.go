@@ -308,6 +308,8 @@ func (l *Lexer) NextToken() token.Token {
 			} else {
 				tok = token.Token{Type: token.SHL, Literal: "<<", Line: l.line, Column: l.column, HadWhitespaceBefore: hadWhiteSpace}
 			}
+		} else if l.match('-') {
+			tok = token.Token{Type: token.ARROW, Literal: "<-", Line: l.line, Column: l.column, HadWhitespaceBefore: hadWhiteSpace}
 		} else {
 			tok = token.Token{Type: token.LT, Literal: "<", Line: l.line, Column: l.column, HadWhitespaceBefore: hadWhiteSpace}
 		}

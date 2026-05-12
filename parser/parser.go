@@ -135,8 +135,6 @@ func (p *Parser) isTypeToken(t token.TokenType) bool {
 		token.STRING_TYPE,
 		token.BOOL_TYPE,
 		token.FLOAT_TYPE,
-		token.ANY_TYPE,
-		token.ERROR_TYPE,
 		token.LBRACKET,
 		token.FUNC,
 		token.IDENT,
@@ -285,6 +283,25 @@ func (p *Parser) isPointerTypeM1() bool {
 		(tok.Type == token.IDENT && p.peekN(i+1).Type == token.DOT)
 }
 
+func (p *Parser) handleVariedResults(expr Expression, lhsCount int) Expression {
+	switch e := expr.(type) {
+	case *TypeAssertExpression:
+		e.ExpectOk = (lhsCount == 2)
+		return e
+
+	case *ReceiveExpression:
+		e.ExpectOk = (lhsCount == 2)
+		return e
+
+	case *IndexExpression:
+		e.ExpectOk = (lhsCount == 2)
+		return e
+
+	default:
+		return expr
+	}
+}
+
 func (p *Parser) ParseProgram() []Statement {
 	var statements []Statement
 	for p.curTok.Type != token.EOF {
@@ -335,6 +352,8 @@ func (p *Parser) parseStatement() Statement {
 		return p.parseTypeStatement()
 	case token.SWITCH:
 		return p.parseSwitchStatement()
+	case token.SELECT:
+		return p.parseSelectStatement()
 	case token.FUNC:
 		if p.peekTok.Type == token.LPAREN {
 
@@ -365,8 +384,8 @@ func (p *Parser) parseStatement() Statement {
 			}
 		}
 		return p.parseFuncStatement()
-	case token.SPAWN:
-		return p.parseSpawnStatement()
+	case token.START:
+		return p.parseStartStatement()
 	case token.IF:
 		return p.parseIfStatement()
 	case token.WITH:
@@ -652,7 +671,9 @@ func (p *Parser) parseMultiVarStatement() *MultiVarStatement {
 		p.nextToken() // move to expr start
 
 		values := p.parseTupleList()
-
+		for i, v := range values {
+			values[i] = p.handleVariedResults(v, len(stmt.Names))
+		}
 		stmt.Values = values
 	}
 
@@ -685,7 +706,9 @@ func (p *Parser) parseMultiVarStatementNoKeyword() *MultiVarStatementNoKeyword {
 	p.nextToken() // move to expr start
 
 	values := p.parseTupleList()
-
+	for i, v := range values {
+		values[i] = p.handleVariedResults(v, len(stmt.Names))
+	}
 	stmt.Values = values
 
 	return stmt
@@ -819,7 +842,9 @@ func (p *Parser) parseConstBlockDecl() Statement {
 			p.nextToken() // move to expr start
 
 			values := p.parseTupleList()
-
+			for i, v := range values {
+				values[i] = p.handleVariedResults(v, len(stmt.Names))
+			}
 			stmt.Values = values
 		}
 
@@ -910,7 +935,9 @@ func (p *Parser) parseMultiConstStatement() *MultiConstStatement {
 		p.nextToken() // move to expr start
 
 		values := p.parseTupleList()
-
+		for i, v := range values {
+			values[i] = p.handleVariedResults(v, len(stmt.Names))
+		}
 		stmt.Values = values
 	}
 
@@ -1035,9 +1062,7 @@ func (p *Parser) parseType() TypeNode {
 	case token.INT_TYPE,
 		token.FLOAT_TYPE,
 		token.BOOL_TYPE,
-		token.STRING_TYPE,
-		token.ANY_TYPE,
-		token.ERROR_TYPE:
+		token.STRING_TYPE:
 
 		base = &IdentType{
 			NodeBase: NodeBase{Token: p.curTok},
@@ -1091,6 +1116,14 @@ func (p *Parser) parseType() TypeNode {
 
 	case token.MAP:
 		base = p.parseMapType()
+
+	case token.ARROW:
+		if p.peekTok.Type == token.CHAN {
+			base = p.parseChanType()
+		}
+
+	case token.CHAN:
+		base = p.parseChanType()
 
 	default:
 		return p.exprToType(p.parseExpression(LOWEST))
@@ -1353,6 +1386,31 @@ func (p *Parser) parseFuncType() TypeNode {
 	return typ
 }
 
+func (p *Parser) parseChanType() TypeNode {
+	typ := &ChanType{
+		NodeBase: NodeBase{Token: p.curTok},
+	}
+
+	if p.curTok.Type == token.ARROW && p.peekTok.Type == token.CHAN {
+		p.nextToken() // <-
+		p.nextToken() // chan
+		typ.CanRecv = true
+		typ.CanSend = false
+	} else if p.curTok.Type == token.CHAN && p.peekTok.Type == token.ARROW {
+		p.nextToken() // chan
+		p.nextToken() // <-
+		typ.CanSend = true
+		typ.CanRecv = false
+	} else {
+		typ.CanSend = true
+		typ.CanRecv = true
+		p.nextToken() // chan
+	}
+
+	typ.Base = p.parseType()
+	return typ
+}
+
 func (p *Parser) parseCompositeLiteral(typ TypeNode) Expression {
 
 	lit := &CompositeLiteral{
@@ -1512,18 +1570,18 @@ func (p *Parser) parseIfStatement() *IfStatement {
 	return stmt
 }
 
-func (p *Parser) parseSpawnStatement() *SpawnStatement {
-	stmt := &SpawnStatement{
+func (p *Parser) parseStartStatement() *StartStatement {
+	stmt := &StartStatement{
 		NodeBase: NodeBase{Token: p.curTok},
 	}
 
-	p.nextToken() // {
-	if p.curTok.Type != token.LBRACE {
-		p.addError("expected '{' after spawn")
-		return nil
-	}
+	p.nextToken()
 
-	stmt.Body = p.parseBlockStatement()
+	if p.curTok.Type == token.LBRACE {
+		stmt.Body = p.parseBlockStatement()
+	} else {
+		stmt.Expr = p.parseExpression(LOWEST)
+	}
 
 	return stmt
 }
@@ -1613,6 +1671,100 @@ func (p *Parser) parseCaseClause() *CaseClause {
 
 	if p.peekTok.Type != token.LBRACE {
 		p.addError("expected '{' after case expression")
+		return nil
+	}
+
+	p.nextToken() // {
+	p.nextToken() // first stmt
+
+	clause.Body = []Statement{}
+
+	for p.curTok.Type != token.RBRACE && p.curTok.Type != token.EOF {
+		stmt := p.parseStatement()
+		if stmt != nil {
+			clause.Body = append(clause.Body, stmt)
+		}
+		p.nextToken()
+	}
+
+	return clause
+}
+
+func (p *Parser) parseSelectStatement() *SelectStatement {
+	stmt := &SelectStatement{
+		NodeBase: NodeBase{Token: p.curTok},
+	}
+
+	p.nextToken()
+
+	if p.curTok.Type != token.LBRACE {
+		p.addError("expected '{'")
+		return nil
+	}
+
+	p.nextToken()
+	p.nextToken()
+
+	stmt.Cases = []*SelectCaseClause{}
+
+	for p.curTok.Type != token.EOF {
+
+		p.consumeTerminators()
+
+		switch p.curTok.Type {
+
+		case token.CASE:
+			clause := p.parseSelectCaseClause()
+			stmt.Cases = append(stmt.Cases, clause)
+
+		case token.DEFAULT:
+			stmt.Default = p.parseDefaultClause()
+
+		case token.RBRACE:
+			return stmt
+
+		default:
+			p.addError("expected 'when' or 'otherwise'")
+			return nil
+		}
+
+		p.nextToken()
+	}
+
+	return stmt
+}
+
+func (p *Parser) parseSelectCaseClause() *SelectCaseClause {
+	clause := &SelectCaseClause{
+		NodeBase: NodeBase{Token: p.curTok},
+	}
+
+	p.nextToken()
+
+	if p.curTok.Type == token.IDENT && p.peekTok.Type == token.WALRUS {
+		ident := &Identifier{
+			NodeBase: NodeBase{Token: p.curTok},
+			Value:    p.curTok.Literal,
+		}
+		clause.AssignName = ident
+
+		p.nextToken() // :=
+		p.nextToken() // RHS
+
+		expr := p.parseExpression(LOWEST)
+
+		if prefix, ok := expr.(*PrefixExpression); ok && prefix.Operator == "<-" {
+			clause.Op = prefix
+		} else {
+			p.addError("select assignment must be a receive (<-ch)")
+			return nil
+		}
+	} else {
+		clause.Op = p.parseExpression(LOWEST)
+	}
+
+	if p.peekTok.Type != token.LBRACE {
+		p.addError("expected '{'")
 		return nil
 	}
 
@@ -2325,6 +2477,19 @@ func (p *Parser) parseDotExpression(left Expression) Expression {
 	return member
 }
 
+func (p *Parser) parseSendExpression(left Expression) Expression {
+	expr := &SendExpression{
+		NodeBase: NodeBase{Token: p.curTok},
+		Channel:  left,
+	}
+
+	precedence := p.curPrecedence()
+	p.nextToken()
+	expr.Value = p.parseExpression(precedence)
+
+	return expr
+}
+
 func (p *Parser) parseExpressionList() []Expression {
 	list := []Expression{}
 
@@ -2426,6 +2591,10 @@ func (p *Parser) parseExpression(precedence int) Expression {
 		case token.DOT:
 			p.nextToken()
 			left = p.parseDotExpression(left)
+
+		case token.ARROW:
+			p.nextToken()
+			left = p.parseSendExpression(left)
 
 		case token.ELLIPSIS, token.INC, token.DEC:
 			p.nextToken()
@@ -2573,6 +2742,24 @@ func (p *Parser) parsePrimary() Expression {
 			Right:    right,
 		}
 
+	case token.ARROW:
+		if p.peekTok.Type == token.CHAN {
+			return p.parseType()
+		}
+
+		tok := p.curTok
+		p.nextToken()
+
+		ch := p.parseExpression(PREFIX)
+		if ch == nil {
+			return nil
+		}
+
+		return &ReceiveExpression{
+			NodeBase: NodeBase{Token: tok},
+			Channel:  ch,
+		}
+
 	case token.INT:
 		return &IntLiteral{NodeBase: NodeBase{Token: p.curTok}, Value: atoi(p.curTok.Literal)}
 
@@ -2618,12 +2805,6 @@ func (p *Parser) parsePrimary() Expression {
 		}
 		return nil
 
-	case token.ERROR_TYPE:
-		if p.peekTok.Type == token.LPAREN {
-			return p.parseFuncCall()
-		}
-		return nil
-
 	case token.STRUCT:
 		typ := p.parseType()
 
@@ -2657,6 +2838,9 @@ func (p *Parser) parsePrimary() Expression {
 
 		p.nextToken()
 		return p.parseCompositeLiteral(typ)
+
+	case token.CHAN:
+		return p.parseType()
 
 	case token.MAP:
 		typ := p.parseType()

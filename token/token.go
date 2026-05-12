@@ -22,6 +22,7 @@ const (
 	FLOAT  = "FLOAT"
 	// operators
 	ASSIGN = "="
+	ARROW  = "<-"
 	WALRUS = ":="
 
 	PLUS  = "+"
@@ -87,6 +88,7 @@ const (
 	IF        = "IF"
 	ELSE      = "ELSE"
 	SWITCH    = "SWITCH"
+	SELECT    = "SELECT"
 	CASE      = "CASE"
 	DEFAULT   = "DEFAULT"
 	WITH      = "WITH"
@@ -95,7 +97,8 @@ const (
 	RETURN    = "RETURN"
 	CONTINUE  = "CONTINUE"
 	DEFER     = "DEFER"
-	SPAWN     = "SPAWN"
+	START     = "START"
+	CHAN      = "CHAN"
 	FOR       = "FOR"
 	RANGE     = "RANGE"
 	WHILE     = "WHILE"
@@ -108,13 +111,11 @@ const (
 	FLOAT_TYPE  = "FLOAT_TYPE"
 	STRING_TYPE = "STRING_TYPE"
 	BOOL_TYPE   = "BOOL_TYPE"
-	ANY_TYPE    = "ANY_TYPE"
-	ERROR_TYPE  = "ERROR_TYPE"
 )
 
 var keywords = map[string]TokenType{
-	"egg":       VAR,
-	"rock":      CONST,
+	"say":       VAR,
+	"keep":      CONST,
 	"import":    IMPORT,
 	"type":      TYPE,
 	"struct":    STRUCT,
@@ -123,24 +124,24 @@ var keywords = map[string]TokenType{
 	"ayla":      IF,
 	"elen":      ELSE,
 	"choose":    SWITCH,
+	"select":    SELECT,
 	"when":      CASE,
 	"otherwise": DEFAULT,
 	"with":      WITH,
 	"map":       MAP,
 	"fun":       FUNC,
-	"back":      RETURN,
+	"give":      RETURN,
 	"defer":     DEFER,
-	"spawn":     SPAWN,
+	"start":     START,
+	"chan":      CHAN,
 	"int":       INT_TYPE,
 	"float":     FLOAT_TYPE,
 	"string":    STRING_TYPE,
 	"bool":      BOOL_TYPE,
-	"thing":     ANY_TYPE,
-	"error":     ERROR_TYPE,
-	"four":      FOR,
+	"for":       FOR,
 	"range":     RANGE,
-	"why":       WHILE,
-	"kitkat":    BREAK,
+	"while":     WHILE,
+	"snap":      BREAK,
 	"next":      CONTINUE,
 	"yes":       TRUE,
 	"no":        FALSE,

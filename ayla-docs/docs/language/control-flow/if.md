@@ -7,7 +7,7 @@ it runs a block of code only if a condition is true
 use the `ayla` keyword for if statements
 
 ```ayla
-egg age = 13
+say age = 13
 
 ayla age >= 13 {
     putln("You are a teenager")
@@ -28,7 +28,7 @@ you can provide an alternative block using else
 the keyword for else is `elen`
 
 ```ayla
-egg age = 10
+say age = 10
 
 ayla age >= 13 {
     putln("Teenager")
@@ -45,7 +45,7 @@ Not a teenager
 you can chain multiple conditions
 
 ```ayla
-egg score = 85
+say score = 85
 
 ayla score >= 90 {
     putln("A")
@@ -66,8 +66,8 @@ the conditions are checked in order, and the first `truthy` condition runs
 You can place an if inside another if:
 
 ```ayla
-egg age = 15
-egg hasID = yes
+say age = 15
+say hasID = yes
 
 ayla age >= 13 {
     ayla hasID {

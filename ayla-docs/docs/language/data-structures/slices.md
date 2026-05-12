@@ -12,7 +12,7 @@ the syntax for a slice type is:
 ```
 Example:
 ```ayla
-egg x []int
+say x []int
 ```
 
 this declares a slice of integers.
@@ -62,7 +62,7 @@ Notice how the first element of the sliced slice `y` is included, but the last o
 the `zero value` of a slice is just an empty literal, since slices are `dynamic`
 
 ```ayla
-egg x []int
+say x []int
 
 putln(x)
 ```

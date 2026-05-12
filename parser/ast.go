@@ -87,6 +87,10 @@ func (f *Formatter) formatExprList(exprs []Expression) string {
 		parts = append(parts, e.Format(f))
 	}
 
+	if len(parts) == 1 {
+		return parts[0]
+	}
+
 	return strings.Join(parts, ", ")
 }
 
@@ -108,6 +112,7 @@ const (
 	BITAND      // &
 	EQUALS      // == !=
 	LESSGREATER // < >
+	ARROW       // <-
 	SHIFT       // << >>
 	SUM         // + -
 	PRODUCT     // * /
@@ -133,6 +138,8 @@ var precedences = map[token.TokenType]int{
 	token.GT:  LESSGREATER,
 	token.LTE: LESSGREATER,
 	token.GTE: LESSGREATER,
+
+	token.ARROW: ARROW,
 
 	token.SHL: SHIFT,
 	token.SHR: SHIFT,
@@ -295,7 +302,7 @@ func (v *VarStatementNoKeyword) Format(f *Formatter) string {
 	out := v.Name.Format(f)
 
 	if v.Value != nil {
-		out += " = " + v.Value.Format(f)
+		out += " := " + v.Value.Format(f)
 	}
 
 	if v.Lifetime != nil {
@@ -352,7 +359,7 @@ func (m *MultiVarStatementNoKeyword) Format(f *Formatter) string {
 	out := strings.Join(names, ", ")
 
 	if len(m.Values) > 0 {
-		out += " = " + f.formatExprList(m.Values)
+		out += " := " + f.formatExprList(m.Values)
 	}
 
 	if m.Lifetime != nil {
@@ -692,13 +699,35 @@ func (p *PointerType) Format(f *Formatter) string {
 	return "*" + p.Base.Format(f)
 }
 
-type SpawnStatement struct {
+type ChanType struct {
 	NodeBase
-	Body []Statement
+	Base    TypeNode
+	CanSend bool
+	CanRecv bool
 }
 
-func (s *SpawnStatement) Format(f *Formatter) string {
-	return "spawn " + formatBlock(f, s.Body)
+func (*ChanType) typeNode() {}
+
+func (c *ChanType) Format(f *Formatter) string {
+	if c.CanRecv && !c.CanSend {
+		return "<-chan " + c.Base.Format(f)
+	}
+
+	if c.CanSend && !c.CanRecv {
+		return "chan<- " + c.Base.Format(f)
+	}
+
+	return "chan " + c.Base.Format(f)
+}
+
+type StartStatement struct {
+	NodeBase
+	Body []Statement
+	Expr Expression
+}
+
+func (s *StartStatement) Format(f *Formatter) string {
+	return "start " + formatBlock(f, s.Body)
 }
 
 type IfStatement struct {
@@ -996,13 +1025,79 @@ type DefaultClause struct {
 func (d *DefaultClause) Format(f *Formatter) string {
 	var out strings.Builder
 
-	out.WriteString("default:\n")
+	out.WriteString("otherwise {\n")
 
 	f.Indent++
 	for _, s := range d.Body {
 		out.WriteString(f.identStr())
 		out.WriteString(s.Format(f))
 		out.WriteString("\n")
+		f.Indent--
+		out.WriteString(f.identStr())
+		f.Indent++
+		out.WriteString("}\n")
+	}
+	f.Indent--
+
+	return out.String()
+}
+
+type SelectStatement struct {
+	NodeBase
+	Cases   []*SelectCaseClause
+	Default *DefaultClause
+}
+
+func (s *SelectStatement) Format(f *Formatter) string {
+	var out strings.Builder
+
+	out.WriteString("select {\n")
+
+	f.Indent++
+
+	for _, c := range s.Cases {
+		out.WriteString(f.identStr())
+		out.WriteString(c.Format(f))
+		out.WriteString("\n")
+	}
+
+	if s.Default != nil {
+		out.WriteString(f.identStr())
+		out.WriteString(s.Default.Format(f))
+		out.WriteString("\n")
+	}
+
+	f.Indent--
+
+	out.WriteString(f.identStr())
+	out.WriteString("}")
+
+	return out.String()
+}
+
+type SelectCaseClause struct {
+	NodeBase
+	AssignName *Identifier
+	Op         Expression
+	Body       []Statement
+}
+
+func (s *SelectCaseClause) Format(f *Formatter) string {
+	var out strings.Builder
+
+	out.WriteString("when ")
+	out.WriteString(f.formatExprList([]Expression{s.Op}))
+	out.WriteString(" {\n")
+
+	f.Indent++
+	for _, stmt := range s.Body {
+		out.WriteString(f.identStr())
+		out.WriteString(stmt.Format(f))
+		out.WriteString("\n")
+		f.Indent--
+		out.WriteString(f.identStr())
+		f.Indent++
+		out.WriteString("}\n")
 	}
 	f.Indent--
 
@@ -1134,18 +1229,40 @@ func (s *SliceExpression) Format(f *Formatter) string {
 
 type IndexExpression struct {
 	NodeBase
-	Left  Expression
-	Index Expression
+	Left     Expression
+	Index    Expression
+	ExpectOk bool
 }
 
 func (i *IndexExpression) Format(f *Formatter) string {
 	return fmt.Sprintf("%s[%s]", i.Left.Format(f), i.Index.Format(f))
 }
 
+type SendExpression struct {
+	NodeBase
+	Channel Expression
+	Value   Expression
+}
+
+func (s *SendExpression) Format(f *Formatter) string {
+	return fmt.Sprintf("%s <- %s", s.Channel.Format(f), s.Value.Format(f))
+}
+
+type ReceiveExpression struct {
+	NodeBase
+	Channel  Expression
+	ExpectOk bool
+}
+
+func (r *ReceiveExpression) Format(f *Formatter) string {
+	return fmt.Sprintf("<-%s", r.Channel.Format(f))
+}
+
 type TypeAssertExpression struct {
 	NodeBase
-	Expr Expression
-	Type TypeNode
+	Expr     Expression
+	Type     TypeNode
+	ExpectOk bool
 }
 
 func (t *TypeAssertExpression) Format(f *Formatter) string {

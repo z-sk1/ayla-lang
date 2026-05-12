@@ -70,7 +70,15 @@ const sidebars = {
         },
         "language/methods",
         "language/pointers",
-        "language/concurrency",
+        {
+          type: "category",
+          label: "Concurrency",
+          collapsed: false,
+          items: [
+            "language/concurrency/start",
+            "language/concurrency/channels",
+          ],
+        },
       ],
     },
   ],

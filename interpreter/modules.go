@@ -76,16 +76,57 @@ func ArgPointer(node parser.Node, args []Value, i int, name string) (*PointerVal
 	return pv, nil
 }
 
-func ArgArray(node parser.Node, args []Value, i int, name string, slice string) (ArrayValue, error) {
+func ArgArray(node parser.Node, args []Value, i int, name string, elem string) (ArrayValue, error) {
 	v := UnwrapFully(args[i])
 	av, ok := v.(ArrayValue)
 	if !ok {
-		if slice == "" {
-			return ArrayValue{}, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be an array or slice", name, i+1))
-		}
-		return ArrayValue{}, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be a []%s", name, i+1, slice))
+		return ArrayValue{}, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be a []%s", name, i+1, elem))
 	}
 	return av, nil
+}
+
+func ArgChan(node parser.Node, args []Value, i int, name string, elem string) (*Channel, error) {
+	v := UnwrapFully(args[i])
+	ch, ok := v.(*Channel)
+	if !ok {
+		return nil, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be chan %s", name, i+1, elem))
+	}
+	return ch, nil
+}
+
+func ArgChanRecv(node parser.Node, args []Value, i int, name string, elem string) (*Channel, error) {
+	v := UnwrapFully(args[i])
+	ch, ok := v.(*Channel)
+	if !ok {
+		return nil, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be chan %s", name, i+1, elem))
+	}
+
+	if !ch.canRecv {
+		return nil, NewRuntimeError(node, fmt.Sprintf("%s: argument %d must be a receive-capable channel", name, i+1))
+	}
+
+	return ch, nil
+}
+
+func ArgChanSend(node parser.Node, args []Value, i int, name string, elem string) (*Channel, error) {
+	v := UnwrapFully(args[i])
+	ch, ok := v.(*Channel)
+	if !ok {
+		return nil, NewRuntimeError(node, fmt.Sprintf(
+			"%s: argument %d must be chan %s", name, i+1, elem))
+	}
+
+	if !ch.canSend {
+		return nil, NewRuntimeError(node, fmt.Sprintf(
+			"%s: argument %d must be a send-capable channel", name, i+1))
+	}
+
+	if ch.closed {
+		return nil, NewRuntimeError(node, fmt.Sprintf(
+			"%s: send on closed channel", name))
+	}
+
+	return ch, nil
 }
 
 func ArgColor(node parser.Node, TypeEnv map[string]TypeValue, args []Value, i int, name string) (rl.Color, error) {

@@ -1,4 +1,4 @@
-egg x = 2
+say x = 2
 
 choose yes {
     when x == 2 {

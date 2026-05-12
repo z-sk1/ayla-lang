@@ -1,0 +1,12 @@
+ch := make(chan int)
+
+select {
+    when <-ch {
+        putln(x)
+    }
+
+    otherwise {
+        putln(999)
+    }
+
+}

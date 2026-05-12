@@ -6,8 +6,8 @@ fun parse(x int) (int, error) {
     back 0, error("oh no")
 }
 
-egg x int
-egg err error
+say x int
+say err error
 
 x, err = parse(6)
 

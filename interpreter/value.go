@@ -24,6 +24,7 @@ const (
 	TypeStruct
 	TypeMap
 	TypeEnum
+	TypeChannel
 	TypeInterface
 	TypeNamed
 )
@@ -54,6 +55,9 @@ type TypeInfo struct {
 
 	Params  []*TypeInfo
 	Returns []*TypeInfo
+
+	CanSend bool
+	CanRecv bool
 }
 
 type NamedValue struct {
@@ -83,6 +87,7 @@ const (
 	MAP         ValueType = "map"
 	FUNCTION    ValueType = "function"
 	ENUM        ValueType = "enum"
+	CHAN        ValueType = "chan"
 	ERROR       ValueType = "error"
 	NIL         ValueType = "nil"
 	MODULE      ValueType = "module"
@@ -306,6 +311,22 @@ func (t TupleValue) String() string {
 		parts = append(parts, v.String())
 	}
 	return fmt.Sprintf("(%s)", strings.Join(parts, ", "))
+}
+
+type Channel struct {
+	ch       chan Value
+	canSend  bool
+	canRecv  bool
+	closed   bool
+	ElemType *TypeInfo
+}
+
+func (c *Channel) Type() ValueType {
+	return CHAN
+}
+
+func (c *Channel) String() string {
+	return fmt.Sprint(c.ch)
 }
 
 type Func struct {
@@ -600,28 +621,6 @@ func (n NativeValue) String() string {
 	return "native"
 }
 
-func (i *Interpreter) rangedIntType(min, max *float64) *TypeInfo {
-	base := i.TypeEnv["int"].TypeInfo
-	return &TypeInfo{
-		Name:       fmt.Sprintf("int<%v..%v>", *min, *max),
-		Kind:       TypeInt,
-		Underlying: base,
-		Min:        min,
-		Max:        max,
-	}
-}
-
-func (i *Interpreter) rangedFloatType(min, max *float64) *TypeInfo {
-	base := i.TypeEnv["float"].TypeInfo
-	return &TypeInfo{
-		Name:       fmt.Sprintf("float<%v..%v>", *min, *max),
-		Kind:       TypeFloat,
-		Underlying: base,
-		Min:        min,
-		Max:        max,
-	}
-}
-
 func (i *Interpreter) resolveTypeNode(t parser.TypeNode) (*TypeInfo, error) {
 	switch tn := t.(type) {
 
@@ -647,12 +646,12 @@ func (i *Interpreter) resolveTypeNode(t parser.TypeNode) (*TypeInfo, error) {
 			return nil, err
 		}
 
-		minVal, err := i.EvalExpression(tn.Min)
+		minVal, err := i.evalOne(tn.Min)
 		if err != nil {
 			return nil, err
 		}
 
-		maxVal, err := i.EvalExpression(tn.Max)
+		maxVal, err := i.evalOne(tn.Max)
 		if err != nil {
 			return nil, err
 		}
@@ -811,7 +810,7 @@ func (i *Interpreter) resolveTypeNode(t parser.TypeNode) (*TypeInfo, error) {
 			}, nil
 		}
 
-		sizeVal, err := i.EvalExpression(tn.Size)
+		sizeVal, err := i.evalOne(tn.Size)
 		if err != nil {
 			return nil, err
 		}
@@ -882,6 +881,30 @@ func (i *Interpreter) resolveTypeNode(t parser.TypeNode) (*TypeInfo, error) {
 			Kind:    TypeFunc,
 			Params:  paramsTI,
 			Returns: returnsTI,
+		}, nil
+
+	case *parser.ChanType:
+		baseTI, err := i.resolveTypeNode(tn.Base)
+		if err != nil {
+			return nil, err
+		}
+
+		name := fmt.Sprintf("chan %s", baseTI.Name)
+
+		if tn.CanRecv && !tn.CanSend {
+			name = fmt.Sprintf("<-chan %s", baseTI.Name)
+		}
+
+		if tn.CanSend && !tn.CanRecv {
+			name = fmt.Sprintf("chan<- %s", baseTI.Name)
+		}
+
+		return &TypeInfo{
+			Name:    name,
+			Kind:    TypeChannel,
+			Elem:    baseTI,
+			CanSend: tn.CanSend,
+			CanRecv: tn.CanRecv,
 		}, nil
 
 	default:
@@ -958,6 +981,8 @@ func valueTypeOf(ti *TypeInfo) ValueType {
 		return MAP
 	case TypeFunc:
 		return FUNCTION
+	case TypeChannel:
+		return CHAN
 	default:
 		return NIL
 	}
@@ -998,7 +1023,6 @@ func (i *Interpreter) TypeInfoFromValue(v Value) *TypeInfo {
 			Kind: TypeArray,
 			Elem: v.ElemType,
 		}
-
 	case MapValue:
 		if v.KeyType == nil || v.ValueType == nil {
 			panic("MapValue KeyType or ValueType is nil")
@@ -1010,7 +1034,6 @@ func (i *Interpreter) TypeInfoFromValue(v Value) *TypeInfo {
 			Key:   v.KeyType,
 			Value: v.ValueType,
 		}
-
 	case *StructValue:
 		return v.TypeName
 	case *Func:
@@ -1021,6 +1044,24 @@ func (i *Interpreter) TypeInfoFromValue(v Value) *TypeInfo {
 		return v.Enum
 	case NamedValue:
 		return v.TypeName
+	case *Channel:
+		name := fmt.Sprintf("chan %s", v.ElemType.Name)
+
+		if v.canRecv && !v.canSend {
+			name = fmt.Sprintf("<-chan %s", v.ElemType.Name)
+		}
+
+		if v.canSend && !v.canRecv {
+			name = fmt.Sprintf("chan<- %s", v.ElemType.Name)
+		}
+
+		return &TypeInfo{
+			Name:    name,
+			Kind:    TypeChannel,
+			Elem:    v.ElemType,
+			CanSend: v.canSend,
+			CanRecv: v.canRecv,
+		}
 	case *PointerValue:
 		if v.ElemType == nil {
 			panic("PointerValue ElemType is nil")
@@ -1121,6 +1162,8 @@ func (i *Interpreter) defaultValueFromTypeInfo(node parser.Node, ti *TypeInfo) (
 		return NilValue{}, nil
 	case TypeInterface:
 		return NilValue{}, nil
+	case TypeChannel:
+		return NilValue{}, nil
 	case TypeNamed:
 		v, err := i.defaultValueFromTypeInfo(node, ti.Underlying)
 		if err != nil {
@@ -1146,6 +1189,7 @@ func (i *Interpreter) defaultValueFromTypeInfo(node parser.Node, ti *TypeInfo) (
 				Value:    v,
 			}, nil
 		}
+
 	default:
 		return NilValue{}, NewRuntimeError(node, "cannot create default value for "+ti.Name)
 	}

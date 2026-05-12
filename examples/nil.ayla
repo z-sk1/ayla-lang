@@ -1,4 +1,4 @@
-egg foo = nil
+say foo = nil
 
 ayla foo == nil {
     put("wow")

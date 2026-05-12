@@ -56,9 +56,9 @@ Hi I'm Ziad and I am 13 years old
 ## empty interfaces
 an empty `interface` has no methods, meaning every type satisfies it. in Ayla, the `thing` type is an `alias` for an empty `interface`:
 ```ayla
-egg x interface{} = 4
-egg y thing = "hello"
-egg z thing = yes
+say x interface{} = 4
+say y thing = "hello"
+say z thing = yes
 ```
 
 `thing` is useful when you need to store or pass values of unknown or mixed types.
@@ -67,7 +67,7 @@ egg z thing = yes
 since a `thing` (or any interface) value could be any type, you need to `assert` it before using it in operations:
 
 ```ayla
-egg x thing = 42
+say x thing = 42
 putln(x.(int) + 1)
 ```
 
@@ -79,8 +79,8 @@ putln(x.(int) + 1)
 asserting the wrong type causes a runtime error:
 
 ```ayla
-egg x thing = "hello"
-egg n int = x.(int) // runtime error: type mismatch
+say x thing = "hello"
+say n int = x.(int) // runtime error: type mismatch
 ```
 > output:
 ```

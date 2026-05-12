@@ -1,4 +1,4 @@
-egg a<2> = 5
+say a<2> = 5
 
 putln(a) // 5
 putln(a) // 5

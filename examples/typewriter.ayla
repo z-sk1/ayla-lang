@@ -1,6 +1,6 @@
 import time
 
-egg text = "Yara's the worst person ever "
+say text = "Yara's the worst person ever "
 
 four i := 0; i < len(text); i = i + 1 {
     putln(text[i])

@@ -2,12 +2,12 @@
 
 ### *Take a break take a kitkat*
 
-break has been renamed to `kitkat`, which exits a loop
+break has been renamed to `snap`, which exits a loop
 
 and continue has been renamed to `next`, which skips to the next iteration
 
 ```ayla
-four i := range 5 {
+for i := range 5 {
     putln(i)
 }
 ```
@@ -21,12 +21,12 @@ four i := range 5 {
 4
 ```
 
-We can use `kitkat` to exit this loop early, for example when `i` reaches 3
+We can use `snap` to exit this loop early, for example when `i` reaches 3
 
 ```ayla
-four i := range 5 {
+for i := range 5 {
     ayla i == 3 {
-        kitkat
+        snap
     }
     
     putln(i)
@@ -45,7 +45,7 @@ now the loop exits at the 3rd iteration so it only prints the first 3 numbers
 We can also use `next` to skip to the next iteration, lets also use it when `i` reaches 3
 
 ```ayla
-four i := range 5 {
+for i := range 5 {
     ayla i == 3 {
         next
     }

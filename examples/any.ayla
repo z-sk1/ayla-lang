@@ -1,1 +1,4 @@
-fun s() {}
+say x thing = 4
+
+y, ok := x.(string)
+putln(y + 3)

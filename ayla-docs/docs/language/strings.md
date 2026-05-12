@@ -4,8 +4,8 @@
 you can concatenate (combine) strings using the `+` operator.
 
 ```ayla
-egg a = "hello "
-egg b = "world"
+say a = "hello "
+say b = "world"
 
 put(a + b)
 ```
@@ -23,7 +23,7 @@ you can also interpolate strings using `${}`
 > unlike JavaScript, you just use the normal quotation marks, "", not ``
 
 ```ayla
-egg rand = randi(10)
+say rand = randi(10)
 
 put("Random number: ${rand}")
 ```
@@ -33,7 +33,7 @@ put("Random number: ${rand}")
 you can index into strings like arrays and slices
 
 ```ayla 
-egg text = "Hello"
+say text = "Hello"
 
 putln(text[0])
 ```

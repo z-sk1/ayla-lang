@@ -1,4 +1,4 @@
-egg x = 2
+say x = 2
 
 with x {
     putln(it + 1)

@@ -2,6 +2,6 @@ import term
 
 options := []string{"Tuffer stuff", "Tyron", "Ligma"}
 
-option := term.Select("Tuff stuff", options)
+option := options[term.Select("Tuff stuff", options)]
 
-putln("You picked ${options[option]}")
+putln("You picked ${option}")

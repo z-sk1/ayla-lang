@@ -16,8 +16,8 @@ so because `Age` is just another name for `int`, they are fully interchangeable:
 ```ayla
 type Age = int
 
-egg a Age = 5
-egg y int = a
+say a Age = 5
+say y int = a
 putln(y)
 ```
 > output: 5
@@ -35,16 +35,16 @@ this creates a new type based on int.
 Now this would require explicit conversion:
 
 ```ayla 
-egg a Age = 5
-egg y int = int(a)  // required
+say a Age = 5
+say y int = int(a)  // required
 ```
 
 but with an alias:
 ```ayla
 type Age = int
 
-egg a Age - 5
-egg y int = a
+say a Age - 5
+say y int = a
 ```
 
 no conversion is needed.

@@ -12,7 +12,7 @@ putln("Hello world!")
 Let's try another program that uses a variable to print out a message
 
 ```ayla
-egg x = "Hi Ayla"
+say x = "Hi Ayla"
 
 putln(x)
 ```

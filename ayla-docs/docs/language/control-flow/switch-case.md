@@ -7,7 +7,7 @@ and default to `otherwise`
 
 Here, it carries out instructions based on what integer value `x` will have
 ```ayla
-egg x = 2
+say x = 2
 
 choose x {
     when 2 {
@@ -28,7 +28,7 @@ choose x {
 you can also use conditionals in the switch expression, like this
 
 ```ayla
-egg x = 5
+say x = 5
 
 choose x < 10 {
     when yes {
@@ -44,7 +44,7 @@ choose x < 10 {
 
 you can also implement conditionals into case expressions by making the switch expression a boolean value
 ```ayla
-egg x = 5
+say x = 5
 
 choose yes {
     when x < 10 {

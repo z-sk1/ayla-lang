@@ -16,12 +16,12 @@ here each variant belongs to the `Color` type
 ## using variants
 you can use enum variants as values using member expressions like this
 ```ayla
-egg c = Color.Red
+say c = Color.Red
 ```
 
 since enums define a new type you can use them in type annotation
 ```ayla
-egg c Color = Color.Blue
+say c Color = Color.Blue
 ```
 
 ## enums as types

@@ -244,6 +244,8 @@ func run() {
 		fmt.Printf("\n%s: %v\n", name, err)
 		return
 	}
+	
+	interp.Wg.Wait()
 
 	var elapsed time.Duration
 

@@ -1,6 +1,6 @@
 type Timespan int
 
-egg timer = Timespan(20)
+say timer = Timespan(20)
 
 why int(timer) > 0 {
     timer = timer - 1

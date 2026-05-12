@@ -1,48 +1,48 @@
 import math
 
-egg A float = 0.0
-egg B float = 0.0
+say A float = 0.0
+say B float = 0.0
 
-egg z [1760]float
-egg b [1760]int
+say z [1760]float
+say b [1760]int
 
-why yes {
+while yes {
 
     // Precompute trig of A and B
-    egg sinA = math.Sin(A)
-    egg cosA = math.Cos(A)
-    egg sinB = math.Sin(B)
-    egg cosB = math.Cos(B)
+    say sinA = math.Sin(A)
+    say cosA = math.Cos(A)
+    say sinB = math.Sin(B)
+    say cosB = math.Cos(B)
 
     // Clear buffers
-    egg i int = 0
-    why i < 1760 {
+    say i int = 0
+    while i < 1760 {
         z[i] = 0.0
         b[i] = 32
         i++
     }
 
-    egg j int = 0
-    why j < 314 {                 // 6.28 / 0.02 ≈ 314
-        egg fj = float(j) * 0.02
-        egg sinFj = math.Sin(fj)
-        egg cosFj = math.Cos(fj)
+    say j int = 0
+    while j < 314 {                 // 6.28 / 0.02 ≈ 314
+        say fj = float(j) * 0.02
+        say sinFj = math.Sin(fj)
+        say cosFj = math.Cos(fj)
 
-        egg k int = 0
-        why k < 90 {              // 6.28 / 0.07 ≈ 90
-            egg fi = float(k) * 0.07
-            egg sinFi = math.Sin(fi)
-            egg cosFi = math.Cos(fi)
+        say k int = 0
+        while k < 90 {              // 6.28 / 0.07 ≈ 90
+            say fi = float(k) * 0.07
+            say sinFi = math.Sin(fi)
+            say cosFi = math.Cos(fi)
 
-            egg h = cosFj + 2.0
-            egg D = 1 / (sinFi * h * sinA + sinFj * cosA + 5)
+            say h = cosFj + 2.0
+            say D = 1 / (sinFi * h * sinA + sinFj * cosA + 5)
 
-            egg t = sinFi * h * cosA - sinFj * sinA
+            say t = sinFi * h * cosA - sinFj * sinA
 
-            egg x = int(40 + 20 * D * (cosFi * h * cosB - t * sinB))
-            egg y = int(12 + 10 * D * (cosFi * h * sinB + t * cosB))
+            say x = int(40 + 20 * D * (cosFi * h * cosB - t * sinB))
+            say y = int(12 + 10 * D * (cosFi * h * sinB + t * cosB))
 
-            egg o int = x + 80 * y
+            say o int = x + 80 * y
 
             ayla (y > 0) && (y < 22) && (x > 0) && (x < 79) && (D > z[o]) {
                 z[o] = D
@@ -57,7 +57,7 @@ why yes {
 
     // Render
     i = 0
-    why i < 1760 {
+    while i < 1760 {
         ayla i % 80 == 0 {
             putln("")
         } elen {

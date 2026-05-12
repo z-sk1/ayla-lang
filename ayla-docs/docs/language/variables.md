@@ -3,25 +3,25 @@
 A variable is a place for storing a value, a constant is a place for storing a value which can never be changed
 
 ## declaration and assignment
-to declare a normal mutable, reassignable variable use `egg`
+to declare a normal mutable, reassignable variable use `say`
 ```ayla
-egg x = "wowie"
+say x = "wowie"
 ```
 
 variables can also be declared without an initial value, like so
 ```ayla
-egg x
+say x
 ```
 
-to declare a constant, a variable which cannot be changed, use `rock`
+to declare a constant, a variable which cannot be changed, use `keep`
 
 ```ayla
-rock x = "i will never change"
+keep x = "i will never change"
 ```
 
 if you try to assign a new value, you will across a `Runtime error`
 ```ayla
-rock x = "i will never change"
+keep x = "i will never change"
 
 x = "i want to change"
 ```
@@ -29,7 +29,7 @@ x = "i want to change"
 
 constants cannot be declared without an intitial value.
 ```ayla
-rock x
+keep x
 ```
 > output: Runtime error at 1:5: const x must be initialised
 
@@ -37,7 +37,7 @@ rock x
 you can also assign and declare multiple variables at the same time
 
 ```ayla
-rock a, b = 4, 2
+keep a, b = 4, 2
 
 putln("${a} ${b}")
 ```
@@ -45,19 +45,19 @@ putln("${a} ${b}")
 
 you can also just declare them without an inital value like normal
 ```ayla
-egg a, b
+say a, b
 ```
 
 and also like single declaration, using multi constant declaration you must initialise it
 ```ayla
-rock a, b
+keep a, b
 ```
 > output: runtime error at 1:5: constants, a, b, must be initialised
 
 
 same principles for multi assignment
 ```ayla
-egg a, b
+say a, b
 
 a, b = 4, 2
 
@@ -72,7 +72,7 @@ fun operation(x int, y int) (int, int) {
     back x + y, x - y
 }
 
-egg a, b int = operation(5, 3)
+say a, b int = operation(5, 3)
 
 putln(a, b)
 ```
@@ -86,12 +86,12 @@ putln(a, b)
 you can also do `declaration blocks` like in Go
 
 ```ayla
-egg (
+say (
   a = 1
   b = no
 )
 
-rock (
+keep (
   x int = 4
   y bool = yes
 )

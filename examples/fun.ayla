@@ -1,9 +1,9 @@
 fun sum(nums ...int) (int) {
     res := 0
-    four _, num := range nums {
+    for _, num := range nums {
         res = res + num
     }
-    back res
+    give res
 }
 
 putln(sum([]int{12, 3, 4}...))

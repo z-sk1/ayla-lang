@@ -11,7 +11,7 @@ the syntax for an array type is:
 ```
 Example:
 ```ayla
-egg x [5]int
+say x [5]int
 ```
 This declares an array of:
 ```ayla
@@ -28,7 +28,7 @@ type Names [5]string
 ## array literals
 You can initialize an array using a literal:
 ```ayla
-egg x = [5]int{1, 2, 3, 4, 5}
+say x = [5]int{1, 2, 3, 4, 5}
 putln(x)
 ```
 each value inside `{}` fills the `array` in order.
@@ -37,7 +37,7 @@ each value inside `{}` fills the `array` in order.
 Arrays use zero-based indexing
 
 ```ayla
-egg x = [5]int{10, 20, 30, 40, 50}
+say x = [5]int{10, 20, 30, 40, 50}
 
 putln(x[0]) // 10
 putln(x[2]) // 30
@@ -53,7 +53,7 @@ the first element is at index 0
 ## modifying elements
 
 ```ayla
-egg x = [5]int{1, 2, 3, 4, 5}
+say x = [5]int{1, 2, 3, 4, 5}
 x[0] = 100
 
 putln(x[0])
@@ -63,8 +63,8 @@ putln(x[0])
 this is very important:
 
 ```ayla
-egg a [5]int
-egg b [3]int
+say a [5]int
+say b [3]int
 ```
 
 these are *different* types.
@@ -83,7 +83,7 @@ The zero value of an array is an array where every element is the zero value of 
 Example:
 
 ```ayla
-egg x [3]string
+say x [3]string
 putln(x)
 ```
 

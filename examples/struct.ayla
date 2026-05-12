@@ -1,1 +1,1 @@
-egg x struct{A int} = struct{A string}{A: "12"}
+say x struct{A int} = struct{A string}{A: "12"}

@@ -10,7 +10,7 @@ rl.SetMusicVolume(m, 0.25)
 
 rl.SetTargetFPS(60)
 
-why !rl.ShouldClose() {
+while !rl.ShouldClose() {
     rl.UpdateMusic(m)
 
     rl.Clear()

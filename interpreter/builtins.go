@@ -42,6 +42,7 @@ func initBuiltinTypes(TypeEnv map[string]TypeValue) {
 			IsComparable: true,
 		},
 	}
+
 	TypeEnv["string"] = TypeValue{
 		TypeInfo: &TypeInfo{
 			Name:         "string",
@@ -166,6 +167,26 @@ func (i *Interpreter) registerBuiltins() {
 		},
 	}
 
+	env.builtins["close"] = &BuiltinFunc{
+		Name:  "close",
+		Arity: 1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			ch, err := ArgChanSend(node, args, 0, "close", "")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			if ch.closed {
+				return NilValue{}, NewRuntimeError(node, "close: channel already closed")
+			}
+
+			close(ch.ch)
+			ch.closed = true
+
+			return NilValue{}, nil
+		},
+	}
+
 	env.builtins["make"] = &BuiltinFunc{
 		Name:  "make",
 		Arity: -1,
@@ -231,8 +252,34 @@ func (i *Interpreter) registerBuiltins() {
 					KeyType:   ti.Key,
 					ValueType: ti.Value,
 				}, nil
+			case TypeChannel:
+				capacity := 0
+
+				if len(args) == 2 {
+					var err error
+					capacity, err = ArgInt(node, args, 1, "make")
+					if err != nil {
+						return NilValue{}, err
+					}
+					if capacity < 0 {
+						return NilValue{}, NewRuntimeError(node, "make: capacity must be >= 0")
+					}
+				}
+
+				var ch chan Value
+				if capacity == 0 {
+					ch = make(chan Value)
+				} else {
+					ch = make(chan Value, capacity)
+				}
+
+				return &Channel{
+					ch:       ch,
+					ElemType: ti.Elem,
+				}, nil
+
 			default:
-				return NilValue{}, NewRuntimeError(node, "make: slices, arrays and maps are only supported")
+				return NilValue{}, NewRuntimeError(node, "make: slices, arrays, maps, and channels are supported")
 			}
 		},
 	}

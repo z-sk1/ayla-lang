@@ -1,12 +1,10 @@
 # For Loop
 A loop allows you to repeat a block of code multiple times.
 
-the for loop has been renamed to `four` loop
-
 ## C-Style
 this is a classic c-style for loop
 ```ayla
-four egg i = 0; i < 5; i = i + 1 {
+for say i = 0; i < 5; i++ {
     put(i) 
 }
 ```
@@ -19,13 +17,13 @@ a C-style loop has three parts:
 initialisation ; condition ; update
 ```
 
-`Initialisation` = `egg i = 0`
+`Initialisation` = `say i = 0`
 creates a counter variable starting at 0.
 
 `Condition` = `i < 5`
 The loop runs as long as this is true.
 
-`Update` = `i = i + 1`
+`Update` = `i++`
 Runs after each iteration and increases i.
 
 So this loop:
@@ -47,7 +45,7 @@ but you can also do a for loop with `range` to iterate over:
 ```ayla
 x := []int{1, 2, 3}
 
-four i, v := range x {
+for i, v := range x {
     putln(v)
 }
 ```
@@ -62,7 +60,7 @@ four i, v := range x {
 ```ayla
 x := map[string]int{"a": 1, "b": 2}
 
-four k, v := range x {
+for k, v := range x {
     putln(k)
 }
 ```
@@ -77,7 +75,7 @@ b
 ```ayla
 x := "hiya"
 
-four i, v := range x {
+for i, v := range x {
     putln(v)
 }
 ```
@@ -92,7 +90,7 @@ a
 ### ints:
 this is used as a repeat
 ```ayla
-four i := range 5 {
+for i := range 5 {
     putln(i)
 }
 ```
@@ -109,7 +107,7 @@ you can also use `_` to discard a variable like this
 ```ayla
 x := []int{1, 2, 3}
 
-four _, v := range x {
+for _, v := range x {
     putln(v)
 }
 ```

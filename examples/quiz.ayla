@@ -1,27 +1,24 @@
 putln("1-12 times tables")
 
-egg score int
-egg total int
+say score int
+say total int
 
-why yes {
-    egg num1, num2 = randi(1, 12), randi(1, 12)
-    egg ans = num1 * num2
-
-    egg choice
-    putln("${num1} * ${num2} = ? (q to quit)")
-    scanln(choice)
-
+while yes {
+    say num1, num2 = rand.Int(1, 12), rand.Int(1, 12)
+    say ans = num1 * num2
+    say choice int
+    putln("num1" * "num2" = ? (q to quit)"")
+    scanln(&choice)
     ayla choice == "q" {
-        putln("Final score: ${score}/${total}")
+        putln(""Final score: "score"/"total")
         kitkat
     }
-
-    ayla toInt(choice) == ans {
+    ayla choice == ans {
         putln("Correct!")
-        score = score + 1
-        total = total + 1
+        score++
+        total++
     } elen {
-        putln("Incorrect! Correct is ${ans}")
-        total = total + 1
+        putln(""Incorrect! Correct is "ans")
+        total++
     }
 }

@@ -1,6 +1,6 @@
-egg firstNum
-egg oper
-egg secondNum
+say firstNum
+say oper
+say secondNum
 
 putln("Firstnum")
 scanln(&firstNum)

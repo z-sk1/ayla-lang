@@ -72,6 +72,18 @@ func New(path string) *Interpreter {
 	return i
 }
 
+func (i *Interpreter) Clone() *Interpreter {
+	return &Interpreter{
+		Env:          i.Env.Clone(),
+		TypeEnv:      i.TypeEnv,
+		pointerCache: i.pointerCache,
+		modulePaths:  i.modulePaths,
+		currentDir:   i.currentDir,
+		projectRoot:  i.projectRoot,
+		Wg:           i.Wg,
+	}
+}
+
 func NewWithEnv(env *Environment, path string) *Interpreter {
 	TypeEnv := make(map[string]TypeValue)
 
@@ -118,6 +130,27 @@ func NewEnvironment(parent *Environment) *Environment {
 		builtins: parent.builtins,
 		parent:   parent,
 		mu:       sync.RWMutex{},
+	}
+}
+
+func (e *Environment) Clone() *Environment {
+	if e == nil {
+		return nil
+	}
+
+	newStore := make(map[string]*Variable)
+	for k, v := range e.store {
+		newStore[k] = v
+	}
+
+	newDefers := make([]*parser.FuncCall, len(e.defers))
+	copy(newDefers, e.defers)
+
+	return &Environment{
+		store:    newStore,
+		builtins: e.builtins,
+		defers:   newDefers,
+		parent:   e.parent.Clone(),
 	}
 }
 
@@ -310,6 +343,21 @@ func TypesAssignable(from, to *TypeInfo) bool {
 	}
 	if to.Kind == TypeNamed && to.Underlying != nil && to.Underlying.Kind == TypeInterface {
 		return implementsInterface(from, to.Underlying)
+	}
+
+	if from.Kind == TypeChannel && to.Kind == TypeChannel {
+		if from.Elem != to.Elem {
+			return false
+		}
+
+		if to.CanSend && !from.CanSend {
+			return false
+		}
+		if to.CanRecv && !from.CanRecv {
+			return false
+		}
+
+		return true
 	}
 
 	if from.Kind == to.Kind && (from.Kind == TypeInt || from.Kind == TypeFloat) {
@@ -1071,6 +1119,40 @@ func resolveAssignableArg(arg Value) (Assignable, bool) {
 	return ass, ok
 }
 
+func (i *Interpreter) unpackForAssign(node parser.Node, res EvalResult, targetCount int) ([]Value, error) {
+	values := res.Values
+
+	if len(values) == 1 {
+		if tup, ok := values[0].(TupleValue); ok {
+			values = tup.Values
+		}
+	}
+
+	if targetCount == 1 {
+		if len(values) == 0 {
+			return nil, NewRuntimeError(node, "no value")
+		}
+
+		if len(values) == 2 {
+			if okVal, isBool := values[1].(BoolValue); isBool && !okVal.V {
+				if res.Err != nil {
+					return nil, NewRuntimeError(node, res.Err.Error())
+				}
+				return nil, NewRuntimeError(node, "operation failed")
+			}
+		}
+
+		return []Value{values[0]}, nil
+	}
+
+	if len(values) != targetCount {
+		return nil, NewRuntimeError(node,
+			fmt.Sprintf("expected %d values, got %d", targetCount, len(values)))
+	}
+
+	return values, nil
+}
+
 func (i *Interpreter) resolveAssignableTarget(expr parser.Expression) (Assignable, error) {
 
 	switch e := expr.(type) {
@@ -1088,7 +1170,7 @@ func (i *Interpreter) resolveAssignableTarget(expr parser.Expression) (Assignabl
 
 	case *parser.MemberExpression:
 
-		objVal, err := i.EvalExpression(e.Left)
+		objVal, err := i.evalOne(e.Left)
 		if err != nil {
 			return nil, err
 		}
@@ -1137,13 +1219,13 @@ func (i *Interpreter) resolveAssignableTarget(expr parser.Expression) (Assignabl
 			}
 			leftVal = v.Value
 		} else {
-			leftVal, err = i.EvalExpression(e.Left)
+			leftVal, err = i.evalOne(e.Left)
 			if err != nil {
 				return nil, err
 			}
 		}
 
-		indexVal, err := i.EvalExpression(e.Index)
+		indexVal, err := i.evalOne(e.Index)
 		indexVal = UnwrapFully(indexVal)
 
 		switch val := leftVal.(type) {
@@ -1202,7 +1284,7 @@ func (i *Interpreter) resolveAssignableTarget(expr parser.Expression) (Assignabl
 
 	case *parser.PrefixExpression:
 		if e.Operator == "*" {
-			ptrVal, err := i.EvalExpression(e.Right)
+			ptrVal, err := i.evalOne(e.Right)
 			if err != nil {
 				return nil, err
 			}

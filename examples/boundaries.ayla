@@ -1,1 +1,1 @@
-egg age int<0..120> = 200
+say age int<0..120> = 200

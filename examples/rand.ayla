@@ -1,4 +1,4 @@
-egg rand = randi(5, 10)
+say rand = randi(5, 10)
 
 put("Random: ${rand}")
 

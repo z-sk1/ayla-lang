@@ -39,7 +39,7 @@ struct{X int}{X: 12}
 if you have a variable which has a `struct` value you can access its fields using the `.` operator
 
 ```ayla
-egg pos = struct{
+say pos = struct{
     X int
     Y int
 }{

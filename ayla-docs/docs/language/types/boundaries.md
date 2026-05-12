@@ -14,8 +14,8 @@ float<start..end>
 
 ## example
 ```ayla
-egg age int<0..120> = 25
-egg temperature float<-273.15..10000>
+say age int<0..120> = 25
+say temperature float<-273.15..10000>
 ```
 Here:
 - `age` cannot be less than 0 or greater than 120
