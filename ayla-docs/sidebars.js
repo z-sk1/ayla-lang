@@ -77,6 +77,7 @@ const sidebars = {
           items: [
             "language/concurrency/start",
             "language/concurrency/channels",
+            "language/concurrency/select",
           ],
         },
       ],
