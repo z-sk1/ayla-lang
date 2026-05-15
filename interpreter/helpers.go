@@ -33,7 +33,7 @@ func New(path string) *Interpreter {
 	env := &Environment{
 		store:    make(map[string]*Variable),
 		builtins: make(map[string]*BuiltinFunc),
-		defers:   make([]*parser.FuncCall, 0),
+		defers:   make([]*parser.DeferStatement, 0),
 		mu:       sync.RWMutex{},
 	}
 
@@ -126,7 +126,7 @@ func NewWithEnv(env *Environment, path string) *Interpreter {
 func NewEnvironment(parent *Environment) *Environment {
 	return &Environment{
 		store:    make(map[string]*Variable),
-		defers:   make([]*parser.FuncCall, 0),
+		defers:   make([]*parser.DeferStatement, 0),
 		builtins: parent.builtins,
 		parent:   parent,
 		mu:       sync.RWMutex{},
@@ -143,7 +143,7 @@ func (e *Environment) Clone() *Environment {
 		newStore[k] = v
 	}
 
-	newDefers := make([]*parser.FuncCall, len(e.defers))
+	newDefers := make([]*parser.DeferStatement, len(e.defers))
 	copy(newDefers, e.defers)
 
 	return &Environment{
@@ -266,15 +266,24 @@ func (e *Environment) GetMethod(typ *TypeInfo, name string) (*Func, bool) {
 	return fn, ok
 }
 
-func (e *Environment) AddDefer(call *parser.FuncCall) {
-	e.defers = append(e.defers, call)
+func (e *Environment) AddDefer(stmt *parser.DeferStatement) {
+	e.defers = append(e.defers, stmt)
 }
 
 func (i *Interpreter) runDefers(env *Environment) error {
 	for j := len(env.defers) - 1; j >= 0; j-- {
-		_, err := i.evalFuncCall(env.defers[j])
-		if err != nil {
-			return err
+		if env.defers[j].Body != nil {
+			_, err := i.EvalStatements(env.defers[j].Body)
+			if err != nil {
+				return err
+			}
+		}
+
+		if env.defers[j].Call != nil {
+			_, err := i.evalFuncCall(env.defers[j].Call)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	env.defers = nil

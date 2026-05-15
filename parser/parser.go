@@ -1592,7 +1592,14 @@ func (p *Parser) parseDeferStatement() *DeferStatement {
 	}
 
 	p.nextToken()
-	if p.curTok.Type != token.IDENT {
+	if p.curTok.Type == token.LBRACE {
+		stmt.Body = p.parseBlockStatement()
+
+		if p.curTok.Type != token.RBRACE {
+			p.addError("expected '}'")
+			return nil
+		}
+	} else if p.curTok.Type != token.IDENT {
 		p.addError("expected function identifier after defer")
 		return nil
 	}

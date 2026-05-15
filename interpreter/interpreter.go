@@ -18,7 +18,7 @@ import (
 type Environment struct {
 	store    map[string]*Variable
 	builtins map[string]*BuiltinFunc
-	defers   []*parser.FuncCall
+	defers   []*parser.DeferStatement
 
 	mu     sync.RWMutex
 	parent *Environment
@@ -1473,7 +1473,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 		return SignalNone{}, nil
 
 	case *parser.DeferStatement:
-		i.Env.AddDefer(stmt.Call)
+		i.Env.AddDefer(stmt)
 		return SignalNone{}, nil
 
 	case *parser.BreakStatement:

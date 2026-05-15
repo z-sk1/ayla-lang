@@ -6,7 +6,7 @@ The start statement runs a function concurrently in a new lightweight thread of 
 
 this the traditional syntax
 ```ayla
-start function()
+start function_call()
 ```
 
 but you can also use a block format like this

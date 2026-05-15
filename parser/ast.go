@@ -1158,6 +1158,7 @@ func (i *ImportStatement) Format(f *Formatter) string {
 type DeferStatement struct {
 	NodeBase
 	Call *FuncCall
+	Body []Statement
 }
 
 func (d *DeferStatement) Format(f *Formatter) string {
