@@ -4,7 +4,7 @@ type Person struct {
 }
 
 fun (p Person) getInfo() (string, int) {
-    back p.Name, p.Age
+    give p.Name, p.Age
 }
 
 x := Person{

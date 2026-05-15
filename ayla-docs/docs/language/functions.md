@@ -28,11 +28,11 @@ hi Ziad
 ```
 
 ## return
-return has been renamed to `back`
+return has been renamed to `give`
 
 ```ayla
 fun add(x int, y int) (int) {
-    back x + y
+    give x + y
 }
 
 put(add(5, 7))
@@ -46,7 +46,7 @@ put(add(5, 7))
 ayla also supports **multiple return values**
 ```ayla
 fun operation(x int, y int) (int, int) {
-    back x + y, x - y
+    give x + y, x - y
 }
 
 putln(operation(4, 5))
@@ -67,7 +67,7 @@ fun sum(nums ...int) (int) {
     four _, n := range nums {
         total = total + n
     } 
-    back total
+    give total
 }
 
 putln(sum(1, 2, 3, 4))

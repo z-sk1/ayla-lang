@@ -69,7 +69,7 @@ putln("${a} ${b}")
 you can assign and declare multiple variables to function return values and it will destructure it
 ```ayla
 fun operation(x int, y int) (int, int) {
-    back x + y, x - y
+    give x + y, x - y
 }
 
 say a, b int = operation(5, 3)

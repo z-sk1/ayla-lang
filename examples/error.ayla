@@ -1,9 +1,9 @@
 fun parse(x int) (int, error) {
     ayla x <= 5 {
-        back 42, nil
+        give 42, nil
     }
 
-    back 0, error("oh no")
+    give 0, error("oh no")
 }
 
 say x int
