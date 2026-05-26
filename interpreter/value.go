@@ -2,7 +2,6 @@ package interpreter
 
 import (
 	"fmt"
-	"math"
 	"strconv"
 	"strings"
 
@@ -51,7 +50,9 @@ type TypeInfo struct {
 	Value        *TypeInfo
 	IsComparable bool
 
-	Variants map[string]int
+	Variants     map[string]*EnumVariant
+	VariantOrder []string
+	Nested       map[string]*TypeInfo
 
 	Params  []*TypeInfo
 	Returns []*TypeInfo
@@ -539,10 +540,15 @@ func (m MapValue) String() string {
 	return fmt.Sprintf("map{%s}", strings.Join(parts, ", "))
 }
 
+type EnumVariant struct {
+	Name  string
+	Index int
+	Value Value
+}
+
 type EnumValue struct {
 	Enum    *TypeInfo
-	Variant string
-	Index   int
+	Variant *EnumVariant
 }
 
 func (e EnumValue) Type() ValueType {
@@ -550,7 +556,7 @@ func (e EnumValue) Type() ValueType {
 }
 
 func (e EnumValue) String() string {
-	return fmt.Sprintf("%s.%s", e.Enum.Name, e.Variant)
+	return fmt.Sprintf("%s.%s{%s}", e.Enum.Name, e.Variant.Name, e.Variant.Value.String())
 }
 
 type TypeValue struct {
@@ -561,8 +567,8 @@ func (t TypeValue) String() string {
 	if t.TypeInfo.Kind == TypeEnum {
 		variants := make([]string, 0, len(t.TypeInfo.Variants))
 
-		for name := range t.TypeInfo.Variants {
-			variants = append(variants, name)
+		for name, v := range t.TypeInfo.Variants {
+			variants = append(variants, name+fmt.Sprintf("{%s}", v.Value.String()))
 		}
 
 		return fmt.Sprintf("%s: %s", t.TypeInfo.Name, strings.Join(variants, ", "))
@@ -932,14 +938,16 @@ func valuesEqual(a, b Value) bool {
 		return ok && av.V == bv.V
 
 	case EnumValue:
-		switch bv := b.(type) {
-		case EnumValue:
-			return av.Index == bv.Index
-		case IntValue:
-			return av.Index == bv.V
-		default:
+		bv, ok := b.(EnumValue)
+		if !ok {
 			return false
 		}
+
+		if bv.Enum != av.Enum {
+			return false
+		}
+
+		return valuesEqual(av.Variant.Value, bv.Variant.Value)
 
 	case *PointerValue:
 		bv, ok := b.(*PointerValue)
@@ -1137,26 +1145,16 @@ func (i *Interpreter) defaultValueFromTypeInfo(node parser.Node, ti *TypeInfo) (
 			TypeName: ti,
 		}, nil
 	case TypeEnum:
-		if len(ti.Variants) == 0 {
+		if len(ti.VariantOrder) == 0 {
 			return NilValue{}, NewRuntimeError(node, "enum has no variants")
 		}
 
-		var (
-			name string
-			idx  = math.MaxInt
-		)
-
-		for n, i := range ti.Variants {
-			if i < idx {
-				name = n
-				idx = i
-			}
-		}
+		first := ti.VariantOrder[0]
+		v := ti.Variants[first]
 
 		return EnumValue{
 			Enum:    ti,
-			Variant: name,
-			Index:   idx,
+			Variant: v,
 		}, nil
 	case TypePointer:
 		return NilValue{}, nil

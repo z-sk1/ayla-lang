@@ -764,11 +764,42 @@ func MapKey(v Value) string {
 		return fmt.Sprintf("p:%p", x.Target)
 
 	case EnumValue:
-		return fmt.Sprintf("e:%s:%d", x.Enum.Name, x.Index)
+		return fmt.Sprintf("e:%s:%d", x.Enum.Name, x.Variant.Index)
 
 	default:
 		panic("unhashable map key")
 	}
+}
+
+func compareOrdered(node parser.Node, a, b Value, op string) (Value, error) {
+	switch av := a.(type) {
+	case IntValue:
+		bv := b.(IntValue).V
+		switch op {
+		case "<":
+			return BoolValue{V: av.V < bv}, nil
+		case ">":
+			return BoolValue{V: av.V > bv}, nil
+		case "<=":
+			return BoolValue{V: av.V <= bv}, nil
+		case ">=":
+			return BoolValue{V: av.V >= bv}, nil
+		}
+	case FloatValue:
+		bv := b.(FloatValue).V
+		switch op {
+		case "<":
+			return BoolValue{V: av.V < bv}, nil
+		case ">":
+			return BoolValue{V: av.V > bv}, nil
+		case "<=":
+			return BoolValue{V: av.V <= bv}, nil
+		case ">=":
+			return BoolValue{V: av.V >= bv}, nil
+		}
+	}
+
+	return NilValue{}, NewRuntimeError(node, "enum values are not orderable")
 }
 
 func (i *Interpreter) checkFuncStatement(fn *parser.FuncStatement) error {
@@ -856,6 +887,18 @@ func (i *Interpreter) checkMethodStatement(fn *parser.MethodStatement) error {
 	}
 
 	return nil
+}
+
+func extractEnumValue(node parser.Node, v EnumValue, expected TypeKind) (Value, error) {
+	elem := UnwrapAlias(v.Enum.Elem)
+
+	if elem.Kind != expected {
+		return NilValue{}, NewRuntimeError(node,
+			fmt.Sprintf("cannot cast 'enum %s' to '%s'", v.Enum.Name, elem.Name),
+		)
+	}
+
+	return v.Variant.Value, nil
 }
 
 func (i *Interpreter) assignWithType(node parser.Node, v Value, expected *TypeInfo) (Value, error) {

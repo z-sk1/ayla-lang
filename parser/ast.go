@@ -472,21 +472,46 @@ func (a *AssignmentStatement) Format(f *Formatter) string {
 	)
 }
 
+type EnumMember interface {
+	isEnumMember()
+	Format(f *Formatter) string
+}
+
+type Variant struct {
+	Name  *Identifier
+	Value Expression
+}
+
+func (v *Variant) isEnumMember() {}
+
+func (v *Variant) Format(f *Formatter) string {
+	if v.Value != nil {
+		return fmt.Sprintf("%s = %s", v.Name.Format(f), v.Value.Format(f))
+	}
+
+	return v.Name.Format(f)
+}
+
 type EnumStatement struct {
 	NodeBase
-	Name     *Identifier
-	Variants []*Identifier
+	Name    *Identifier
+	Type    TypeNode
+	Members []EnumMember
+	Order   []string
 }
+
+func (e *EnumStatement) isEnumMember() {}
 
 func (e *EnumStatement) Format(f *Formatter) string {
 	var out strings.Builder
 
 	out.WriteString("enum ")
-	out.WriteString(e.Name.Format(f))
+	out.WriteString(e.Name.Format(f) + " ")
+	out.WriteString(e.Type.Format(f))
 	out.WriteString(" {\n")
 
 	f.Indent++
-	for _, v := range e.Variants {
+	for _, v := range e.Members {
 		out.WriteString(f.identStr())
 		out.WriteString(v.Format(f))
 		out.WriteString("\n")

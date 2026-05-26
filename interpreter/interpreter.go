@@ -222,20 +222,64 @@ func (i *Interpreter) RegisterForward(stmts []parser.Statement) error {
 				return NewRuntimeError(stmt, fmt.Sprintf("cannot redeclare enum: %s", stmt.Name.Value))
 			}
 
-			enumType := &TypeInfo{
-				Name:     stmt.Name.Value,
-				Kind:     TypeEnum,
-				Variants: make(map[string]int),
+			elemTI, err := i.resolveTypeNode(stmt.Type)
+			if err != nil {
+				return err
 			}
 
-			for idx, ident := range stmt.Variants {
-				name := ident.Value
+			enumType := &TypeInfo{
+				Name:         stmt.Name.Value,
+				Kind:         TypeEnum,
+				Elem:         elemTI,
+				Variants:     make(map[string]*EnumVariant),
+				VariantOrder: make([]string, 0),
+				Nested:       make(map[string]*TypeInfo),
+			}
+
+			for idx, member := range stmt.Members {
+
+				if nested, ok := member.(*parser.EnumStatement); ok {
+					err := i.RegisterForward([]parser.Statement{nested})
+					if err != nil {
+						return err
+					}
+					continue
+				}
+
+				variant := member.(*parser.Variant)
+				name := variant.Name.Value
 
 				if _, exists := enumType.Variants[name]; exists {
 					return NewRuntimeError(stmt, fmt.Sprintf("duplicate enum variant: %s", name))
 				}
 
-				enumType.Variants[name] = idx
+				var val Value
+
+				if variant.Value != nil {
+					v, err := i.evalOne(variant.Value)
+					if err != nil {
+						return err
+					}
+					val = v
+
+					if !TypesAssignable(i.TypeInfoFromValue(val), enumType.Elem) {
+						return NewRuntimeError(stmt, fmt.Sprintf("type mismatch: variant '%s' expected '%s' but got '%s'", name, enumType.Elem.Name, i.TypeInfoFromValue(val).Name))
+					}
+				} else {
+					val = IntValue{V: idx}
+
+					if !TypesAssignable(i.TypeInfoFromValue(val), enumType.Elem) {
+						return NewRuntimeError(stmt, fmt.Sprintf("type mismatch: variant '%s' expected '%s' but got '%s'", name, enumType.Elem.Name, i.TypeInfoFromValue(val).Name))
+					}
+				}
+
+				enumType.Variants[name] = &EnumVariant{
+					Name:  name,
+					Index: idx,
+					Value: val,
+				}
+
+				enumType.VariantOrder = append(enumType.VariantOrder, name)
 			}
 
 			i.TypeEnv[stmt.Name.Value] = TypeValue{TypeInfo: enumType}
@@ -2196,6 +2240,11 @@ func (i *Interpreter) evalTypeCast(target *TypeInfo, arg parser.Expression, node
 
 	v := UnwrapFully(val)
 
+	if ev, ok := v.(EnumValue); ok {
+		inner := ev.Variant.Value
+		return i.evalTypeCastValue(target, inner, node)
+	}
+
 	switch target.Kind {
 	case TypeInt:
 		var val int
@@ -2206,7 +2255,7 @@ func (i *Interpreter) evalTypeCast(target *TypeInfo, arg parser.Expression, node
 		case FloatValue:
 			val = int(v.V)
 		default:
-			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("%s type cast does not support %s", target.Name, i.TypeInfoFromValue(v).Name))
+			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("cannot cast '%s' to '%s'", i.TypeInfoFromValue(v).Name, target.Name))
 		}
 
 		return IntValue{V: val}, nil
@@ -2219,16 +2268,21 @@ func (i *Interpreter) evalTypeCast(target *TypeInfo, arg parser.Expression, node
 		case FloatValue:
 			val = v.V
 		default:
-			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("%s type cast does not support %s", target.Name, i.TypeInfoFromValue(v).Name))
+			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("cannot cast '%s' to '%s'", i.TypeInfoFromValue(v).Name, target.Name))
 		}
 
 		return FloatValue{V: val}, nil
 	case TypeString:
-		if s, ok := v.(StringValue); ok {
-			return s, nil
+		var val string
+
+		switch v := v.(type) {
+		case StringValue:
+			val = v.V
+		default:
+			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("cannot cast '%s' to '%s'", i.TypeInfoFromValue(v).Name, target.Name))
 		}
 
-		return NilValue{}, NewRuntimeError(node, fmt.Sprintf("%s type cast does not support %s", target.Name, i.TypeInfoFromValue(v).Name))
+		return StringValue{V: val}, nil
 	case TypeBool:
 		var val bool
 
@@ -2236,21 +2290,249 @@ func (i *Interpreter) evalTypeCast(target *TypeInfo, arg parser.Expression, node
 		case BoolValue:
 			val = v.V
 		default:
-			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("%s type cast does not support %s", target.Name, i.TypeInfoFromValue(v).Name))
+			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("cannot cast '%s' to '%s'", i.TypeInfoFromValue(v).Name, target.Name))
 		}
 
 		return BoolValue{V: val}, nil
-
 	case TypeArray:
-		if a, ok := v.(ArrayValue); ok {
-			return a, nil
+		var val ArrayValue
+
+		switch v := v.(type) {
+		case ArrayValue:
+			val = v
+		default:
+			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("cannot cast '%s' to '%s'", i.TypeInfoFromValue(v).Name, target.Name))
 		}
 
-		return NilValue{}, NewRuntimeError(node, fmt.Sprintf("%s type cast does not support %s", target.Name, i.TypeInfoFromValue(v).Name))
+		return val, nil
+	case TypeFixedArray:
+		var val ArrayValue
+
+		switch v := v.(type) {
+		case ArrayValue:
+			val = v
+
+			if val.Capacity != target.Size {
+				return NilValue{}, NewRuntimeError(node, fmt.Sprintf("cannot cast '%s' to '%s'", i.TypeInfoFromValue(v).Name, target.Name))
+			}
+		default:
+			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("cannot cast '%s' to '%s'", i.TypeInfoFromValue(v).Name, target.Name))
+		}
+
+		return val, nil
+	case TypeMap:
+		switch v := v.(type) {
+		case MapValue:
+			return v, nil
+		default:
+			return NilValue{}, NewRuntimeError(node,
+				fmt.Sprintf("cannot cast '%s' to '%s'", i.TypeInfoFromValue(v).Name, target.Name))
+		}
+	case TypeStruct:
+		switch v := v.(type) {
+		case *StructValue:
+			return v, nil
+		default:
+			return NilValue{}, NewRuntimeError(node,
+				fmt.Sprintf("cannot cast '%s' to '%s'", i.TypeInfoFromValue(v).Name, target.Name))
+		}
+	case TypePointer:
+		switch v := v.(type) {
+		case *PointerValue:
+			return v, nil
+		default:
+			return NilValue{}, NewRuntimeError(node,
+				fmt.Sprintf("cannot cast '%s' to '%s'", i.TypeInfoFromValue(v).Name, target.Name))
+		}
+	case TypeFunc:
+		switch v := v.(type) {
+		case *Func:
+			return v, nil
+		default:
+			return NilValue{}, NewRuntimeError(node,
+				fmt.Sprintf("cannot cast '%s' to '%s'", i.TypeInfoFromValue(v).Name, target.Name))
+		}
+	case TypeChannel:
+		switch v := v.(type) {
+		case *Channel:
+			return v, nil
+		default:
+			return NilValue{}, NewRuntimeError(node,
+				fmt.Sprintf("cannot cast '%s' to '%s'", i.TypeInfoFromValue(v).Name, target.Name))
+		}
+	case TypeInterface:
+		if !implementsInterface(i.TypeInfoFromValue(v), target) {
+			return NilValue{}, NewRuntimeError(node,
+				fmt.Sprintf("type '%s' does not implement interface '%s'",
+					i.TypeInfoFromValue(v).Name, target.Name))
+		}
+
+		return InterfaceValue{
+			Value:    v,
+			TypeInfo: i.TypeInfoFromValue(v),
+		}, nil
 	case TypeNamed:
 		base := target.Underlying
 
 		casted, err := i.evalTypeCast(base, arg, node)
+		if err != nil {
+			return NilValue{}, err
+		}
+
+		if sv, ok := casted.(*StructValue); ok {
+			sv.TypeName = target
+			return sv, nil
+		}
+
+		return NamedValue{
+			TypeName: target,
+			Value:    casted,
+		}, nil
+
+	default:
+		return NilValue{}, NewRuntimeError(node, fmt.Sprintf("unknown type cast: %s", target.Name))
+	}
+}
+
+func (i *Interpreter) evalTypeCastValue(target *TypeInfo, val Value, node parser.Node) (Value, error) {
+	v := UnwrapFully(val)
+
+	switch target.Kind {
+	case TypeInt:
+		var val int
+
+		switch v := v.(type) {
+		case IntValue:
+			val = v.V
+		case FloatValue:
+			val = int(v.V)
+		default:
+			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("cannot cast '%s' to '%s'", i.TypeInfoFromValue(v).Name, target.Name))
+		}
+
+		return IntValue{V: val}, nil
+	case TypeFloat:
+		var val float64
+
+		switch v := v.(type) {
+		case IntValue:
+			val = float64(v.V)
+		case FloatValue:
+			val = v.V
+		default:
+			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("cannot cast '%s' to '%s'", i.TypeInfoFromValue(v).Name, target.Name))
+		}
+
+		return FloatValue{V: val}, nil
+	case TypeString:
+		var val string
+
+		switch v := v.(type) {
+		case StringValue:
+			val = v.V
+		case EnumValue:
+			ev, err := extractEnumValue(node, v, TypeInt)
+			if err != nil {
+				return NilValue{}, err
+			}
+			return ev, nil
+		default:
+			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("cannot cast '%s' to '%s'", i.TypeInfoFromValue(v).Name, target.Name))
+		}
+
+		return StringValue{V: val}, nil
+	case TypeBool:
+		var val bool
+
+		switch v := v.(type) {
+		case BoolValue:
+			val = v.V
+		default:
+			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("cannot cast '%s' to '%s'", i.TypeInfoFromValue(v).Name, target.Name))
+		}
+
+		return BoolValue{V: val}, nil
+	case TypeArray:
+		var val ArrayValue
+
+		switch v := v.(type) {
+		case ArrayValue:
+			val = v
+		default:
+			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("cannot cast '%s' to '%s'", i.TypeInfoFromValue(v).Name, target.Name))
+		}
+
+		return val, nil
+	case TypeFixedArray:
+		var val ArrayValue
+
+		switch v := v.(type) {
+		case ArrayValue:
+			val = v
+
+			if val.Capacity != target.Size {
+				return NilValue{}, NewRuntimeError(node, fmt.Sprintf("cannot cast '%s' to '%s'", i.TypeInfoFromValue(v).Name, target.Name))
+			}
+		default:
+			return NilValue{}, NewRuntimeError(node, fmt.Sprintf("cannot cast '%s' to '%s'", i.TypeInfoFromValue(v).Name, target.Name))
+		}
+
+		return val, nil
+	case TypeMap:
+		switch v := v.(type) {
+		case MapValue:
+			return v, nil
+		default:
+			return NilValue{}, NewRuntimeError(node,
+				fmt.Sprintf("cannot cast '%s' to '%s'", i.TypeInfoFromValue(v).Name, target.Name))
+		}
+	case TypeStruct:
+		switch v := v.(type) {
+		case *StructValue:
+			return v, nil
+		default:
+			return NilValue{}, NewRuntimeError(node,
+				fmt.Sprintf("cannot cast '%s' to '%s'", i.TypeInfoFromValue(v).Name, target.Name))
+		}
+	case TypePointer:
+		switch v := v.(type) {
+		case *PointerValue:
+			return v, nil
+		default:
+			return NilValue{}, NewRuntimeError(node,
+				fmt.Sprintf("cannot cast '%s' to '%s'", i.TypeInfoFromValue(v).Name, target.Name))
+		}
+	case TypeFunc:
+		switch v := v.(type) {
+		case *Func:
+			return v, nil
+		default:
+			return NilValue{}, NewRuntimeError(node,
+				fmt.Sprintf("cannot cast '%s' to '%s'", i.TypeInfoFromValue(v).Name, target.Name))
+		}
+	case TypeChannel:
+		switch v := v.(type) {
+		case *Channel:
+			return v, nil
+		default:
+			return NilValue{}, NewRuntimeError(node,
+				fmt.Sprintf("cannot cast '%s' to '%s'", i.TypeInfoFromValue(v).Name, target.Name))
+		}
+	case TypeInterface:
+		if !implementsInterface(i.TypeInfoFromValue(v), target) {
+			return NilValue{}, NewRuntimeError(node,
+				fmt.Sprintf("type '%s' does not implement interface '%s'",
+					i.TypeInfoFromValue(v).Name, target.Name))
+		}
+
+		return InterfaceValue{
+			Value:    v,
+			TypeInfo: i.TypeInfoFromValue(v),
+		}, nil
+	case TypeNamed:
+		base := target.Underlying
+
+		casted, err := i.evalTypeCastValue(base, v, node)
 		if err != nil {
 			return NilValue{}, err
 		}
@@ -2798,7 +3080,7 @@ func (i *Interpreter) evalMemberExpression(node parser.Expression, left Value, f
 				fmt.Sprintf("type '%s' has no members", obj.TypeInfo.Name))
 		}
 
-		idx, ok := obj.TypeInfo.Variants[field]
+		variant, ok := obj.TypeInfo.Variants[field]
 		if !ok {
 			return NilValue{}, NewRuntimeError(node,
 				fmt.Sprintf("unknown enum variant '%s.%s'",
@@ -2807,8 +3089,7 @@ func (i *Interpreter) evalMemberExpression(node parser.Expression, left Value, f
 
 		return EnumValue{
 			Enum:    obj.TypeInfo,
-			Variant: field,
-			Index:   idx,
+			Variant: variant,
 		}, nil
 	}
 
@@ -3123,7 +3404,6 @@ func evalInterfaceNilInfix(node *parser.InfixExpression, left InterfaceValue, op
 }
 
 func evalEnumInfix(node *parser.InfixExpression, left EnumValue, op string, right EnumValue) (Value, error) {
-	// Ensure both enums are the same type
 	if left.Enum != right.Enum {
 		return NilValue{}, NewRuntimeError(
 			node,
@@ -3131,19 +3411,16 @@ func evalEnumInfix(node *parser.InfixExpression, left EnumValue, op string, righ
 		)
 	}
 
+	lv := left.Variant.Value
+	rv := right.Variant.Value
+
 	switch op {
 	case "==":
-		return BoolValue{V: left.Index == right.Index}, nil
+		return BoolValue{V: valuesEqual(lv, rv)}, nil
 	case "!=":
-		return BoolValue{V: left.Index != right.Index}, nil
-	case "<":
-		return BoolValue{V: left.Index < right.Index}, nil
-	case ">":
-		return BoolValue{V: left.Index > right.Index}, nil
-	case "<=":
-		return BoolValue{V: left.Index <= right.Index}, nil
-	case ">=":
-		return BoolValue{V: left.Index >= right.Index}, nil
+		return BoolValue{V: !valuesEqual(lv, rv)}, nil
+	case "<", ">", "<=", ">=":
+		return compareOrdered(node, lv, rv, op)
 	default:
 		return NilValue{}, NewRuntimeError(
 			node,

@@ -104,26 +104,47 @@ func (p *Parser) parseIdentPtrList() []*Identifier {
 	return idents
 }
 
-func (p *Parser) parseEnumVariants() []*Identifier {
-	var variants []*Identifier
+func (p *Parser) parseEnumMembers() ([]EnumMember, []string) {
+	var members []EnumMember
+	var order []string
 
 	for {
 		p.consumeTerminators()
 
 		if p.curTok.Type == token.RBRACE {
-			return variants
+			return members, order
+		}
+
+		if p.curTok.Type == token.ENUM {
+			enum := p.parseEnumStatement()
+			members = append(members, enum)
+			continue
 		}
 
 		if p.curTok.Type != token.IDENT {
-			p.addError("expected identifier in enum body")
-			return nil
+			p.addError("expected identifier or enum")
+			return nil, nil
 		}
 
-		variants = append(variants, &Identifier{
+		name := &Identifier{
 			NodeBase: NodeBase{Token: p.curTok},
 			Value:    p.curTok.Literal,
-		})
+		}
 
+		var val Expression
+		if p.peekTok.Type == token.ASSIGN {
+			p.nextToken()
+			p.nextToken()
+			val = p.parseExpression(LOWEST)
+		}
+
+		variant := &Variant{
+			Name:  name,
+			Value: val,
+		}
+
+		members = append(members, variant)
+		order = append(order, name.Value)
 		p.nextToken()
 	}
 }
@@ -1487,9 +1508,8 @@ func (p *Parser) parseEnumStatement() *EnumStatement {
 		NodeBase: NodeBase{Token: p.curTok}, // enum
 	}
 
-	// enum Color
 	if p.peekTok.Type != token.IDENT {
-		p.addError("expected identifier after 'enum'")
+		p.addError("expected identifier")
 		return nil
 	}
 	p.nextToken()
@@ -1499,19 +1519,26 @@ func (p *Parser) parseEnumStatement() *EnumStatement {
 		Value:    p.curTok.Literal,
 	}
 
-	// {
+	if !p.isType() {
+		p.addError("expected type")
+		return nil
+	}
+
+	p.nextToken()
+	stmt.Type = p.parseType()
+
 	if p.peekTok.Type != token.LBRACE {
-		p.addError("expected '{' after enum identifier")
+		p.addError("expected '{'")
 		return nil
 	}
 	p.nextToken() // curTok == '{'
 
 	p.nextToken()
 
-	stmt.Variants = p.parseEnumVariants()
+	stmt.Members, stmt.Order = p.parseEnumMembers()
 
 	if p.curTok.Type != token.RBRACE {
-		p.addError("expected '}' after variants")
+		p.addError("expected '}'")
 		return nil
 	}
 

@@ -1,0 +1,7 @@
+enum Color int {
+  Blue = 5
+  Red = 43
+}
+
+say x Color
+putln(float(x))
