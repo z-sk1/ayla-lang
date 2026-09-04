@@ -1167,15 +1167,23 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 						if err != nil {
 							continue
 						}
-						cc.ch = chVal.(*Channel)
+						ch, ok := chVal.(*Channel)
+						if !ok {
+							continue // or runtime error
+						}
+						cc.ch = ch
 						cc.hasChan = true
 
-					case *parser.PrefixExpression:
-						chVal, err := i.evalOne(op.Right)
+					case *parser.ReceiveExpression:
+						chVal, err := i.evalOne(op.Channel)
 						if err != nil {
 							continue
 						}
-						cc.ch = chVal.(*Channel)
+						ch, ok := chVal.(*Channel)
+						if !ok {
+							continue // or runtime error
+						}
+						cc.ch = ch
 						cc.hasChan = true
 					}
 				}
@@ -1200,7 +1208,7 @@ func (i *Interpreter) EvalStatement(s parser.Statement) (ControlSignal, error) {
 
 				case *parser.ReceiveExpression:
 					select {
-					case v := <-cc.ch.ch:
+					case v := <-cc.ch.ch: // line 1203
 						return i.runCase(cc.clause, v)
 					default:
 					}

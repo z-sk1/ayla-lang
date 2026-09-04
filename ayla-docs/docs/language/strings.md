@@ -25,7 +25,9 @@ you can also interpolate strings using `${}`
 > unlike JavaScript, you just use the normal quotation marks, "", not ``
 
 ```ayla
-say rand = randi(10)
+import rand
+
+say rand = rand.Int(10)
 
 put("Random number: ${rand}")
 ```
