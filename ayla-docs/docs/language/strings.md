@@ -13,7 +13,9 @@ put(a + b)
 
 you can also concatenate strings with other types by parsing.
 ```ayla 
-put(toString(4) + toString(2))
+import conv
+
+put(conv.String(4) + conv.String(2))
 ```
 > output: 42
 
