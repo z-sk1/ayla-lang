@@ -5,6 +5,7 @@ x := map[string]int{
 
 pX := &x["a"]
 
-*pX = 7
+*pX = 5
 
-putln(x)
+v := x["a"]
+putln(v)

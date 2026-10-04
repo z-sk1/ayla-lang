@@ -1685,14 +1685,20 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (EvalResult, error) {
 			return EvalResult{[]Value{NilValue{}}, nil}, err
 		}
 
-		start, err := i.evalOne(expr.Start)
-		if err != nil {
-			return EvalResult{[]Value{NilValue{}}, nil}, err
+		start := Value(NilValue{})
+		if expr.Start != nil {
+			start, err = i.evalOne(expr.Start)
+			if err != nil {
+				return EvalResult{[]Value{NilValue{}}, nil}, err
+			}
 		}
 
-		end, err := i.evalOne(expr.End)
-		if err != nil {
-			return EvalResult{[]Value{NilValue{}}, nil}, err
+		end := Value(NilValue{})
+		if expr.End != nil {
+			end, err = i.evalOne(expr.End)
+			if err != nil {
+				return EvalResult{[]Value{NilValue{}}, nil}, err
+			}
 		}
 
 		val, err := i.evalSliceExpression(expr, left, start, end)
@@ -1884,12 +1890,23 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (EvalResult, error) {
 		return EvalResult{[]Value{val}, nil}, err
 
 	case *parser.PrefixExpression:
+		if expr.Operator == "&" {
+			val, err := i.evalPrefix(expr, "&", nil)
+			if err != nil {
+				return EvalResult{[]Value{NilValue{}}, nil}, err
+			}
+			return EvalResult{[]Value{val}, nil}, nil
+		}
+
 		right, err := i.evalOne(expr.Right)
 		if err != nil {
 			return EvalResult{[]Value{NilValue{}}, nil}, err
 		}
 
 		val, err := i.evalPrefix(expr, expr.Operator, right)
+		if err != nil {
+			return EvalResult{[]Value{NilValue{}}, nil}, err
+		}
 
 		return EvalResult{[]Value{val}, nil}, nil
 
@@ -1930,6 +1947,7 @@ func (i *Interpreter) evalOne(expr parser.Expression) (Value, error) {
 	if err != nil {
 		return NilValue{}, err
 	}
+
 	return res.MustSingle(expr)
 }
 
