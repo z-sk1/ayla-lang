@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/z-sk1/ayla-lang/lexer"
 	"github.com/z-sk1/ayla-lang/parser"
 )
 
@@ -184,6 +185,27 @@ func (i *Interpreter) registerBuiltins() {
 			ch.closed = true
 
 			return NilValue{}, nil
+		},
+	}
+
+	env.builtins["eval"] = &BuiltinFunc{
+		Name:  "eval",
+		Arity: 1,
+		Fn: func(i *Interpreter, node *parser.FuncCall, args []Value) (Value, error) {
+			src, err := ArgString(node, args, 0, "eval")
+			if err != nil {
+				return NilValue{}, err
+			}
+
+			l := lexer.New(src)
+			p := parser.New(l)
+
+			expr := p.parseExpression(parser.LOWEST)
+			if len(p.Errors()) > 0 {
+				return nil, p.Errors()[0]
+			}
+
+			return i.EvalExpression(expr)
 		},
 	}
 
