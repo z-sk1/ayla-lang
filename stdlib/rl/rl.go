@@ -1462,7 +1462,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 				return interpreter.NilValue{}, err
 			}
 
-			pv, err := interpreter.ArgVector2(node, i, TypeEnv, args, 1, "rl.DrawRect")
+			pv, err := interpreter.ArgVector2(node, i, TypeEnv, args, 1, "rl.DrawText")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -1588,7 +1588,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 
 	env.Define("MeasureText", &interpreter.BuiltinFunc{
 		Name:  "MeasureText",
-		Arity: 4,
+		Arity: 2,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
 			text, err := interpreter.ArgString(node, args, 0, "rl.MeasureText")
 			if err != nil {

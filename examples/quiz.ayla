@@ -11,7 +11,7 @@ while yes {
     scanln(&choice)
     ayla choice == "q" {
         putln("Final score: ${score / total}")
-        kitkat
+        snap
     }
     ayla choice == ans {
         putln("Correct!")

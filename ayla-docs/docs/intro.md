@@ -2,7 +2,7 @@
 
 ayla lang is a statically typed interpreted language written in go, designed to make you forget everything
 
-*Because f-ck you.* - Linus Torvalds
+*Because f--k you.* - Linus Torvalds
 
 # about
 
