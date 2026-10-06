@@ -135,7 +135,7 @@ func (p *Parser) parseEnumMembers() ([]EnumMember, []string) {
 		if p.peekTok.Type == token.ASSIGN {
 			p.nextToken()
 			p.nextToken()
-			val = p.parseExpression(LOWEST)
+			val = p.ParseExpression(LOWEST)
 		}
 
 		variant := &Variant{
@@ -398,7 +398,7 @@ func (p *Parser) parseStatement() Statement {
 				return p.parseMethodStatement()
 			}
 
-			expr := p.parseExpression(LOWEST)
+			expr := p.ParseExpression(LOWEST)
 			return &ExpressionStatement{
 				NodeBase:   NodeBase{Token: p.curTok},
 				Expression: expr,
@@ -444,7 +444,7 @@ func (p *Parser) parseStatement() Statement {
 	case token.NEWLINE, token.EOF:
 		return nil
 	default:
-		expr := p.parseExpression(LOWEST)
+		expr := p.ParseExpression(LOWEST)
 		if expr == nil {
 			return nil
 		}
@@ -516,7 +516,7 @@ func (p *Parser) parseVarBlockDecl() Statement {
 			p.nextToken() // move to '<'
 			p.nextToken() // move to first token of lifetime expression
 
-			stmt.Lifetime = p.parseExpressionUntil(token.GT)
+			stmt.Lifetime = p.ParseExpressionUntil(token.GT)
 
 			if p.peekTok.Type != token.GT {
 				p.addError("expected '>' after lifetime expression")
@@ -535,7 +535,7 @@ func (p *Parser) parseVarBlockDecl() Statement {
 			p.nextToken() // =
 			p.nextToken() // expression start
 
-			stmt.Value = p.parseExpression(LOWEST)
+			stmt.Value = p.ParseExpression(LOWEST)
 		}
 
 		return stmt
@@ -548,7 +548,7 @@ func (p *Parser) parseVarBlockDecl() Statement {
 			p.nextToken() // move to '<'
 			p.nextToken() // move to first token of lifetime expression
 
-			stmt.Lifetime = p.parseExpressionUntil(token.GT)
+			stmt.Lifetime = p.ParseExpressionUntil(token.GT)
 
 			if p.peekTok.Type != token.GT {
 				p.addError("expected '>' after lifetime expression")
@@ -597,7 +597,7 @@ func (p *Parser) parseVarStatement() *VarStatement {
 		p.nextToken()
 
 		p.stopTokens[token.GT] = true
-		stmt.Lifetime = p.parseExpression(LOWEST)
+		stmt.Lifetime = p.ParseExpression(LOWEST)
 		p.stopTokens[token.GT] = false
 
 		if p.peekTok.Type != token.GT {
@@ -616,7 +616,7 @@ func (p *Parser) parseVarStatement() *VarStatement {
 	if p.peekTok.Type == token.ASSIGN {
 		p.nextToken() // move to '='
 		p.nextToken() // move to expression
-		stmt.Value = p.parseExpression(LOWEST)
+		stmt.Value = p.ParseExpression(LOWEST)
 		if stmt.Value == nil {
 			p.addError("expected expression after '='")
 		}
@@ -640,7 +640,7 @@ func (p *Parser) parseVarStatementNoKeyword() *VarStatementNoKeyword {
 		p.nextToken() // move to '<'
 		p.nextToken() // move to first token of lifetime expression
 
-		stmt.Lifetime = p.parseExpressionUntil(token.GT)
+		stmt.Lifetime = p.ParseExpressionUntil(token.GT)
 
 		if p.peekTok.Type != token.GT {
 			p.addError("expected '>' after lifetime expression")
@@ -652,7 +652,7 @@ func (p *Parser) parseVarStatementNoKeyword() *VarStatementNoKeyword {
 
 	p.nextToken() // :=
 	p.nextToken() // expr
-	stmt.Value = p.parseExpression(LOWEST)
+	stmt.Value = p.ParseExpression(LOWEST)
 
 	return stmt
 }
@@ -670,7 +670,7 @@ func (p *Parser) parseMultiVarStatement() *MultiVarStatement {
 		p.nextToken() // move to '<'
 		p.nextToken() // move to first token of lifetime expression
 
-		stmt.Lifetime = p.parseExpressionUntil(token.GT)
+		stmt.Lifetime = p.ParseExpressionUntil(token.GT)
 
 		if p.peekTok.Type != token.GT {
 			p.addError("expected '>' after lifetime expression")
@@ -713,7 +713,7 @@ func (p *Parser) parseMultiVarStatementNoKeyword() *MultiVarStatementNoKeyword {
 		p.nextToken() // move to '<'
 		p.nextToken() // move to first token of lifetime expression
 
-		stmt.Lifetime = p.parseExpressionUntil(token.GT)
+		stmt.Lifetime = p.ParseExpressionUntil(token.GT)
 
 		if p.peekTok.Type != token.GT {
 			p.addError("expected '>' after lifetime expression")
@@ -738,12 +738,12 @@ func (p *Parser) parseMultiVarStatementNoKeyword() *MultiVarStatementNoKeyword {
 func (p *Parser) parseTupleList() []Expression {
 	values := []Expression{}
 
-	values = append(values, p.parseExpression(LOWEST))
+	values = append(values, p.ParseExpression(LOWEST))
 
 	for p.peekTok.Type == token.COMMA {
 		p.nextToken() // ,
 		p.nextToken() // next expr
-		values = append(values, p.parseExpression(LOWEST))
+		values = append(values, p.ParseExpression(LOWEST))
 	}
 
 	return values
@@ -811,7 +811,7 @@ func (p *Parser) parseConstBlockDecl() Statement {
 			p.nextToken() // move to '<'
 			p.nextToken() // move to first token of lifetime expression
 
-			stmt.Lifetime = p.parseExpressionUntil(token.GT)
+			stmt.Lifetime = p.ParseExpressionUntil(token.GT)
 
 			if p.peekTok.Type != token.GT {
 				p.addError("expected '>' after lifetime expression")
@@ -830,7 +830,7 @@ func (p *Parser) parseConstBlockDecl() Statement {
 		if p.peekTok.Type == token.ASSIGN {
 			p.nextToken()
 			p.nextToken()
-			stmt.Value = p.parseExpression(LOWEST)
+			stmt.Value = p.ParseExpression(LOWEST)
 		}
 
 		return stmt
@@ -842,7 +842,7 @@ func (p *Parser) parseConstBlockDecl() Statement {
 			p.nextToken() // move to '<'
 			p.nextToken() // move to first token of lifetime expression
 
-			stmt.Lifetime = p.parseExpressionUntil(token.GT)
+			stmt.Lifetime = p.ParseExpressionUntil(token.GT)
 
 			if p.peekTok.Type != token.GT {
 				p.addError("expected '>' after lifetime expression")
@@ -895,7 +895,7 @@ func (p *Parser) parseConstStatement() *ConstStatement {
 		p.nextToken() // move to '<'
 		p.nextToken() // move to first token of lifetime expression
 
-		stmt.Lifetime = p.parseExpressionUntil(token.GT)
+		stmt.Lifetime = p.ParseExpressionUntil(token.GT)
 
 		if p.peekTok.Type != token.GT {
 			p.addError("expected '>' after lifetime expression")
@@ -915,7 +915,7 @@ func (p *Parser) parseConstStatement() *ConstStatement {
 	if p.peekTok.Type == token.ASSIGN {
 		p.nextToken()
 		p.nextToken()
-		stmt.Value = p.parseExpression(LOWEST)
+		stmt.Value = p.ParseExpression(LOWEST)
 	}
 
 	return stmt
@@ -934,7 +934,7 @@ func (p *Parser) parseMultiConstStatement() *MultiConstStatement {
 		p.nextToken() // move to '<'
 		p.nextToken() // move to first token of lifetime expression
 
-		stmt.Lifetime = p.parseExpressionUntil(token.GT)
+		stmt.Lifetime = p.ParseExpressionUntil(token.GT)
 
 		if p.peekTok.Type != token.GT {
 			p.addError("expected '>' after lifetime expression")
@@ -978,14 +978,14 @@ func (p *Parser) parseImportStatement() *ImportStatement {
 
 func (p *Parser) parseAssignOrExprStatement() Statement {
 
-	exprs := p.parseExpressionList()
+	exprs := p.ParseExpressionList()
 
 	if p.isAssignToken(p.peekTok.Type) {
 		op := p.peekTok.Type
 		p.nextToken() // =
 		p.nextToken()
 
-		values := p.parseExpressionList()
+		values := p.ParseExpressionList()
 
 		return &AssignmentStatement{
 			NodeBase: NodeBase{Token: p.curTok},
@@ -1147,7 +1147,7 @@ func (p *Parser) parseType() TypeNode {
 		base = p.parseChanType()
 
 	default:
-		return p.exprToType(p.parseExpression(LOWEST))
+		return p.exprToType(p.ParseExpression(LOWEST))
 	}
 
 	if p.peekTok.Type == token.LT {
@@ -1187,7 +1187,7 @@ func (p *Parser) parseRangeType(base TypeNode) TypeNode {
 	p.nextToken() // consume '<'
 	p.nextToken() // first token of min
 
-	min := p.parseExpression(LOWEST)
+	min := p.ParseExpression(LOWEST)
 	if min == nil {
 		p.addError("expected expression for min range")
 		return nil
@@ -1201,7 +1201,7 @@ func (p *Parser) parseRangeType(base TypeNode) TypeNode {
 	p.nextToken() // move to '..'
 	p.nextToken() // first token of max
 
-	max := p.parseExpression(PREFIX)
+	max := p.ParseExpression(PREFIX)
 
 	if p.peekTok.Type != token.GT {
 		p.addError("expected '>' after range type")
@@ -1230,7 +1230,7 @@ func (p *Parser) parseArrayType() TypeNode {
 		return at
 	}
 
-	at.Size = p.parseExpression(LOWEST)
+	at.Size = p.ParseExpression(LOWEST)
 	if at.Size == nil {
 		p.addError("expected expression for array size")
 		return nil
@@ -1456,18 +1456,18 @@ func (p *Parser) parseCompositeLiteral(typ TypeNode) Expression {
 			fieldName := p.curTok.Literal
 			p.nextToken() // :
 			p.nextToken() // value
-			lit.Fields[fieldName] = p.parseExpression(LOWEST)
+			lit.Fields[fieldName] = p.ParseExpression(LOWEST)
 			if lit.Fields[fieldName] == nil {
 				p.addError("expected expression after ':'")
 				return nil
 			}
 		} else {
-			first := p.parseExpression(LOWEST)
+			first := p.ParseExpression(LOWEST)
 
 			if p.peekTok.Type == token.COLON {
 				p.nextToken() // :
 				p.nextToken() // value
-				value := p.parseExpression(LOWEST)
+				value := p.ParseExpression(LOWEST)
 				if value == nil {
 					p.addError("expected expression after ':'")
 					return nil
@@ -1559,7 +1559,7 @@ func (p *Parser) parseIfStatement() *IfStatement {
 		return nil
 	}
 
-	stmt.Condition = p.parseExpression(LOWEST)
+	stmt.Condition = p.ParseExpression(LOWEST)
 
 	// expect '{'
 	if p.peekTok.Type != token.LBRACE {
@@ -1607,7 +1607,7 @@ func (p *Parser) parseStartStatement() *StartStatement {
 	if p.curTok.Type == token.LBRACE {
 		stmt.Body = p.parseBlockStatement()
 	} else {
-		stmt.Expr = p.parseExpression(LOWEST)
+		stmt.Expr = p.ParseExpression(LOWEST)
 	}
 
 	return stmt
@@ -1646,7 +1646,7 @@ func (p *Parser) parseSwitchStatement() *SwitchStatement {
 	if p.curTok.Type == token.LBRACE {
 		stmt.Value = nil
 	} else {
-		stmt.Value = p.parseExpression(LOWEST)
+		stmt.Value = p.ParseExpression(LOWEST)
 
 		if p.peekTok.Type != token.LBRACE {
 			p.addError("expected '{' after switch expression")
@@ -1695,12 +1695,12 @@ func (p *Parser) parseCaseClause() *CaseClause {
 	p.nextToken()
 
 	clause.Exprs = []Expression{}
-	clause.Exprs = append(clause.Exprs, p.parseExpression(LOWEST))
+	clause.Exprs = append(clause.Exprs, p.ParseExpression(LOWEST))
 
 	for p.peekTok.Type == token.COMMA {
 		p.nextToken() // ,
 		p.nextToken() // next expression
-		clause.Exprs = append(clause.Exprs, p.parseExpression(LOWEST))
+		clause.Exprs = append(clause.Exprs, p.ParseExpression(LOWEST))
 	}
 
 	if p.peekTok.Type != token.LBRACE {
@@ -1785,7 +1785,7 @@ func (p *Parser) parseSelectCaseClause() *SelectCaseClause {
 		p.nextToken() // :=
 		p.nextToken() // RHS
 
-		expr := p.parseExpression(LOWEST)
+		expr := p.ParseExpression(LOWEST)
 
 		if prefix, ok := expr.(*PrefixExpression); ok && prefix.Operator == "<-" {
 			clause.Op = prefix
@@ -1794,7 +1794,7 @@ func (p *Parser) parseSelectCaseClause() *SelectCaseClause {
 			return nil
 		}
 	} else {
-		clause.Op = p.parseExpression(LOWEST)
+		clause.Op = p.ParseExpression(LOWEST)
 	}
 
 	if p.peekTok.Type != token.LBRACE {
@@ -2146,12 +2146,12 @@ func (p *Parser) parseReturnStatement() *ReturnStatement {
 		return stmt
 	}
 
-	stmt.Values = append(stmt.Values, p.parseExpression(LOWEST))
+	stmt.Values = append(stmt.Values, p.ParseExpression(LOWEST))
 
 	for p.peekTok.Type == token.COMMA {
 		p.nextToken() // move to comma
 		p.nextToken() // move to next expr
-		stmt.Values = append(stmt.Values, p.parseExpression(LOWEST))
+		stmt.Values = append(stmt.Values, p.ParseExpression(LOWEST))
 	}
 
 	return stmt
@@ -2179,7 +2179,7 @@ func (p *Parser) parseForVarNoKeyword() *VarStatementNoKeyword {
 		p.nextToken() // move to '<'
 		p.nextToken() // move to first token of lifetime expression
 
-		stmt.Lifetime = p.parseExpressionUntil(token.GT)
+		stmt.Lifetime = p.ParseExpressionUntil(token.GT)
 
 		if p.peekTok.Type != token.GT {
 			p.addError("expected '>' after lifetime expression")
@@ -2191,7 +2191,7 @@ func (p *Parser) parseForVarNoKeyword() *VarStatementNoKeyword {
 
 	p.nextToken() // :=
 	p.nextToken() // expr
-	stmt.Value = p.parseExpressionUntil(token.SEMICOLON)
+	stmt.Value = p.ParseExpressionUntil(token.SEMICOLON)
 
 	return stmt
 }
@@ -2280,7 +2280,7 @@ func (p *Parser) parseForStatement() *ForStatement {
 
 	p.nextToken() // ;
 	p.nextToken() // condition
-	stmt.Condition = p.parseExpression(LOWEST)
+	stmt.Condition = p.ParseExpression(LOWEST)
 
 	if p.peekTok.Type != token.SEMICOLON {
 		p.addError("expected ';'")
@@ -2320,7 +2320,7 @@ func (p *Parser) parseForRangeStatement(idents []*Identifier) *ForRangeStatement
 	}
 
 	p.nextToken() // move to expr
-	stmt.Expr = p.parseExpression(LOWEST)
+	stmt.Expr = p.ParseExpression(LOWEST)
 
 	if p.peekTok.Type != token.LBRACE {
 		p.addError("expected '{' after range expression")
@@ -2339,7 +2339,7 @@ func (p *Parser) parseWhileStatement() *WhileStatement {
 
 	// move to condition
 	p.nextToken()
-	stmt.Condition = p.parseExpression(LOWEST)
+	stmt.Condition = p.ParseExpression(LOWEST)
 	if stmt.Condition == nil {
 		p.addError("expected condition after 'why'")
 		return nil
@@ -2362,7 +2362,7 @@ func (p *Parser) parseWithStatement() *WithStatement {
 	}
 
 	p.nextToken()
-	stmt.Expr = p.parseExpression(LOWEST)
+	stmt.Expr = p.ParseExpression(LOWEST)
 	if stmt.Expr == nil {
 		return nil
 	}
@@ -2413,17 +2413,17 @@ func (p *Parser) parseIndexExpression(left Expression) Expression {
 		p.nextToken() // move to end expression or ']'
 
 		if p.curTok.Type != token.RBRACKET {
-			end = p.parseExpression(LOWEST)
+			end = p.ParseExpression(LOWEST)
 		}
 	} else {
-		start = p.parseExpression(LOWEST)
+		start = p.ParseExpression(LOWEST)
 
 		if p.peekTok.Type == token.COLON {
 			p.nextToken() // consume ':'
 			p.nextToken() // move to end expression or ']'
 
 			if p.curTok.Type != token.RBRACKET {
-				end = p.parseExpression(LOWEST)
+				end = p.ParseExpression(LOWEST)
 			}
 		} else {
 			if p.peekTok.Type != token.RBRACKET {
@@ -2519,20 +2519,20 @@ func (p *Parser) parseSendExpression(left Expression) Expression {
 
 	precedence := p.curPrecedence()
 	p.nextToken()
-	expr.Value = p.parseExpression(precedence)
+	expr.Value = p.ParseExpression(precedence)
 
 	return expr
 }
 
-func (p *Parser) parseExpressionList() []Expression {
+func (p *Parser) ParseExpressionList() []Expression {
 	list := []Expression{}
 
-	list = append(list, p.parseExpression(LOWEST))
+	list = append(list, p.ParseExpression(LOWEST))
 
 	for p.peekTok.Type == token.COMMA {
 		p.nextToken() // ,
 		p.nextToken() // next expression
-		list = append(list, p.parseExpression(LOWEST))
+		list = append(list, p.ParseExpression(LOWEST))
 	}
 
 	return list
@@ -2549,7 +2549,7 @@ func (p *Parser) parseArgList(end token.TokenType) []Expression {
 	}
 
 	for {
-		expr := p.parseExpression(LOWEST)
+		expr := p.ParseExpression(LOWEST)
 
 		list = append(list, expr)
 
@@ -2596,8 +2596,8 @@ func (p *Parser) parseCallExpression(callee Expression) Expression {
 	}
 }
 
-func (p *Parser) parseExpressionUntil(stop token.TokenType) Expression {
-	expr := p.parseExpression(LOWEST)
+func (p *Parser) ParseExpressionUntil(stop token.TokenType) Expression {
+	expr := p.ParseExpression(LOWEST)
 
 	if p.peekTok.Type == stop {
 		return expr
@@ -2606,7 +2606,7 @@ func (p *Parser) parseExpressionUntil(stop token.TokenType) Expression {
 	return expr
 }
 
-func (p *Parser) parseExpression(precedence int) Expression {
+func (p *Parser) ParseExpression(precedence int) Expression {
 	left := p.parsePrimary()
 	for precedence < p.peekPrecedence() {
 		if p.stopTokens[p.peekTok.Type] {
@@ -2657,7 +2657,7 @@ func (p *Parser) parseInfixExpression(left Expression) Expression {
 	prec := p.curPrecedence()
 	p.nextToken()
 
-	expr.Right = p.parseExpression(prec)
+	expr.Right = p.ParseExpression(prec)
 	return expr
 }
 
@@ -2689,7 +2689,7 @@ func (p *Parser) parseStringLiteral() Expression {
 
 			exprSrc := raw[start : i-1]
 
-			expr := p.parseExpressionFromString(exprSrc)
+			expr := p.ParseExpressionFromString(exprSrc)
 			parts = append(parts, expr)
 		} else {
 			start := i
@@ -2704,10 +2704,10 @@ func (p *Parser) parseStringLiteral() Expression {
 	return &InterpolatedString{Parts: parts}
 }
 
-func (p *Parser) parseExpressionFromString(src string) Expression {
+func (p *Parser) ParseExpressionFromString(src string) Expression {
 	l := lexer.New(src)
 	subParser := New(l)
-	return subParser.parseExpression(LOWEST)
+	return subParser.ParseExpression(LOWEST)
 }
 
 func (p *Parser) parsePrimary() Expression {
@@ -2717,7 +2717,7 @@ func (p *Parser) parsePrimary() Expression {
 		tok := p.curTok
 		p.nextToken()
 
-		right := p.parseExpression(PREFIX)
+		right := p.ParseExpression(PREFIX)
 		if right == nil {
 			return nil
 		}
@@ -2733,7 +2733,7 @@ func (p *Parser) parsePrimary() Expression {
 		tok := p.curTok
 		p.nextToken()
 
-		right := p.parseExpression(PREFIX)
+		right := p.ParseExpression(PREFIX)
 		if right == nil {
 			return nil
 		}
@@ -2749,7 +2749,7 @@ func (p *Parser) parsePrimary() Expression {
 		tok := p.curTok
 		p.nextToken()
 
-		right := p.parseExpression(PREFIX)
+		right := p.ParseExpression(PREFIX)
 		if right == nil {
 			return nil
 		}
@@ -2765,7 +2765,7 @@ func (p *Parser) parsePrimary() Expression {
 		tok := p.curTok
 		p.nextToken()
 
-		right := p.parseExpression(PREFIX)
+		right := p.ParseExpression(PREFIX)
 		if right == nil {
 			return nil
 		}
@@ -2784,7 +2784,7 @@ func (p *Parser) parsePrimary() Expression {
 		tok := p.curTok
 		p.nextToken()
 
-		ch := p.parseExpression(PREFIX)
+		ch := p.ParseExpression(PREFIX)
 		if ch == nil {
 			return nil
 		}
@@ -2889,7 +2889,7 @@ func (p *Parser) parsePrimary() Expression {
 
 	case token.LPAREN:
 		p.nextToken()
-		exp := p.parseExpression(LOWEST)
+		exp := p.ParseExpression(LOWEST)
 
 		if p.peekTok.Type != token.RPAREN {
 			p.addError("expected ')'")

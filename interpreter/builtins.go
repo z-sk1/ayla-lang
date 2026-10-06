@@ -200,12 +200,24 @@ func (i *Interpreter) registerBuiltins() {
 			l := lexer.New(src)
 			p := parser.New(l)
 
-			expr := p.parseExpression(parser.LOWEST)
+			expr := p.ParseExpression(parser.LOWEST)
 			if len(p.Errors()) > 0 {
 				return nil, p.Errors()[0]
 			}
+			res, err := i.EvalExpression(expr)
+			if err != nil {
+				return NilValue{}, err
+			}
 
-			return i.EvalExpression(expr)
+			if res.Err != nil {
+				return NilValue{}, res.Err
+			}
+
+			if len(res.Values) == 0 {
+				return NilValue{}, nil
+			}
+
+			return res.Values[0], nil
 		},
 	}
 
