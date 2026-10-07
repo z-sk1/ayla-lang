@@ -1,4 +1,23 @@
-ayla-lsp.log
-ayla.exe
-ayla-lsp.exe
-elen.exe
+# Build output
+dist/
+bin/
+
+# Go
+*.exe
+*.dll
+*.so
+*.syso
+*.dylib
+*.test
+*.out
+
+# IDEs
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+setup.iss
+versioninfo.json

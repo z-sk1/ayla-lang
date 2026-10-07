@@ -54,7 +54,7 @@ func main() {
 	}
 
 	if len(os.Args) == 1 {
-		fmt.Println("Welcome to ayla-lang v1.5.0, do ayla --help to see all commands.")
+		fmt.Println("Welcome to ayla-lang v1.5.2, do ayla --help to see all commands.")
 		repl()
 		return
 	}
@@ -70,7 +70,7 @@ func main() {
 
 	case "build":
 		if len(os.Args) < 3 {
-			fmt.Println("usage: ayla build <file>")
+			fmt.Println("usage: ayla build [-o name] <file>")
 			return
 		}
 
@@ -244,7 +244,7 @@ func run() {
 		fmt.Printf("\n%s: %v\n", name, err)
 		return
 	}
-	
+
 	interp.Wg.Wait()
 
 	var elapsed time.Duration
