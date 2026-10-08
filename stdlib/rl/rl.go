@@ -1,15 +1,12 @@
+//go:build rl
+
 package rl
 
 import (
 	rl "github.com/gen2brain/raylib-go/raylib"
 	"github.com/z-sk1/ayla-lang/interpreter"
 	"github.com/z-sk1/ayla-lang/parser"
-	"github.com/z-sk1/ayla-lang/registry"
 )
-
-func init() {
-	registry.Register("rl", Load)
-}
 
 func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 	env := interpreter.NewEnvironment(i.Env)

@@ -423,12 +423,12 @@ func (i *Interpreter) registerBuiltins() {
 							return NilValue{}, err
 						}
 
-						fmt.Print(res.String())
+						fmt.Fprint(i.Stdout, res.String())
 						continue
 					}
 				}
 
-				fmt.Print(v.String())
+				fmt.Fprint(i.Stdout, v.String())
 			}
 
 			return NilValue{}, nil
@@ -459,15 +459,15 @@ func (i *Interpreter) registerBuiltins() {
 							return NilValue{}, err
 						}
 
-						fmt.Print(res.String())
+						fmt.Fprint(i.Stdout,res.String())
 						continue
 					}
 				}
 
-				fmt.Print(v.String())
+				fmt.Fprint(i.Stdout, v.String())
 			}
 
-			fmt.Println()
+			fmt.Fprintln(i.Stdout)
 			return NilValue{}, nil
 		},
 	}
@@ -490,7 +490,7 @@ func (i *Interpreter) registerBuiltins() {
 				goArgs = append(goArgs, aylaValueToGoValue(v))
 			}
 
-			fmt.Printf(format, goArgs...)
+			fmt.Fprintf(i.Stdout, format, goArgs...)
 			return NilValue{}, nil
 		},
 	}

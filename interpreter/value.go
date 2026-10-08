@@ -281,7 +281,7 @@ func (i *Interpreter) assignToType(val Value, expected *TypeInfo) (Value, error)
 		return nil, err
 	}
 
-	return i.promoteValueToType(val, expected), nil
+	return i.PromoteValueToType(val, expected), nil
 }
 
 type ControlSignal any

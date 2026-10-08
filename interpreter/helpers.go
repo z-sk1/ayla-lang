@@ -45,6 +45,7 @@ func New(path string) *Interpreter {
 		Env:          env,
 		pointerCache: make(map[*TypeInfo]*TypeInfo),
 		currentDir:   dir,
+		Stdout:       os.Stdout,
 	}
 
 	libDir, err := SetupAylaDirs()
@@ -541,13 +542,13 @@ func typesIdentical(a, b *TypeInfo) bool {
 	}
 }
 
-func (i *Interpreter) promoteValueToType(v Value, ti *TypeInfo) Value {
+func (i *Interpreter) PromoteValueToType(v Value, ti *TypeInfo) Value {
 	base := UnwrapAlias(ti)
 
 	switch val := v.(type) {
 
 	case UntypedValue:
-		converted := i.promoteValueToType(val.Value, ti)
+		converted := i.PromoteValueToType(val.Value, ti)
 
 		if ti.Kind == TypeNamed {
 			return NamedValue{
@@ -910,7 +911,7 @@ func (i *Interpreter) assignWithType(node parser.Node, v Value, expected *TypeIn
 
 	// promote literals first
 	if uv, ok := v.(UntypedValue); ok {
-		promoted := i.promoteValueToType(uv, expected)
+		promoted := i.PromoteValueToType(uv, expected)
 		inner := UnwrapFully(promoted)
 		innerTI := UnwrapAlias(i.TypeInfoFromValue(inner))
 		if baseExpected.Kind == TypeInterface && len(baseExpected.MethodTypes) > 0 {
@@ -969,7 +970,7 @@ func (i *Interpreter) assignWithType(node parser.Node, v Value, expected *TypeIn
 		)
 	}
 
-	v = i.promoteValueToType(v, expected)
+	v = i.PromoteValueToType(v, expected)
 
 	if err := validateRange(node, v, baseExpected); err != nil {
 		return NilValue{}, err
@@ -1006,7 +1007,7 @@ func (i *Interpreter) paramWithType(node parser.Node, pname string, v Value, exp
 
 	// promote literals first
 	if uv, ok := v.(UntypedValue); ok {
-		promoted := i.promoteValueToType(uv, expected)
+		promoted := i.PromoteValueToType(uv, expected)
 		inner := UnwrapFully(promoted)
 		innerTI := UnwrapAlias(i.TypeInfoFromValue(inner))
 		if baseExpected.Kind == TypeInterface && len(baseExpected.MethodTypes) > 0 {
@@ -1067,7 +1068,7 @@ func (i *Interpreter) paramWithType(node parser.Node, pname string, v Value, exp
 		)
 	}
 
-	v = i.promoteValueToType(v, expected)
+	v = i.PromoteValueToType(v, expected)
 
 	if err := validateRange(node, v, baseExpected); err != nil {
 		return NilValue{}, err

@@ -2,6 +2,7 @@ package interpreter
 
 import (
 	"fmt"
+	"io"
 	"math/rand"
 	"path/filepath"
 	"runtime"
@@ -31,6 +32,8 @@ type Interpreter struct {
 	modulePaths  []string
 	currentDir   string
 	projectRoot  string
+
+	Stdout io.Writer
 
 	Wg sync.WaitGroup
 }
@@ -1739,10 +1742,10 @@ func (i *Interpreter) EvalExpression(e parser.Expression) (EvalResult, error) {
 		}
 
 		if expr.ExpectOk {
-			return EvalResult{[]Value{i.promoteValueToType(inner, targetTI), BoolValue{true}}, nil}, nil
+			return EvalResult{[]Value{i.PromoteValueToType(inner, targetTI), BoolValue{true}}, nil}, nil
 		}
 
-		return EvalResult{[]Value{i.promoteValueToType(inner, targetTI)}, nil}, nil
+		return EvalResult{[]Value{i.PromoteValueToType(inner, targetTI)}, nil}, nil
 
 	case *parser.SendExpression:
 		chVal, err := i.evalOne(expr.Channel)
@@ -2014,7 +2017,7 @@ func (i *Interpreter) evalStructLiteral(expr *parser.CompositeLiteral, typeInfo 
 		actualTI := UnwrapAlias(i.TypeInfoFromValue(v))
 		expectedTI := UnwrapAlias(expectedType)
 
-		v = i.promoteValueToType(v, expectedTI)
+		v = i.PromoteValueToType(v, expectedTI)
 
 		actualTI = UnwrapAlias(i.TypeInfoFromValue(v))
 
@@ -2030,7 +2033,7 @@ func (i *Interpreter) evalStructLiteral(expr *parser.CompositeLiteral, typeInfo 
 			)
 		}
 
-		v = i.promoteValueToType(v, expectedTI)
+		v = i.PromoteValueToType(v, expectedTI)
 
 		if err := validateRange(expr, v, expectedTI); err != nil {
 			return NilValue{}, err
@@ -2087,7 +2090,7 @@ func (i *Interpreter) evalArrayLiteral(expr *parser.CompositeLiteral, ti *TypeIn
 			)
 		}
 
-		val = i.promoteValueToType(val, elemType)
+		val = i.PromoteValueToType(val, elemType)
 
 		err = validateRange(expr, val, elemType)
 		if err != nil {

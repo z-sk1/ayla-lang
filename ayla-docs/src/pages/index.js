@@ -41,6 +41,15 @@ function HomepageHeader() {
           >
             Download
           </Link>
+
+          <div className={styles.buttons}>
+            <Link
+              className="button button--primary button--lg"
+              to="https://github.com/z-sk1/ayla-lang/releases"
+            >
+              Playground
+            </Link>
+          </div>
         </div>
       </div>
     </header>
