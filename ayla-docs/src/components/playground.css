@@ -1,0 +1,35 @@
+.playground {
+    display: flex;
+    height: calc(100vh - 64px);
+    width: 100%;
+    gap: 16px;
+    padding: 20px;
+    box-sizing: border-box;
+}
+
+.editor-panel {
+    flex: 3;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.output-panel {
+    flex: 1;
+    background: #1e1e1e;
+    color: white;
+    border-radius: 8px;
+    padding: 16px;
+    overflow: auto;
+}
+
+.output-panel pre {
+    white-space: pre-wrap;
+    margin: 0;
+}
+
+.toolbar {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 10px;
+}
