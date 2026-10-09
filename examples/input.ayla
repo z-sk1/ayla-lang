@@ -1,0 +1,6 @@
+say input string
+
+put("Does nael shallekh: ")
+scanln(&input)
+
+putln("${input} he does")

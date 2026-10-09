@@ -214,7 +214,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 				rl.ClearBackground(rl.Black)
 				return interpreter.NilValue{}, nil
 			case 1:
-				col, err := interpreter.ArgColor(node, TypeEnv, args, 0, "rl.Clear")
+				col, err := ArgColor(node, TypeEnv, args, 0, "rl.Clear")
 				if err != nil {
 					return interpreter.NilValue{}, err
 				}
@@ -274,7 +274,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "GetWindowPosition",
 		Arity: 0,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			return interpreter.MakeVector2(rl.GetWindowPosition(), TypeEnv), nil
+			return MakeVector2(rl.GetWindowPosition(), TypeEnv), nil
 		},
 	}, false)
 
@@ -531,29 +531,29 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		},
 	}, false)
 
-	env.Define("Vector2Add", interpreter.WrapVector2D2("rl.Vector2Add", TypeEnv, rl.Vector2Add), false)
-	env.Define("Vector2Subtract", interpreter.WrapVector2D2("rl.Vector2Subtract", TypeEnv, rl.Vector2Subtract), false)
-	env.Define("Vector2Multiply", interpreter.WrapVector2D2("rl.Vector2Multiply", TypeEnv, rl.Vector2Multiply), false)
-	env.Define("Vector2Divide", interpreter.WrapVector2D2("rl.Vector2Divide", TypeEnv, rl.Vector2Divide), false)
-	env.Define("Vector2Scale", interpreter.WrapVector2DFloat("rl.Vector2Scale", TypeEnv, rl.Vector2Scale), false)
-	env.Define("Vector2Negate", interpreter.WrapVector2D1("rl.Vector2Negate", TypeEnv, rl.Vector2Negate), false)
-	env.Define("Vector2Length", interpreter.WrapVector2D1RFloat("rl.Vector2Length", TypeEnv, rl.Vector2Length), false)
-	env.Define("Vector2LengthSqr", interpreter.WrapVector2D1RFloat("rl.Vector2LengthSqr", TypeEnv, rl.Vector2LengthSqr), false)
-	env.Define("Vector2Distance", interpreter.WrapVector2D2RFloat("rl.Vector2Distance", TypeEnv, rl.Vector2Distance), false)
-	env.Define("Vector2DistanceSqr", interpreter.WrapVector2D2RFloat("rl.Vector2DistanceSqr", TypeEnv, rl.Vector2DistanceSqr), false)
-	env.Define("Vector2Normalize", interpreter.WrapVector2D1("rl.Vector2Normalize", TypeEnv, rl.Vector2Normalize), false)
-	env.Define("Vector2Dot", interpreter.WrapVector2D2RFloat("rl.Vector2Dot", TypeEnv, rl.Vector2DotProduct), false)
-	env.Define("Vector2Angle", interpreter.WrapVector2D2RFloat("rl.Vector2Angle", TypeEnv, rl.Vector2Angle), false)
+	env.Define("Vector2Add", WrapVector2D2("rl.Vector2Add", TypeEnv, rl.Vector2Add), false)
+	env.Define("Vector2Subtract", WrapVector2D2("rl.Vector2Subtract", TypeEnv, rl.Vector2Subtract), false)
+	env.Define("Vector2Multiply", WrapVector2D2("rl.Vector2Multiply", TypeEnv, rl.Vector2Multiply), false)
+	env.Define("Vector2Divide", WrapVector2D2("rl.Vector2Divide", TypeEnv, rl.Vector2Divide), false)
+	env.Define("Vector2Scale", WrapVector2DFloat("rl.Vector2Scale", TypeEnv, rl.Vector2Scale), false)
+	env.Define("Vector2Negate", WrapVector2D1("rl.Vector2Negate", TypeEnv, rl.Vector2Negate), false)
+	env.Define("Vector2Length", WrapVector2D1RFloat("rl.Vector2Length", TypeEnv, rl.Vector2Length), false)
+	env.Define("Vector2LengthSqr", WrapVector2D1RFloat("rl.Vector2LengthSqr", TypeEnv, rl.Vector2LengthSqr), false)
+	env.Define("Vector2Distance", WrapVector2D2RFloat("rl.Vector2Distance", TypeEnv, rl.Vector2Distance), false)
+	env.Define("Vector2DistanceSqr", WrapVector2D2RFloat("rl.Vector2DistanceSqr", TypeEnv, rl.Vector2DistanceSqr), false)
+	env.Define("Vector2Normalize", WrapVector2D1("rl.Vector2Normalize", TypeEnv, rl.Vector2Normalize), false)
+	env.Define("Vector2Dot", WrapVector2D2RFloat("rl.Vector2Dot", TypeEnv, rl.Vector2DotProduct), false)
+	env.Define("Vector2Angle", WrapVector2D2RFloat("rl.Vector2Angle", TypeEnv, rl.Vector2Angle), false)
 	env.Define("Vector2Lerp", &interpreter.BuiltinFunc{
 		Name:  "Vector2Lerp",
 		Arity: 3,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			v, err := interpreter.ArgVector2(node, i, TypeEnv, args, 0, "rl.Vector2Lerp")
+			v, err := ArgVector2(node, i, TypeEnv, args, 0, "rl.Vector2Lerp")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			v2, err := interpreter.ArgVector2(node, i, TypeEnv, args, 1, "rl.Vector2Lerp")
+			v2, err := ArgVector2(node, i, TypeEnv, args, 1, "rl.Vector2Lerp")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -563,18 +563,18 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 				return interpreter.NilValue{}, err
 			}
 
-			return interpreter.MakeVector2(rl.Vector2Lerp(v, v2, float32(t)), TypeEnv), nil
+			return MakeVector2(rl.Vector2Lerp(v, v2, float32(t)), TypeEnv), nil
 		}}, false)
 	env.Define("Vector2Equals", &interpreter.BuiltinFunc{
 		Name:  "Vector2Equals",
 		Arity: 2,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			v, err := interpreter.ArgVector2(node, i, TypeEnv, args, 0, "rl.Vector2Equals")
+			v, err := ArgVector2(node, i, TypeEnv, args, 0, "rl.Vector2Equals")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			v2, err := interpreter.ArgVector2(node, i, TypeEnv, args, 1, "rl.Vector2Equals")
+			v2, err := ArgVector2(node, i, TypeEnv, args, 1, "rl.Vector2Equals")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -585,46 +585,46 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "Vector2Zero",
 		Arity: 0,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			return interpreter.MakeVector2(rl.Vector2Zero(), TypeEnv), nil
+			return MakeVector2(rl.Vector2Zero(), TypeEnv), nil
 		}}, false)
 	env.Define("Vector2One", &interpreter.BuiltinFunc{
 		Name:  "Vector2One",
 		Arity: 0,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			return interpreter.MakeVector2(rl.Vector2Zero(), TypeEnv), nil
+			return MakeVector2(rl.Vector2Zero(), TypeEnv), nil
 		}}, false)
 	env.Define("Vector2Clamp", &interpreter.BuiltinFunc{
 		Name:  "Vector2Clamp",
 		Arity: 3,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			v, err := interpreter.ArgVector2(node, i, TypeEnv, args, 0, "rl.Vector2Clamp")
+			v, err := ArgVector2(node, i, TypeEnv, args, 0, "rl.Vector2Clamp")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			min, err := interpreter.ArgVector2(node, i, TypeEnv, args, 1, "rl.Vector2Clamp")
+			min, err := ArgVector2(node, i, TypeEnv, args, 1, "rl.Vector2Clamp")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			max, err := interpreter.ArgVector2(node, i, TypeEnv, args, 2, "rl.Vector2Clamp")
+			max, err := ArgVector2(node, i, TypeEnv, args, 2, "rl.Vector2Clamp")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			return interpreter.MakeVector2(rl.Vector2Clamp(v, min, max), TypeEnv), nil
+			return MakeVector2(rl.Vector2Clamp(v, min, max), TypeEnv), nil
 		}}, false)
 
 	env.Define("NewRectangle", &interpreter.BuiltinFunc{
 		Name:  "NewRectangle",
 		Arity: 2,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			pos, err := interpreter.ArgVector2(node, i, TypeEnv, args, 0, "rl.NewRectangle")
+			pos, err := ArgVector2(node, i, TypeEnv, args, 0, "rl.NewRectangle")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			size, err := interpreter.ArgVector2(node, i, TypeEnv, args, 1, "rl.NewRectangle")
+			size, err := ArgVector2(node, i, TypeEnv, args, 1, "rl.NewRectangle")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -645,12 +645,12 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "NewCamera2D",
 		Arity: 4,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			offset, err := interpreter.ArgVector2(node, i, TypeEnv, args, 0, "rl.NewCamera2D")
+			offset, err := ArgVector2(node, i, TypeEnv, args, 0, "rl.NewCamera2D")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			target, err := interpreter.ArgVector2(node, i, TypeEnv, args, 1, "rl.NewCamera2D")
+			target, err := ArgVector2(node, i, TypeEnv, args, 1, "rl.NewCamera2D")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -668,8 +668,8 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 			return &interpreter.StructValue{
 				TypeName: TypeEnv["Camera2D"].TypeInfo,
 				Fields: map[string]interpreter.Value{
-					"Offset":   interpreter.MakeVector2(offset, TypeEnv),
-					"Target":   interpreter.MakeVector2(target, TypeEnv),
+					"Offset":   MakeVector2(offset, TypeEnv),
+					"Target":   MakeVector2(target, TypeEnv),
 					"Rotation": interpreter.FloatValue{V: rot},
 					"Zoom":     interpreter.FloatValue{V: zoom},
 				},
@@ -681,7 +681,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "BeginMode2D",
 		Arity: 1,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			cam, err := interpreter.ArgCamera2D(node, i, TypeEnv, args, 0, "rl.BeginMode2D")
+			cam, err := ArgCamera2D(node, i, TypeEnv, args, 0, "rl.BeginMode2D")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -704,18 +704,18 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "GetWorldToScreen2D",
 		Arity: 2,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			pos, err := interpreter.ArgVector2(node, i, TypeEnv, args, 0, "rl.GetWorldToScreen2D")
+			pos, err := ArgVector2(node, i, TypeEnv, args, 0, "rl.GetWorldToScreen2D")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			cam, err := interpreter.ArgCamera2D(node, i, TypeEnv, args, 1, "rl.GetWorldToScreen2D")
+			cam, err := ArgCamera2D(node, i, TypeEnv, args, 1, "rl.GetWorldToScreen2D")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
 			res := rl.GetWorldToScreen2D(pos, cam)
-			return interpreter.MakeVector2(res, TypeEnv), nil
+			return MakeVector2(res, TypeEnv), nil
 		},
 	}, false)
 
@@ -723,18 +723,18 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "GetScreenToWorld2D",
 		Arity: 2,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			pos, err := interpreter.ArgVector2(node, i, TypeEnv, args, 0, "rl.GetScreenToWorld2D")
+			pos, err := ArgVector2(node, i, TypeEnv, args, 0, "rl.GetScreenToWorld2D")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			cam, err := interpreter.ArgCamera2D(node, i, TypeEnv, args, 1, "rl.GetScreenToWorld2D")
+			cam, err := ArgCamera2D(node, i, TypeEnv, args, 1, "rl.GetScreenToWorld2D")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
 			res := rl.GetScreenToWorld2D(pos, cam)
-			return interpreter.MakeVector2(res, TypeEnv), nil
+			return MakeVector2(res, TypeEnv), nil
 		},
 	}, false)
 
@@ -758,7 +758,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "UnloadFont",
 		Arity: 1,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			font, err := interpreter.ArgFont(node, i, TypeEnv, args, 0, "rl.UnloadFont")
+			font, err := ArgFont(node, i, TypeEnv, args, 0, "rl.UnloadFont")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -804,7 +804,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "UnloadRenderTexture",
 		Arity: 1,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			ren, err := interpreter.ArgRenderTexture2D(node, i, TypeEnv, args, 0, "rl.UnloadRenderTexture")
+			ren, err := ArgRenderTexture2D(node, i, TypeEnv, args, 0, "rl.UnloadRenderTexture")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -818,7 +818,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "BeginTextureMode",
 		Arity: 1,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			rt, err := interpreter.ArgRenderTexture2D(node, i, TypeEnv, args, 0, "rl.BeginTextureMode")
+			rt, err := ArgRenderTexture2D(node, i, TypeEnv, args, 0, "rl.BeginTextureMode")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -841,7 +841,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "GetTextureFromRender",
 		Arity: 1,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			rt, err := interpreter.ArgRenderTexture2D(node, i, TypeEnv, args, 0, "rl.GetTextureFromRender")
+			rt, err := ArgRenderTexture2D(node, i, TypeEnv, args, 0, "rl.GetTextureFromRender")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -873,7 +873,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "UnloadTexture",
 		Arity: 1,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			tex, err := interpreter.ArgTexture2D(node, i, TypeEnv, args, 0, "rl.UnloadTexture")
+			tex, err := ArgTexture2D(node, i, TypeEnv, args, 0, "rl.UnloadTexture")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -887,12 +887,12 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "GetTextureSize",
 		Arity: 1,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			tex, err := interpreter.ArgTexture2D(node, i, TypeEnv, args, 0, "rl.GetTextureSize")
+			tex, err := ArgTexture2D(node, i, TypeEnv, args, 0, "rl.GetTextureSize")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			return interpreter.MakeVector2(rl.Vector2{X: float32(tex.Width), Y: float32(tex.Height)}, TypeEnv), nil
+			return MakeVector2(rl.Vector2{X: float32(tex.Width), Y: float32(tex.Height)}, TypeEnv), nil
 		},
 	}, false)
 
@@ -900,17 +900,17 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "DrawTexture",
 		Arity: 3,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			tex, err := interpreter.ArgTexture2D(node, i, TypeEnv, args, 0, "rl.DrawTexture")
+			tex, err := ArgTexture2D(node, i, TypeEnv, args, 0, "rl.DrawTexture")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			pos, err := interpreter.ArgVector2(node, i, TypeEnv, args, 1, "rl.DrawTexture")
+			pos, err := ArgVector2(node, i, TypeEnv, args, 1, "rl.DrawTexture")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			tint, err := interpreter.ArgColor(node, TypeEnv, args, 2, "rl.DrawTexture")
+			tint, err := ArgColor(node, TypeEnv, args, 2, "rl.DrawTexture")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -924,22 +924,22 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "DrawTextureRec",
 		Arity: 4,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			tex, err := interpreter.ArgTexture2D(node, i, TypeEnv, args, 0, "rl.DrawTextureRec")
+			tex, err := ArgTexture2D(node, i, TypeEnv, args, 0, "rl.DrawTextureRec")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			src, err := interpreter.ArgRectangle(node, i, TypeEnv, args, 1, "rl.DrawTextureRec")
+			src, err := ArgRectangle(node, i, TypeEnv, args, 1, "rl.DrawTextureRec")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			pos, err := interpreter.ArgVector2(node, i, TypeEnv, args, 2, "rl.DrawTextureRec")
+			pos, err := ArgVector2(node, i, TypeEnv, args, 2, "rl.DrawTextureRec")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			tint, err := interpreter.ArgColor(node, TypeEnv, args, 3, "rl.DrawTectureRec")
+			tint, err := ArgColor(node, TypeEnv, args, 3, "rl.DrawTectureRec")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -953,12 +953,12 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "DrawTextureEx",
 		Arity: 5,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			tex, err := interpreter.ArgTexture2D(node, i, TypeEnv, args, 0, "rl.DrawTextureEx")
+			tex, err := ArgTexture2D(node, i, TypeEnv, args, 0, "rl.DrawTextureEx")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			pos, err := interpreter.ArgVector2(node, i, TypeEnv, args, 1, "rl.DrawTextureEx")
+			pos, err := ArgVector2(node, i, TypeEnv, args, 1, "rl.DrawTextureEx")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -973,7 +973,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 				return interpreter.NilValue{}, err
 			}
 
-			tint, err := interpreter.ArgColor(node, TypeEnv, args, 4, "rl.DrawTextureEx")
+			tint, err := ArgColor(node, TypeEnv, args, 4, "rl.DrawTextureEx")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -987,22 +987,22 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "DrawTexturePro",
 		Arity: 6,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			tex, err := interpreter.ArgTexture2D(node, i, TypeEnv, args, 0, "rl.DrawTexturePro")
+			tex, err := ArgTexture2D(node, i, TypeEnv, args, 0, "rl.DrawTexturePro")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			src, err := interpreter.ArgRectangle(node, i, TypeEnv, args, 1, "rl.DrawTexturePro")
+			src, err := ArgRectangle(node, i, TypeEnv, args, 1, "rl.DrawTexturePro")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			dest, err := interpreter.ArgRectangle(node, i, TypeEnv, args, 2, "rl.DrawTexturePro")
+			dest, err := ArgRectangle(node, i, TypeEnv, args, 2, "rl.DrawTexturePro")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			org, err := interpreter.ArgVector2(node, i, TypeEnv, args, 3, "rl.DrawTexturePro")
+			org, err := ArgVector2(node, i, TypeEnv, args, 3, "rl.DrawTexturePro")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -1012,7 +1012,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 				return interpreter.NilValue{}, err
 			}
 
-			tint, err := interpreter.ArgColor(node, TypeEnv, args, 5, "rl.DrawTexturePro")
+			tint, err := ArgColor(node, TypeEnv, args, 5, "rl.DrawTexturePro")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -1026,17 +1026,17 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "DrawRect",
 		Arity: 3,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			pv, err := interpreter.ArgVector2(node, i, TypeEnv, args, 0, "rl.DrawRectangle")
+			pv, err := ArgVector2(node, i, TypeEnv, args, 0, "rl.DrawRectangle")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			sv, err := interpreter.ArgVector2(node, i, TypeEnv, args, 1, "rl.DrawRectangle")
+			sv, err := ArgVector2(node, i, TypeEnv, args, 1, "rl.DrawRectangle")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			col, err := interpreter.ArgColor(node, TypeEnv, args, 2, "rl.DrawRectangle")
+			col, err := ArgColor(node, TypeEnv, args, 2, "rl.DrawRectangle")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -1050,9 +1050,9 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "DrawRect",
 		Arity: 3,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			rec, err := interpreter.ArgRectangle(node, i, TypeEnv, args, 0, "rl.DrawRectangleRec")
+			rec, err := ArgRectangle(node, i, TypeEnv, args, 0, "rl.DrawRectangleRec")
 
-			col, err := interpreter.ArgColor(node, TypeEnv, args, 2, "rl.DrawRectangleRec")
+			col, err := ArgColor(node, TypeEnv, args, 2, "rl.DrawRectangleRec")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -1066,12 +1066,12 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "DrawRectanglePro",
 		Arity: 4,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			rec, err := interpreter.ArgRectangle(node, i, TypeEnv, args, 0, "rl.DrawRectanglePro")
+			rec, err := ArgRectangle(node, i, TypeEnv, args, 0, "rl.DrawRectanglePro")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			org, err := interpreter.ArgVector2(node, i, TypeEnv, args, 1, "rl.DrawRectanglePro")
+			org, err := ArgVector2(node, i, TypeEnv, args, 1, "rl.DrawRectanglePro")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -1081,7 +1081,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 				return interpreter.NilValue{}, err
 			}
 
-			col, err := interpreter.ArgColor(node, TypeEnv, args, 3, "rl.DrawRectanglePro")
+			col, err := ArgColor(node, TypeEnv, args, 3, "rl.DrawRectanglePro")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -1095,17 +1095,17 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "DrawRectLines",
 		Arity: 3,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			pv, err := interpreter.ArgVector2(node, i, TypeEnv, args, 0, "rl.DrawRectangleLines")
+			pv, err := ArgVector2(node, i, TypeEnv, args, 0, "rl.DrawRectangleLines")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			sv, err := interpreter.ArgVector2(node, i, TypeEnv, args, 1, "rl.DrawRectangleLines")
+			sv, err := ArgVector2(node, i, TypeEnv, args, 1, "rl.DrawRectangleLines")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			col, err := interpreter.ArgColor(node, TypeEnv, args, 2, "rl.DrawRectangleLines")
+			col, err := ArgColor(node, TypeEnv, args, 2, "rl.DrawRectangleLines")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -1119,9 +1119,9 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "DrawRectLinesRec",
 		Arity: 3,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			rec, err := interpreter.ArgRectangle(node, i, TypeEnv, args, 0, "rl.DrawRectangleLinesRec")
+			rec, err := ArgRectangle(node, i, TypeEnv, args, 0, "rl.DrawRectangleLinesRec")
 
-			col, err := interpreter.ArgColor(node, TypeEnv, args, 1, "rl.DrawRectangleLinesRec")
+			col, err := ArgColor(node, TypeEnv, args, 1, "rl.DrawRectangleLinesRec")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -1135,7 +1135,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "DrawRectangleLinesEx",
 		Arity: 3,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			rec, err := interpreter.ArgRectangle(node, i, TypeEnv, args, 0, "rl.DrawRectangleLinesEx")
+			rec, err := ArgRectangle(node, i, TypeEnv, args, 0, "rl.DrawRectangleLinesEx")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -1145,7 +1145,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 				return interpreter.NilValue{}, err
 			}
 
-			col, err := interpreter.ArgColor(node, TypeEnv, args, 2, "rl.DrawRectangleLinesEx")
+			col, err := ArgColor(node, TypeEnv, args, 2, "rl.DrawRectangleLinesEx")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -1159,7 +1159,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "DrawRectangleRounded",
 		Arity: 3,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			rec, err := interpreter.ArgRectangle(node, i, TypeEnv, args, 0, "rl.DrawRectangleRounded")
+			rec, err := ArgRectangle(node, i, TypeEnv, args, 0, "rl.DrawRectangleRounded")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -1174,7 +1174,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 				return interpreter.NilValue{}, err
 			}
 
-			col, err := interpreter.ArgColor(node, TypeEnv, args, 3, "rl.DrawRectangleRounded")
+			col, err := ArgColor(node, TypeEnv, args, 3, "rl.DrawRectangleRounded")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -1188,7 +1188,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "DrawRectangleRoundedLines",
 		Arity: 3,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			rec, err := interpreter.ArgRectangle(node, i, TypeEnv, args, 0, "rl.DrawRectangleRoundedLines")
+			rec, err := ArgRectangle(node, i, TypeEnv, args, 0, "rl.DrawRectangleRoundedLines")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -1203,7 +1203,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 				return interpreter.NilValue{}, err
 			}
 
-			col, err := interpreter.ArgColor(node, TypeEnv, args, 3, "rl.DrawRectangleRoundedLines")
+			col, err := ArgColor(node, TypeEnv, args, 3, "rl.DrawRectangleRoundedLines")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -1217,14 +1217,14 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "rl.DrawRectangleGradientH",
 		Arity: 3,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			rec, err := interpreter.ArgRectangle(node, i, TypeEnv, args, 0, "rl.DrawRectangleGradientH")
+			rec, err := ArgRectangle(node, i, TypeEnv, args, 0, "rl.DrawRectangleGradientH")
 
-			lcol, err := interpreter.ArgColor(node, TypeEnv, args, 1, "rl.DrawRectangleGradientH")
+			lcol, err := ArgColor(node, TypeEnv, args, 1, "rl.DrawRectangleGradientH")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			rcol, err := interpreter.ArgColor(node, TypeEnv, args, 2, "rl.DrawRectangleGradientH")
+			rcol, err := ArgColor(node, TypeEnv, args, 2, "rl.DrawRectangleGradientH")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -1238,14 +1238,14 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "rl.DrawRectangleGradientV",
 		Arity: 3,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			rec, err := interpreter.ArgRectangle(node, i, TypeEnv, args, 0, "rl.DrawRectangleGradientV")
+			rec, err := ArgRectangle(node, i, TypeEnv, args, 0, "rl.DrawRectangleGradientV")
 
-			lcol, err := interpreter.ArgColor(node, TypeEnv, args, 1, "rl.DrawRectangleGradientV")
+			lcol, err := ArgColor(node, TypeEnv, args, 1, "rl.DrawRectangleGradientV")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			rcol, err := interpreter.ArgColor(node, TypeEnv, args, 2, "rl.DrawRectangleGradientV")
+			rcol, err := ArgColor(node, TypeEnv, args, 2, "rl.DrawRectangleGradientV")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -1259,27 +1259,27 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "rl.DrawRectangleGradientEx",
 		Arity: 5,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			rec, err := interpreter.ArgRectangle(node, i, TypeEnv, args, 0, "rl.DrawRectangleGradientEx")
+			rec, err := ArgRectangle(node, i, TypeEnv, args, 0, "rl.DrawRectangleGradientEx")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			tlcol, err := interpreter.ArgColor(node, TypeEnv, args, 1, "rl.DrawRectangleGradientEx")
+			tlcol, err := ArgColor(node, TypeEnv, args, 1, "rl.DrawRectangleGradientEx")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			blcol, err := interpreter.ArgColor(node, TypeEnv, args, 2, "rl.DrawRectangleGradientEx")
+			blcol, err := ArgColor(node, TypeEnv, args, 2, "rl.DrawRectangleGradientEx")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			trcol, err := interpreter.ArgColor(node, TypeEnv, args, 3, "rl.DrawRectangleGradientEx")
+			trcol, err := ArgColor(node, TypeEnv, args, 3, "rl.DrawRectangleGradientEx")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			brcol, err := interpreter.ArgColor(node, TypeEnv, args, 4, "rl.DrawRectangleGradientEx")
+			brcol, err := ArgColor(node, TypeEnv, args, 4, "rl.DrawRectangleGradientEx")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -1293,7 +1293,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "DrawCircle",
 		Arity: 3,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			pv, err := interpreter.ArgVector2(node, i, TypeEnv, args, 0, "rl.DrawCircle")
+			pv, err := ArgVector2(node, i, TypeEnv, args, 0, "rl.DrawCircle")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -1303,7 +1303,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 				return interpreter.NilValue{}, err
 			}
 
-			col, err := interpreter.ArgColor(node, TypeEnv, args, 2, "rl.DrawCircle")
+			col, err := ArgColor(node, TypeEnv, args, 2, "rl.DrawCircle")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -1319,7 +1319,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "DrawCircleLines",
 		Arity: 3,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			pv, err := interpreter.ArgVector2(node, i, TypeEnv, args, 0, "rl.DrawCircleLines")
+			pv, err := ArgVector2(node, i, TypeEnv, args, 0, "rl.DrawCircleLines")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -1329,7 +1329,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 				return interpreter.NilValue{}, err
 			}
 
-			col, err := interpreter.ArgColor(node, TypeEnv, args, 2, "rl.DrawCircleLines")
+			col, err := ArgColor(node, TypeEnv, args, 2, "rl.DrawCircleLines")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -1345,7 +1345,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "DrawCircleGradient",
 		Arity: 3,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			pv, err := interpreter.ArgVector2(node, i, TypeEnv, args, 0, "rl.DrawCircle")
+			pv, err := ArgVector2(node, i, TypeEnv, args, 0, "rl.DrawCircle")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -1355,12 +1355,12 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 				return interpreter.NilValue{}, err
 			}
 
-			icol, err := interpreter.ArgColor(node, TypeEnv, args, 2, "rl.DrawCircle")
+			icol, err := ArgColor(node, TypeEnv, args, 2, "rl.DrawCircle")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			ocol, err := interpreter.ArgColor(node, TypeEnv, args, 2, "rl.DrawCircle")
+			ocol, err := ArgColor(node, TypeEnv, args, 2, "rl.DrawCircle")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -1376,7 +1376,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "DrawCircleSector",
 		Arity: 3,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			pv, err := interpreter.ArgVector2(node, i, TypeEnv, args, 0, "rl.DrawCircleSector")
+			pv, err := ArgVector2(node, i, TypeEnv, args, 0, "rl.DrawCircleSector")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -1401,7 +1401,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 				return interpreter.NilValue{}, err
 			}
 
-			col, err := interpreter.ArgColor(node, TypeEnv, args, 5, "rl.DrawCircleSector")
+			col, err := ArgColor(node, TypeEnv, args, 5, "rl.DrawCircleSector")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -1415,7 +1415,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "DrawCircleSectorLines",
 		Arity: 3,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			pv, err := interpreter.ArgVector2(node, i, TypeEnv, args, 0, "rl.DrawCircleSectorLines")
+			pv, err := ArgVector2(node, i, TypeEnv, args, 0, "rl.DrawCircleSectorLines")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -1440,7 +1440,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 				return interpreter.NilValue{}, err
 			}
 
-			col, err := interpreter.ArgColor(node, TypeEnv, args, 5, "rl.DrawCircleSectorLines")
+			col, err := ArgColor(node, TypeEnv, args, 5, "rl.DrawCircleSectorLines")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -1459,7 +1459,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 				return interpreter.NilValue{}, err
 			}
 
-			pv, err := interpreter.ArgVector2(node, i, TypeEnv, args, 1, "rl.DrawText")
+			pv, err := ArgVector2(node, i, TypeEnv, args, 1, "rl.DrawText")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -1469,7 +1469,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 				return interpreter.NilValue{}, err
 			}
 
-			col, err := interpreter.ArgColor(node, TypeEnv, args, 3, "rl.DrawText")
+			col, err := ArgColor(node, TypeEnv, args, 3, "rl.DrawText")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -1488,7 +1488,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "DrawTextEx",
 		Arity: 6,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			fontVal, err := interpreter.ArgFont(node, i, TypeEnv, args, 0, "rl.DrawTextEx")
+			fontVal, err := ArgFont(node, i, TypeEnv, args, 0, "rl.DrawTextEx")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -1498,7 +1498,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 				return interpreter.NilValue{}, err
 			}
 
-			pv, err := interpreter.ArgVector2(node, i, TypeEnv, args, 2, "rl.DrawTextEx")
+			pv, err := ArgVector2(node, i, TypeEnv, args, 2, "rl.DrawTextEx")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -1513,7 +1513,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 				return interpreter.NilValue{}, err
 			}
 
-			col, err := interpreter.ArgColor(node, TypeEnv, args, 5, "rl.DrawTextEx")
+			col, err := ArgColor(node, TypeEnv, args, 5, "rl.DrawTextEx")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -1532,7 +1532,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "DrawTextPro",
 		Arity: 8,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			fontVal, err := interpreter.ArgFont(node, i, TypeEnv, args, 0, "rl.DrawTextPro")
+			fontVal, err := ArgFont(node, i, TypeEnv, args, 0, "rl.DrawTextPro")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -1542,12 +1542,12 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 				return interpreter.NilValue{}, err
 			}
 
-			pv, err := interpreter.ArgVector2(node, i, TypeEnv, args, 2, "rl.DrawTextPro")
+			pv, err := ArgVector2(node, i, TypeEnv, args, 2, "rl.DrawTextPro")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			ov, err := interpreter.ArgVector2(node, i, TypeEnv, args, 3, "rl.DrawTextPro")
+			ov, err := ArgVector2(node, i, TypeEnv, args, 3, "rl.DrawTextPro")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -1567,7 +1567,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 				return interpreter.NilValue{}, err
 			}
 
-			col, err := interpreter.ArgColor(node, TypeEnv, args, 7, "rl.DrawTextPro")
+			col, err := ArgColor(node, TypeEnv, args, 7, "rl.DrawTextPro")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -1606,7 +1606,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "MeasureTextEx",
 		Arity: 4,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			font, err := interpreter.ArgFont(node, i, TypeEnv, args, 0, "rl.MeasureTextEx")
+			font, err := ArgFont(node, i, TypeEnv, args, 0, "rl.MeasureTextEx")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -1627,7 +1627,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 			}
 
 			result := rl.MeasureTextEx(font, text, float32(size), float32(spacing))
-			return interpreter.MakeVector2(result, TypeEnv), nil
+			return MakeVector2(result, TypeEnv), nil
 		},
 	}, false)
 
@@ -1635,17 +1635,17 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "DrawLine",
 		Arity: 3,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			pv, err := interpreter.ArgVector2(node, i, TypeEnv, args, 0, "rl.DrawLine")
+			pv, err := ArgVector2(node, i, TypeEnv, args, 0, "rl.DrawLine")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			sv, err := interpreter.ArgVector2(node, i, TypeEnv, args, 1, "rl.DrawLine")
+			sv, err := ArgVector2(node, i, TypeEnv, args, 1, "rl.DrawLine")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			col, err := interpreter.ArgColor(node, TypeEnv, args, 2, "rl.DrawLine")
+			col, err := ArgColor(node, TypeEnv, args, 2, "rl.DrawLine")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -1659,19 +1659,19 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "DrawLineEx",
 		Arity: 4,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			pv, err := interpreter.ArgVector2(node, i, TypeEnv, args, 0, "rl.DrawLineEx")
+			pv, err := ArgVector2(node, i, TypeEnv, args, 0, "rl.DrawLineEx")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			sv, err := interpreter.ArgVector2(node, i, TypeEnv, args, 1, "rl.DrawLineEx")
+			sv, err := ArgVector2(node, i, TypeEnv, args, 1, "rl.DrawLineEx")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
 			thick, err := interpreter.ArgFloat(node, args, 2, "rl.DrawLineEx")
 
-			col, err := interpreter.ArgColor(node, TypeEnv, args, 3, "rl.DrawLineEx")
+			col, err := ArgColor(node, TypeEnv, args, 3, "rl.DrawLineEx")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -1685,19 +1685,19 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "DrawLineBezier",
 		Arity: 3,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			pv, err := interpreter.ArgVector2(node, i, TypeEnv, args, 0, "rl.DrawLineBezier")
+			pv, err := ArgVector2(node, i, TypeEnv, args, 0, "rl.DrawLineBezier")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			sv, err := interpreter.ArgVector2(node, i, TypeEnv, args, 1, "rl.DrawLineBezier")
+			sv, err := ArgVector2(node, i, TypeEnv, args, 1, "rl.DrawLineBezier")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
 			thick, err := interpreter.ArgFloat(node, args, 2, "rl.DrawLineBezier")
 
-			col, err := interpreter.ArgColor(node, TypeEnv, args, 3, "rl.DrawLineBezier")
+			col, err := ArgColor(node, TypeEnv, args, 3, "rl.DrawLineBezier")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -1733,7 +1733,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 				})
 			}
 
-			col, err := interpreter.ArgColor(node, TypeEnv, args, 2, "rl.DrawLineStrip")
+			col, err := ArgColor(node, TypeEnv, args, 2, "rl.DrawLineStrip")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -1747,22 +1747,22 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "DrawTriangle",
 		Arity: 4,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			pv1, err := interpreter.ArgVector2(node, i, TypeEnv, args, 0, "DrawTriangle")
+			pv1, err := ArgVector2(node, i, TypeEnv, args, 0, "DrawTriangle")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			pv2, err := interpreter.ArgVector2(node, i, TypeEnv, args, 1, "DrawTriangle")
+			pv2, err := ArgVector2(node, i, TypeEnv, args, 1, "DrawTriangle")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			pv3, err := interpreter.ArgVector2(node, i, TypeEnv, args, 2, "DrawTriangle")
+			pv3, err := ArgVector2(node, i, TypeEnv, args, 2, "DrawTriangle")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			col, err := interpreter.ArgColor(node, TypeEnv, args, 3, "DrawTriangle")
+			col, err := ArgColor(node, TypeEnv, args, 3, "DrawTriangle")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -1776,22 +1776,22 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "DrawTriangleLines",
 		Arity: 4,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			pv1, err := interpreter.ArgVector2(node, i, TypeEnv, args, 0, "DrawTriangle")
+			pv1, err := ArgVector2(node, i, TypeEnv, args, 0, "DrawTriangle")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			pv2, err := interpreter.ArgVector2(node, i, TypeEnv, args, 1, "DrawTriangle")
+			pv2, err := ArgVector2(node, i, TypeEnv, args, 1, "DrawTriangle")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			pv3, err := interpreter.ArgVector2(node, i, TypeEnv, args, 2, "DrawTriangle")
+			pv3, err := ArgVector2(node, i, TypeEnv, args, 2, "DrawTriangle")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
 
-			col, err := interpreter.ArgColor(node, TypeEnv, args, 3, "DrawTriangle")
+			col, err := ArgColor(node, TypeEnv, args, 3, "DrawTriangle")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -1827,7 +1827,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 				})
 			}
 
-			col, err := interpreter.ArgColor(node, TypeEnv, args, 2, "rl.DrawTriangleStrip")
+			col, err := ArgColor(node, TypeEnv, args, 2, "rl.DrawTriangleStrip")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -1841,7 +1841,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "DrawPoly",
 		Arity: 5,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			center, err := interpreter.ArgVector2(node, i, TypeEnv, args, 0, "rl.DrawPoly")
+			center, err := ArgVector2(node, i, TypeEnv, args, 0, "rl.DrawPoly")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -1861,7 +1861,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 				return interpreter.NilValue{}, err
 			}
 
-			col, err := interpreter.ArgColor(node, TypeEnv, args, 4, "rl.DrawPoly")
+			col, err := ArgColor(node, TypeEnv, args, 4, "rl.DrawPoly")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -1875,7 +1875,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "DrawPolyLines",
 		Arity: 5,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			center, err := interpreter.ArgVector2(node, i, TypeEnv, args, 0, "rl.DrawPolyLines")
+			center, err := ArgVector2(node, i, TypeEnv, args, 0, "rl.DrawPolyLines")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -1895,7 +1895,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 				return interpreter.NilValue{}, err
 			}
 
-			col, err := interpreter.ArgColor(node, TypeEnv, args, 4, "rl.DrawPolyLines")
+			col, err := ArgColor(node, TypeEnv, args, 4, "rl.DrawPolyLines")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -1909,7 +1909,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "DrawPolyLinesEx",
 		Arity: 6,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			center, err := interpreter.ArgVector2(node, i, TypeEnv, args, 0, "rl.DrawPolyLinesEx")
+			center, err := ArgVector2(node, i, TypeEnv, args, 0, "rl.DrawPolyLinesEx")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -1934,7 +1934,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 				return interpreter.NilValue{}, err
 			}
 
-			col, err := interpreter.ArgColor(node, TypeEnv, args, 5, "rl.DrawPolyLinesEx")
+			col, err := ArgColor(node, TypeEnv, args, 5, "rl.DrawPolyLinesEx")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -2143,7 +2143,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "UnloadSound",
 		Arity: 1,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			sound, err := interpreter.ArgSound(node, i, TypeEnv, args, 0, "rl.UnloadSound")
+			sound, err := ArgSound(node, i, TypeEnv, args, 0, "rl.UnloadSound")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -2157,7 +2157,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "PlaySound",
 		Arity: 1,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			sound, err := interpreter.ArgSound(node, i, TypeEnv, args, 0, "rl.PlaySound")
+			sound, err := ArgSound(node, i, TypeEnv, args, 0, "rl.PlaySound")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -2171,7 +2171,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "StopSound",
 		Arity: 1,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			sound, err := interpreter.ArgSound(node, i, TypeEnv, args, 0, "rl.StopSound")
+			sound, err := ArgSound(node, i, TypeEnv, args, 0, "rl.StopSound")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -2185,7 +2185,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "IsSoundPlaying",
 		Arity: 1,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			sound, err := interpreter.ArgSound(node, i, TypeEnv, args, 0, "rl.IsSoundPlaying")
+			sound, err := ArgSound(node, i, TypeEnv, args, 0, "rl.IsSoundPlaying")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -2198,7 +2198,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "PauseSound",
 		Arity: 1,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			sound, err := interpreter.ArgSound(node, i, TypeEnv, args, 0, "rl.PauseSound")
+			sound, err := ArgSound(node, i, TypeEnv, args, 0, "rl.PauseSound")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -2212,7 +2212,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "ResumeSound",
 		Arity: 1,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			sound, err := interpreter.ArgSound(node, i, TypeEnv, args, 0, "rl.ResumeSound")
+			sound, err := ArgSound(node, i, TypeEnv, args, 0, "rl.ResumeSound")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -2226,7 +2226,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "SetSoundVolume",
 		Arity: 2,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			sound, err := interpreter.ArgSound(node, i, TypeEnv, args, 0, "rl.SetSoundVolume")
+			sound, err := ArgSound(node, i, TypeEnv, args, 0, "rl.SetSoundVolume")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -2245,7 +2245,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "SetSoundPitch",
 		Arity: 2,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			sound, err := interpreter.ArgSound(node, i, TypeEnv, args, 0, "rl.SetSoundPitch")
+			sound, err := ArgSound(node, i, TypeEnv, args, 0, "rl.SetSoundPitch")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -2282,7 +2282,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "UnloadMusic",
 		Arity: 1,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			mus, err := interpreter.ArgMusic(node, i, TypeEnv, args, 0, "rl.UnloadMusic")
+			mus, err := ArgMusic(node, i, TypeEnv, args, 0, "rl.UnloadMusic")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -2296,7 +2296,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "PlayMusic",
 		Arity: 1,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			mus, err := interpreter.ArgMusic(node, i, TypeEnv, args, 0, "rl.PlayMusic")
+			mus, err := ArgMusic(node, i, TypeEnv, args, 0, "rl.PlayMusic")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -2310,7 +2310,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "UpdateMusic",
 		Arity: 1,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			mus, err := interpreter.ArgMusic(node, i, TypeEnv, args, 0, "rl.UpdateMusic")
+			mus, err := ArgMusic(node, i, TypeEnv, args, 0, "rl.UpdateMusic")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -2324,7 +2324,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "StopMusic",
 		Arity: 1,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			mus, err := interpreter.ArgMusic(node, i, TypeEnv, args, 0, "rl.StopMusic")
+			mus, err := ArgMusic(node, i, TypeEnv, args, 0, "rl.StopMusic")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -2338,7 +2338,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "IsMusicPlaying",
 		Arity: 1,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			mus, err := interpreter.ArgMusic(node, i, TypeEnv, args, 0, "rl.IsMusicPlaying")
+			mus, err := ArgMusic(node, i, TypeEnv, args, 0, "rl.IsMusicPlaying")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -2351,7 +2351,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "PauseMusic",
 		Arity: 1,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			mus, err := interpreter.ArgMusic(node, i, TypeEnv, args, 0, "rl.PauseMusic")
+			mus, err := ArgMusic(node, i, TypeEnv, args, 0, "rl.PauseMusic")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -2365,7 +2365,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "ResumeMusic",
 		Arity: 1,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			mus, err := interpreter.ArgMusic(node, i, TypeEnv, args, 0, "rl.ResumeMusic")
+			mus, err := ArgMusic(node, i, TypeEnv, args, 0, "rl.ResumeMusic")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -2379,7 +2379,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "SetMusicVolume",
 		Arity: 2,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			mus, err := interpreter.ArgMusic(node, i, TypeEnv, args, 0, "rl.SetMusicVolume")
+			mus, err := ArgMusic(node, i, TypeEnv, args, 0, "rl.SetMusicVolume")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -2398,7 +2398,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "SetMusicPitch",
 		Arity: 2,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			mus, err := interpreter.ArgMusic(node, i, TypeEnv, args, 0, "rl.SetMusicPitch")
+			mus, err := ArgMusic(node, i, TypeEnv, args, 0, "rl.SetMusicPitch")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
@@ -2417,7 +2417,7 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 		Name:  "SetMusicLooping",
 		Arity: 2,
 		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
-			mus, err := interpreter.ArgMusic(node, i, TypeEnv, args, 0, "rl.SetMusicLooping")
+			mus, err := ArgMusic(node, i, TypeEnv, args, 0, "rl.SetMusicLooping")
 			if err != nil {
 				return interpreter.NilValue{}, err
 			}
