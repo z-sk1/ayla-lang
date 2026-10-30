@@ -1,10 +1,14 @@
 package fs
 
 import (
+	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
+	"github.com/sqweek/dialog"
 	"github.com/z-sk1/ayla-lang/interpreter"
 	"github.com/z-sk1/ayla-lang/parser"
 	"github.com/z-sk1/ayla-lang/registry"
@@ -482,6 +486,130 @@ func Load(i *interpreter.Interpreter) (interpreter.ModuleValue, error) {
 			}
 
 			return interpreter.NilValue{}, nil
+		},
+	}, false)
+
+	env.Define("PickFile", &interpreter.BuiltinFunc{
+		Name:  "PickFile",
+		Arity: -1,
+		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
+			var extensions []string
+			_ = extensions
+
+			if len(args) == 1 {
+				arr, err := interpreter.ArgArray(node, args, 0, "fs.PickFile", "string")
+				if err != nil {
+					return interpreter.TupleValue{
+						Values: []interpreter.Value{
+							interpreter.NilValue{},
+							interpreter.NilValue{},
+						},
+					}, err
+				}
+
+				if !interpreter.TypesAssignable(arr.ElemType, i.TypeEnv["string"].TypeInfo) {
+					return interpreter.TupleValue{
+						Values: []interpreter.Value{
+							interpreter.NilValue{},
+							interpreter.NilValue{},
+						},
+					}, interpreter.NewRuntimeError(node, "fs.PickFile: argument 1 must be a []string")
+				}
+
+				for _, elem := range arr.Elements {
+					elem, ok := elem.(interpreter.StringValue)
+					if !ok {
+						return interpreter.TupleValue{
+							Values: []interpreter.Value{
+								interpreter.NilValue{},
+								interpreter.NilValue{},
+							},
+						}, interpreter.NewRuntimeError(node, "fs.PickFile: argument 1 must be a []string")
+					}
+
+					extensions = append(extensions, elem.V)
+				}
+
+			} else if len(args) > 1 {
+				return interpreter.TupleValue{
+					Values: []interpreter.Value{
+						interpreter.NilValue{},
+						interpreter.NilValue{},
+					},
+				}, interpreter.ExpectArgsRange(node, args, 0, 1, "fs.PickFile")
+			}
+
+			fileDialog := dialog.File()
+
+			if len(extensions) > 0 {
+				fileDialog = fileDialog.Filter(fmt.Sprintf("Supported files (%s)", strings.Join(extensions, ", ")), extensions...)
+			}
+
+			path, err := fileDialog.Load()
+
+			if errors.Is(err, dialog.Cancelled) {
+				return interpreter.TupleValue{
+					Values: []interpreter.Value{
+						interpreter.NilValue{},
+						interpreter.NilValue{},
+					},
+				}, nil
+			}
+
+			if err != nil {
+				return interpreter.TupleValue{
+					Values: []interpreter.Value{
+						interpreter.NilValue{},
+						interpreter.InterfaceValue{
+							TypeInfo: i.TypeEnv["error"].TypeInfo,
+							Value:    interpreter.Error{Message: err.Error()},
+						},
+					},
+				}, nil
+			}
+
+			return interpreter.TupleValue{
+				Values: []interpreter.Value{
+					interpreter.StringValue{V: path},
+					interpreter.NilValue{},
+				},
+			}, nil
+		},
+	}, false)
+
+	env.Define("PickFolder", &interpreter.BuiltinFunc{
+		Name:  "PickFolder",
+		Arity: 0,
+		Fn: func(i *interpreter.Interpreter, node *parser.FuncCall, args []interpreter.Value) (interpreter.Value, error) {
+			path, err := dialog.Directory().Browse()
+
+			if errors.Is(err, dialog.Cancelled) {
+				return interpreter.TupleValue{
+					Values: []interpreter.Value{
+						interpreter.NilValue{},
+						interpreter.NilValue{},
+					},
+				}, nil
+			}
+
+			if err != nil {
+				return interpreter.TupleValue{
+					Values: []interpreter.Value{
+						interpreter.NilValue{},
+						interpreter.InterfaceValue{
+							TypeInfo: i.TypeEnv["error"].TypeInfo,
+							Value:    interpreter.Error{Message: err.Error()},
+						},
+					},
+				}, nil
+			}
+
+			return interpreter.TupleValue{
+				Values: []interpreter.Value{
+					interpreter.StringValue{V: path},
+					interpreter.NilValue{},
+				},
+			}, nil
 		},
 	}, false)
 
